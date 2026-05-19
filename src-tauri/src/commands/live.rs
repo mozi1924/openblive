@@ -8,87 +8,28 @@ use crate::models::{
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
-use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
-use serde::Serialize;
 use serde_json::json;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::{BTreeMap, HashMap};
 use tauri::{AppHandle, State};
-use tokio::process::Command;
 use tokio_tungstenite::tungstenite::Message;
-use url::form_urlencoded;
+
+mod common;
+mod linkage;
+mod stream;
+use common::{
+    build_room_update_form, clear_user_auth_flags, error_message, is_auth_invalid_code,
+    live_platform_pc_link, mark_current_user_login_invalid,
+};
+use linkage::{
+    apply_command_template, build_command_template_context, empty_command_template_context,
+    normalize_live_control_mode, obs_ws_start_stream, obs_ws_stop_stream,
+    spawn_shell_command,
+};
+pub(crate) use linkage::obs_ws_probe;
+use stream::{collect_stream_endpoints, select_primary_endpoint};
 
 const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
-const LIVE_PLATFORM_PC_LINK: &str = "pc_link";
-
-#[derive(Clone, Serialize)]
-struct StreamEndpoint {
-    protocol: String,
-    addr: String,
-    code: String,
-    full_url: String,
-    provider: String,
-    new_link: String,
-    stream_name: String,
-    stream_key: String,
-    schedule: String,
-    pflag: String,
-    query: BTreeMap<String, String>,
-}
-
-fn is_auth_invalid_code(code: i64) -> bool {
-    matches!(code, -101 | 3 | 65530)
-}
-
-fn error_message(value: &serde_json::Value, fallback: &str) -> String {
-    value["msg"]
-        .as_str()
-        .filter(|msg| !msg.trim().is_empty())
-        .or_else(|| {
-            value["message"]
-                .as_str()
-                .filter(|msg| !msg.trim().is_empty())
-        })
-        .unwrap_or(fallback)
-        .to_string()
-}
-
-fn cookie_diagnostics(cookie_header: &str) -> String {
-    let has_sess = crate::client::parse_cookie_value(cookie_header, "SESSDATA").is_some();
-    let has_uid = crate::client::parse_cookie_value(cookie_header, "DedeUserID").is_some();
-    let has_csrf = crate::client::parse_cookie_value(cookie_header, "bili_jct").is_some();
-    format!(
-        "has_sess={has_sess}, has_uid={has_uid}, has_csrf={has_csrf}, cookie_len={}",
-        cookie_header.len()
-    )
-}
-
-async fn mark_current_user_login_invalid(state: &AppState, reason: &str) {
-    let mut runtime = state.runtime.lock().await;
-    let Some(uid) = runtime.config.current_uid.clone() else {
-        return;
-    };
-    let mut fail_count = 0u32;
-    let mut cookie_diag = String::from("cookie=missing");
-    let mut room_id = String::new();
-    let mut csrf_len = 0usize;
-    if let Some(user) = runtime.config.users.get_mut(&uid) {
-        user.login_invalid = true;
-        user.auth_fail_count = user.auth_fail_count.saturating_add(1);
-        user.last_auth_fail_at = chrono::Utc::now().timestamp();
-        fail_count = user.auth_fail_count;
-        cookie_diag = cookie_diagnostics(&user.cookie);
-        room_id = user.room_id.clone();
-        csrf_len = user.csrf.len();
-    }
-    eprintln!(
-        "[auth][live] mark login invalid uid={}, fail_count={}, room_id={}, csrf_len={}, reason={}, {}",
-        uid, fail_count, room_id, csrf_len, reason, cookie_diag
-    );
-    runtime.session = Default::default();
-    save_config(&state.config_path, &runtime.config, &state.master_key);
-}
 
 fn split_tags(raw: &str) -> Vec<String> {
     raw.split([',', '，'])
@@ -143,7 +84,7 @@ fn apply_profile_state_from_remote(
         user.live_profile_state.title.message.clear();
     } else if user.live_profile_state.title.review != "pending" {
         user.live_profile_state.title.transport = "conflict".to_string();
-        user.live_profile_state.title.message = "远端标题与最近一次提交不同".to_string();
+        user.live_profile_state.title.message = "i18n.live.profile.title_conflict".to_string();
     }
     user.live_profile_state.title.updated_at = now;
 
@@ -177,12 +118,12 @@ fn apply_profile_state_from_remote(
         && user.live_profile_state.area.submitted_area_id == area_id
     {
         user.live_profile_state.area.transport = "synced".to_string();
-        if user.live_profile_state.area.message == "远端分区与最近一次提交不同" {
+        if user.live_profile_state.area.message == "i18n.live.profile.area_conflict" {
             user.live_profile_state.area.message.clear();
         }
     } else {
         user.live_profile_state.area.transport = "conflict".to_string();
-        user.live_profile_state.area.message = "远端分区与最近一次提交不同".to_string();
+        user.live_profile_state.area.message = "i18n.live.profile.area_conflict".to_string();
     }
     user.live_profile_state.area.updated_at = now;
 
@@ -193,23 +134,14 @@ fn apply_profile_state_from_remote(
     user.live_profile_state.tags.effective = tags.to_vec();
     if same_tags(&user.live_profile_state.tags.submitted, tags) {
         user.live_profile_state.tags.transport = "synced".to_string();
-        if user.live_profile_state.tags.message == "远端标签与最近一次提交不同" {
+        if user.live_profile_state.tags.message == "i18n.live.profile.tags_conflict" {
             user.live_profile_state.tags.message.clear();
         }
     } else {
         user.live_profile_state.tags.transport = "conflict".to_string();
-        user.live_profile_state.tags.message = "远端标签与最近一次提交不同".to_string();
+        user.live_profile_state.tags.message = "i18n.live.profile.tags_conflict".to_string();
     }
     user.live_profile_state.tags.updated_at = now;
-}
-
-fn build_room_update_form(room_id: &str, csrf: &str) -> BTreeMap<String, String> {
-    let mut form = BTreeMap::new();
-    form.insert("room_id".into(), room_id.to_string());
-    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
-    form.insert("csrf".into(), csrf.to_string());
-    form.insert("csrf_token".into(), csrf.to_string());
-    form
 }
 
 fn sanitized_live_client_version(version: &str, build: u64) -> (String, u64) {
@@ -224,17 +156,6 @@ fn sanitized_live_client_version(version: &str, build: u64) -> (String, u64) {
         build
     };
     (normalized_version, normalized_build)
-}
-
-fn parse_stream_query(code: &str) -> BTreeMap<String, String> {
-    let query_str = code.trim().trim_start_matches('?');
-    if query_str.is_empty() {
-        return BTreeMap::new();
-    }
-
-    form_urlencoded::parse(query_str.as_bytes())
-        .into_owned()
-        .collect::<BTreeMap<_, _>>()
 }
 
 fn room_live_state(status: i64) -> bool {
@@ -269,442 +190,6 @@ fn apply_room_area_to_session(
     }
 }
 
-fn parse_protocol_from_addr(addr: &str) -> String {
-    if let Some((scheme, _)) = addr.split_once("://") {
-        return scheme.trim().to_ascii_lowercase();
-    }
-    String::new()
-}
-
-fn parse_stream_endpoint(value: &serde_json::Value, fallback_protocol: &str) -> Option<StreamEndpoint> {
-    let addr = value["addr"].as_str().unwrap_or("").trim().to_string();
-    let code = value["code"].as_str().unwrap_or("").trim().to_string();
-    if addr.is_empty() && code.is_empty() {
-        return None;
-    }
-
-    let query = parse_stream_query(&code);
-    let mut protocol = value["protocol"]
-        .as_str()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    if protocol.is_empty() {
-        protocol = query
-            .get("schedule")
-            .map(|item| item.trim().to_ascii_lowercase())
-            .unwrap_or_default();
-    }
-    if protocol.is_empty() {
-        protocol = parse_protocol_from_addr(&addr);
-    }
-    if protocol.is_empty() {
-        protocol = fallback_protocol.to_ascii_lowercase();
-    }
-
-    let stream_key = query.get("key").cloned().unwrap_or_else(|| {
-        let cleaned = code.trim_start_matches('?').trim();
-        if cleaned.is_empty() || cleaned.contains('=') {
-            String::new()
-        } else {
-            cleaned.to_string()
-        }
-    });
-
-    Some(StreamEndpoint {
-        protocol,
-        full_url: format!("{addr}{code}"),
-        provider: value["provider"].as_str().unwrap_or("").to_string(),
-        new_link: value["new_link"].as_str().unwrap_or("").to_string(),
-        stream_name: query.get("streamname").cloned().unwrap_or_default(),
-        stream_key,
-        schedule: query.get("schedule").cloned().unwrap_or_default(),
-        pflag: query.get("pflag").cloned().unwrap_or_default(),
-        query,
-        addr,
-        code,
-    })
-}
-
-fn collect_stream_endpoints(data: &serde_json::Value) -> Vec<StreamEndpoint> {
-    let mut endpoints: Vec<StreamEndpoint> = Vec::new();
-    if let Some(primary) = parse_stream_endpoint(&data["rtmp"], "rtmp") {
-        endpoints.push(primary);
-    }
-    if let Some(protocols) = data["protocols"].as_array() {
-        for protocol in protocols {
-            if let Some(endpoint) = parse_stream_endpoint(protocol, "rtmp") {
-                endpoints.push(endpoint);
-            }
-        }
-    }
-
-    let mut dedup = HashSet::new();
-    endpoints
-        .into_iter()
-        .filter(|item| {
-            let key = format!("{}|{}|{}", item.protocol, item.addr, item.code);
-            dedup.insert(key)
-        })
-        .collect()
-}
-
-fn select_primary_endpoint(endpoints: &[StreamEndpoint]) -> Option<StreamEndpoint> {
-    if endpoints.is_empty() {
-        return None;
-    }
-    endpoints
-        .iter()
-        .find(|item| item.protocol == "rtmp")
-        .cloned()
-        .or_else(|| endpoints.first().cloned())
-}
-
-#[derive(Clone)]
-struct CommandTemplateContext {
-    server: String,
-    stream_key: String,
-    stream_code: String,
-    stream_url: String,
-    protocol: String,
-}
-
-fn normalize_live_control_mode(mode: &str) -> &'static str {
-    match mode.trim() {
-        "obs_ws" => "obs_ws",
-        "command" => "command",
-        _ => "none",
-    }
-}
-
-fn build_command_template_context(primary: &StreamEndpoint) -> CommandTemplateContext {
-    let stream_key = if !primary.stream_key.trim().is_empty() {
-        primary.stream_key.clone()
-    } else {
-        primary
-            .query
-            .get("key")
-            .cloned()
-            .unwrap_or_else(String::new)
-    };
-    CommandTemplateContext {
-        server: primary.addr.clone(),
-        stream_key,
-        stream_code: primary.code.clone(),
-        stream_url: primary.full_url.clone(),
-        protocol: primary.protocol.clone(),
-    }
-}
-
-fn apply_command_template(raw: &str, context: &CommandTemplateContext) -> String {
-    let mut cmd = raw.to_string();
-    let replacements = [
-        ("{{server}}", context.server.as_str()),
-        ("{server}", context.server.as_str()),
-        ("${server}", context.server.as_str()),
-        ("{{stream_key}}", context.stream_key.as_str()),
-        ("{stream_key}", context.stream_key.as_str()),
-        ("${stream_key}", context.stream_key.as_str()),
-        ("{{stream_code}}", context.stream_code.as_str()),
-        ("{stream_code}", context.stream_code.as_str()),
-        ("${stream_code}", context.stream_code.as_str()),
-        ("{{stream_url}}", context.stream_url.as_str()),
-        ("{stream_url}", context.stream_url.as_str()),
-        ("${stream_url}", context.stream_url.as_str()),
-        ("{{protocol}}", context.protocol.as_str()),
-        ("{protocol}", context.protocol.as_str()),
-        ("${protocol}", context.protocol.as_str()),
-    ];
-    for (from, to) in replacements {
-        cmd = cmd.replace(from, to);
-    }
-    cmd
-}
-
-async fn spawn_shell_command(raw_command: &str) -> Result<(), String> {
-    let command = raw_command.trim();
-    if command.is_empty() {
-        return Ok(());
-    }
-    #[cfg(target_os = "windows")]
-    let mut child = Command::new("cmd")
-        .arg("/C")
-        .arg(command)
-        .spawn()
-        .map_err(|error| format!("执行命令失败: {error}"))?;
-
-    #[cfg(not(target_os = "windows"))]
-    let mut child = Command::new("sh")
-        .arg("-lc")
-        .arg(command)
-        .spawn()
-        .map_err(|error| format!("执行命令失败: {error}"))?;
-
-    tokio::spawn(async move {
-        if let Err(error) = child.wait().await {
-            eprintln!("[live][command] command process wait failed: {error}");
-        }
-    });
-    Ok(())
-}
-
-static OBS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
-
-fn obs_next_request_id() -> String {
-    format!("obs-{}", OBS_REQUEST_ID.fetch_add(1, Ordering::Relaxed))
-}
-
-fn obs_compute_auth(password: &str, salt: &str, challenge: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{password}{salt}"));
-    let secret = base64::engine::general_purpose::STANDARD.encode(hasher.finalize());
-
-    let mut hasher2 = Sha256::new();
-    hasher2.update(format!("{secret}{challenge}"));
-    base64::engine::general_purpose::STANDARD.encode(hasher2.finalize())
-}
-
-async fn obs_wait_message<S>(
-    read: &mut S,
-    label: &str,
-) -> Result<serde_json::Value, String>
-where
-    S: futures_util::Stream<
-            Item = Result<Message, tokio_tungstenite::tungstenite::Error>,
-        > + Unpin,
-{
-    let Some(result) = read.next().await else {
-        return Err(format!("OBS WS 连接已关闭({label})"));
-    };
-    let message = result.map_err(|error| format!("OBS WS 收包失败({label}): {error}"))?;
-    match message {
-        Message::Text(text) => serde_json::from_str::<serde_json::Value>(&text)
-            .map_err(|error| format!("OBS WS JSON 解析失败({label}): {error}")),
-        Message::Binary(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes)
-            .map_err(|error| format!("OBS WS 二进制 JSON 解析失败({label}): {error}")),
-        Message::Close(frame) => Err(format!("OBS WS 连接被关闭({label}): {:?}", frame)),
-        _ => Err(format!("OBS WS 收到非 JSON 帧({label})")),
-    }
-}
-
-async fn obs_send_request<S>(
-    write: &mut S,
-    request_type: &str,
-    request_data: serde_json::Value,
-) -> Result<String, String>
-where
-    S: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
-{
-    let request_id = obs_next_request_id();
-    let packet = json!({
-        "op": 6,
-        "d": {
-            "requestType": request_type,
-            "requestId": request_id,
-            "requestData": request_data
-        }
-    });
-    write
-        .send(Message::Text(packet.to_string().into()))
-        .await
-        .map_err(|error| format!("OBS WS 请求发送失败({request_type}): {error}"))?;
-    Ok(request_id)
-}
-
-async fn obs_wait_request_response<S>(
-    read: &mut S,
-    expected_request_id: &str,
-    request_type: &str,
-) -> Result<serde_json::Value, String>
-where
-    S: futures_util::Stream<
-            Item = Result<Message, tokio_tungstenite::tungstenite::Error>,
-        > + Unpin,
-{
-    loop {
-        let value = obs_wait_message(read, request_type).await?;
-        let op = value["op"].as_i64().unwrap_or(-1);
-        if op != 7 {
-            continue;
-        }
-        let response_id = value["d"]["requestId"].as_str().unwrap_or_default();
-        if response_id != expected_request_id {
-            continue;
-        }
-        let result = value["d"]["requestStatus"]["result"]
-            .as_bool()
-            .unwrap_or(false);
-        if result {
-            return Ok(value);
-        }
-        let code = value["d"]["requestStatus"]["code"].as_i64().unwrap_or(-1);
-        let comment = value["d"]["requestStatus"]["comment"]
-            .as_str()
-            .unwrap_or("Unknown error");
-        return Err(format!("OBS WS 请求失败({request_type}) code={code}: {comment}"));
-    }
-}
-
-async fn obs_ws_start_stream(
-    url: &str,
-    password: &str,
-    context: &CommandTemplateContext,
-) -> Result<(), String> {
-    let (ws, _) = tokio_tungstenite::connect_async(url)
-        .await
-        .map_err(|error| format!("连接 OBS WS 失败: {error}"))?;
-    let (mut write, mut read) = ws.split();
-
-    let hello = obs_wait_message(&mut read, "hello").await?;
-    if hello["op"].as_i64().unwrap_or(-1) != 0 {
-        return Err("OBS WS 协议错误：未收到 Hello".to_string());
-    }
-
-    let rpc_version = hello["d"]["rpcVersion"].as_i64().unwrap_or(1);
-    let mut identify = json!({
-        "op": 1,
-        "d": {
-            "rpcVersion": rpc_version
-        }
-    });
-    if let Some(auth_obj) = hello["d"]["authentication"].as_object() {
-        let challenge = auth_obj
-            .get("challenge")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default();
-        let salt = auth_obj
-            .get("salt")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default();
-        let auth = obs_compute_auth(password, salt, challenge);
-        identify["d"]["authentication"] = json!(auth);
-    }
-    write
-        .send(Message::Text(identify.to_string().into()))
-        .await
-        .map_err(|error| format!("发送 OBS Identify 失败: {error}"))?;
-
-    loop {
-        let identified = obs_wait_message(&mut read, "identify").await?;
-        let op = identified["op"].as_i64().unwrap_or(-1);
-        if op == 2 {
-            break;
-        }
-    }
-
-    let set_req_id = obs_send_request(
-        &mut write,
-        "SetStreamServiceSettings",
-        json!({
-            "streamServiceType": "rtmp_custom",
-            "streamServiceSettings": {
-                "server": context.server,
-                "key": context.stream_key
-            }
-        }),
-    )
-    .await?;
-    obs_wait_request_response(&mut read, &set_req_id, "SetStreamServiceSettings").await?;
-
-    let start_req_id = obs_send_request(&mut write, "StartStream", json!({})).await?;
-    obs_wait_request_response(&mut read, &start_req_id, "StartStream").await?;
-    Ok(())
-}
-
-async fn obs_ws_stop_stream(url: &str, password: &str) -> Result<(), String> {
-    let (ws, _) = tokio_tungstenite::connect_async(url)
-        .await
-        .map_err(|error| format!("连接 OBS WS 失败: {error}"))?;
-    let (mut write, mut read) = ws.split();
-
-    let hello = obs_wait_message(&mut read, "hello").await?;
-    if hello["op"].as_i64().unwrap_or(-1) != 0 {
-        return Err("OBS WS 协议错误：未收到 Hello".to_string());
-    }
-
-    let rpc_version = hello["d"]["rpcVersion"].as_i64().unwrap_or(1);
-    let mut identify = json!({
-        "op": 1,
-        "d": {
-            "rpcVersion": rpc_version
-        }
-    });
-    if let Some(auth_obj) = hello["d"]["authentication"].as_object() {
-        let challenge = auth_obj
-            .get("challenge")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default();
-        let salt = auth_obj
-            .get("salt")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default();
-        let auth = obs_compute_auth(password, salt, challenge);
-        identify["d"]["authentication"] = json!(auth);
-    }
-    write
-        .send(Message::Text(identify.to_string().into()))
-        .await
-        .map_err(|error| format!("发送 OBS Identify 失败: {error}"))?;
-
-    loop {
-        let identified = obs_wait_message(&mut read, "identify").await?;
-        let op = identified["op"].as_i64().unwrap_or(-1);
-        if op == 2 {
-            break;
-        }
-    }
-
-    let stop_req_id = obs_send_request(&mut write, "StopStream", json!({})).await?;
-    obs_wait_request_response(&mut read, &stop_req_id, "StopStream").await?;
-    Ok(())
-}
-
-pub(crate) async fn obs_ws_probe(url: &str, password: &str) -> Result<(), String> {
-    let (ws, _) = tokio_tungstenite::connect_async(url)
-        .await
-        .map_err(|error| format!("连接 OBS WS 失败: {error}"))?;
-    let (mut write, mut read) = ws.split();
-
-    let hello = obs_wait_message(&mut read, "hello").await?;
-    if hello["op"].as_i64().unwrap_or(-1) != 0 {
-        return Err("OBS WS 协议错误：未收到 Hello".to_string());
-    }
-
-    let rpc_version = hello["d"]["rpcVersion"].as_i64().unwrap_or(1);
-    let mut identify = json!({
-        "op": 1,
-        "d": { "rpcVersion": rpc_version }
-    });
-    if let Some(auth_obj) = hello["d"]["authentication"].as_object() {
-        let challenge = auth_obj
-            .get("challenge")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default();
-        let salt = auth_obj
-            .get("salt")
-            .and_then(|item| item.as_str())
-            .unwrap_or_default();
-        identify["d"]["authentication"] = json!(obs_compute_auth(password, salt, challenge));
-    }
-    write
-        .send(Message::Text(identify.to_string().into()))
-        .await
-        .map_err(|error| format!("发送 OBS Identify 失败: {error}"))?;
-
-    loop {
-        let identified = obs_wait_message(&mut read, "identify").await?;
-        let op = identified["op"].as_i64().unwrap_or(-1);
-        if op == 2 {
-            break;
-        }
-    }
-
-    let req_id = obs_send_request(&mut write, "GetStreamStatus", json!({})).await?;
-    obs_wait_request_response(&mut read, &req_id, "GetStreamStatus").await?;
-    Ok(())
-}
-
 async fn fetch_room_info_by_room_id(
     state: &AppState,
     room_id: &str,
@@ -725,7 +210,7 @@ async fn fetch_room_info_by_room_id(
         .await
         .map_err(|error| error.to_string())?;
     if value["code"].as_i64().unwrap_or(-1) != 0 {
-        return Err(error_message(&value, "查询直播状态失败"));
+        return Err(error_message(&value, "i18n.live.error.sync_status_failed"));
     }
     Ok(value["data"].clone())
 }
@@ -753,7 +238,7 @@ pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(Stri
     if value["code"].as_i64().unwrap_or(-1) != 0 {
         return Err(value["message"]
             .as_str()
-            .unwrap_or("获取版本号失败")
+            .unwrap_or("i18n.live.error.fetch_live_version_failed")
             .to_string());
     }
 
@@ -866,13 +351,13 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
             .config
             .current_uid
             .clone()
-            .ok_or_else(|| "未登录".to_string())?;
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         let user = runtime
             .config
             .users
             .get(&uid)
             .cloned()
-            .ok_or_else(|| "未登录".to_string())?;
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         (uid, user)
     };
 
@@ -1028,12 +513,12 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
             .config
             .current_uid
             .clone()
-            .ok_or_else(|| "未登录".to_string())?;
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         let user = runtime
             .config
             .users
             .get(&uid)
-            .ok_or_else(|| "未登录".to_string())?;
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         let area_id = runtime
             .partition_map
             .get(&req.parent)
@@ -1050,10 +535,10 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
     };
 
     if room_id.is_empty() {
-        return Err("未获取到直播间号".into());
+        return Err("i18n.live.error.room_id_missing".into());
     }
     if csrf.is_empty() {
-        return Err("未获取到 csrf，请尝试刷新账号信息".into());
+        return Err("i18n.live.error.csrf_missing".into());
     }
 
     state.client.apply_cookie_header(&cookie);
@@ -1073,9 +558,9 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
                 &format!("update_area code={code}, msg={}", error_message(&value, "")),
             )
             .await;
-            return Err("登录已失效，请重新扫码登录".into());
+            return Err("i18n.common.login_expired_relogin".into());
         }
-        return Err(error_message(&value, "分区设置失败"));
+        return Err(error_message(&value, "i18n.live.error.update_area_failed"));
     }
 
     let mut runtime = state.runtime.lock().await;
@@ -1093,9 +578,7 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
         user.live_profile_state.area.review = "none".to_string();
         user.live_profile_state.area.message.clear();
         user.live_profile_state.area.updated_at = current_timestamp();
-        user.login_invalid = false;
-        user.auth_fail_count = 0;
-        user.last_auth_fail_at = 0;
+        clear_user_auth_flags(user);
     }
     runtime.session.current_area_id = Some(area_id);
     runtime.session.current_area_names = vec![req.parent.clone(), req.child.clone()];
@@ -1114,12 +597,12 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
 pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> CmdResult {
     let runtime = state.runtime.lock().await;
     if runtime.session.room_id.is_empty() {
-        return Err("未登录".into());
+        return Err("i18n.common.not_logged_in".into());
     }
 
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), runtime.session.room_id.clone());
-    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
+    form.insert("platform".into(), live_platform_pc_link().into());
     form.insert("title".into(), req.title.clone());
     form.insert("csrf".into(), runtime.session.csrf.clone());
     form.insert("csrf_token".into(), runtime.session.csrf.clone());
@@ -1153,9 +636,7 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
                 if review == "none" {
                     user.live_profile_state.title.effective = req.title.clone();
                 }
-                user.login_invalid = false;
-                user.auth_fail_count = 0;
-                user.last_auth_fail_at = 0;
+                clear_user_auth_flags(user);
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -1177,9 +658,9 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
                 ),
             )
             .await;
-            return Err("登录已失效，请重新扫码登录".into());
+            return Err("i18n.common.login_expired_relogin".into());
         }
-        Err(error_message(&value, "更新失败"))
+        Err(error_message(&value, "i18n.live.error.update_title_failed"))
     }
 }
 
@@ -1192,12 +673,12 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
             .config
             .current_uid
             .clone()
-            .ok_or_else(|| "未登录".to_string())?;
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         let user = runtime
             .config
             .users
             .get(&uid)
-            .ok_or_else(|| "未登录".to_string())?;
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         (
             uid,
             user.room_id.clone(),
@@ -1208,10 +689,10 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
     };
 
     if room_id.is_empty() {
-        return Err("未获取到直播间号".into());
+        return Err("i18n.live.error.room_id_missing".into());
     }
     if csrf.is_empty() {
-        return Err("未获取到 csrf，请尝试刷新账号信息".into());
+        return Err("i18n.live.error.csrf_missing".into());
     }
 
     state.client.apply_cookie_header(&cookie);
@@ -1246,11 +727,11 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
                     ),
                 )
                 .await;
-                return Err("登录已失效，请重新扫码登录".into());
+                return Err("i18n.common.login_expired_relogin".into());
             }
             return Err(format!(
-                "新增标签失败({tag}): {}",
-                error_message(&value, "更新失败")
+                "i18n.live.error.update_tags_add_failed({tag}): {}",
+                error_message(&value, "i18n.live.error.update_tags_add_failed")
             ));
         }
     }
@@ -1274,11 +755,11 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
                     ),
                 )
                 .await;
-                return Err("登录已失效，请重新扫码登录".into());
+                return Err("i18n.common.login_expired_relogin".into());
             }
             return Err(format!(
-                "删除标签失败({tag}): {}",
-                error_message(&value, "更新失败")
+                "i18n.live.error.update_tags_remove_failed({tag}): {}",
+                error_message(&value, "i18n.live.error.update_tags_remove_failed")
             ));
         }
     }
@@ -1293,9 +774,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
         user.live_profile_state.tags.review = "none".to_string();
         user.live_profile_state.tags.message.clear();
         user.live_profile_state.tags.updated_at = current_timestamp();
-        user.login_invalid = false;
-        user.auth_fail_count = 0;
-        user.last_auth_fail_at = 0;
+        clear_user_auth_flags(user);
     }
     runtime.session.current_tags = desired_tags.clone();
     save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -1316,7 +795,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
 pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     let runtime = state.runtime.lock().await;
     if runtime.session.room_id.is_empty() {
-        return Err("未登录".into());
+        return Err("i18n.common.not_logged_in".into());
     }
 
     let area = runtime.session.current_area_id.unwrap_or(235);
@@ -1329,7 +808,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
 
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id);
-    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
+    form.insert("platform".into(), live_platform_pc_link().into());
     form.insert("area_v2".into(), area.to_string());
     form.insert("backup_stream".into(), "0".into());
     form.insert("csrf_token".into(), csrf.clone());
@@ -1349,7 +828,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     let code = response["code"].as_i64().unwrap_or(-1);
     if code == 60024 {
         let qr = response["data"]["qr"].as_str().unwrap_or("").to_string();
-        return Ok(json!({ "code": 60024, "msg": "需要人脸验证", "qr": qr }));
+        return Ok(json!({ "code": 60024, "msg": "i18n.live.face_auth_required", "qr": qr }));
     }
     if code == 60043 {
         let uid = {
@@ -1359,7 +838,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
         let qr = format!(
             "https://www.bilibili.com/blackboard/live/face-auth-middle.html?source_event=400&mid={uid}"
         );
-        return Ok(json!({ "code": 60043, "msg": "需要人脸验证", "qr": qr }));
+        return Ok(json!({ "code": 60043, "msg": "i18n.live.face_auth_required", "qr": qr }));
     }
     if code != 0 {
         if is_auth_invalid_code(code) {
@@ -1371,9 +850,9 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
                 ),
             )
             .await;
-            return Err("登录已失效，请重新扫码登录".into());
+            return Err("i18n.common.login_expired_relogin".into());
         }
-        return Err(error_message(&response, "开播失败"));
+        return Err(error_message(&response, "i18n.live.error.start_live_failed"));
     }
 
     let stream_data = &response["data"];
@@ -1382,13 +861,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     let primary_context = primary
         .as_ref()
         .map(build_command_template_context)
-        .unwrap_or_else(|| CommandTemplateContext {
-            server: String::new(),
-            stream_key: String::new(),
-            stream_code: String::new(),
-            stream_url: String::new(),
-            protocol: String::new(),
-        });
+        .unwrap_or_else(empty_command_template_context);
 
     let (live_control_mode, obs_ws_url, obs_ws_password, start_command_template) = {
         let runtime = state.runtime.lock().await;
@@ -1403,7 +876,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     let linkage_result = match live_control_mode.as_str() {
         "obs_ws" => {
             if primary_context.server.trim().is_empty() || primary_context.stream_key.trim().is_empty() {
-                Err("未获取到推流地址或推流密钥，无法执行 OBS WS 联动".to_string())
+                Err("i18n.live.error.obs_stream_context_missing".to_string())
             } else {
                 obs_ws_start_stream(&obs_ws_url, &obs_ws_password, &primary_context).await
             }
@@ -1418,23 +891,21 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     if let Err(link_error) = linkage_result {
         let mut rollback_form = BTreeMap::new();
         rollback_form.insert("room_id".into(), room_id_for_rollback);
-        rollback_form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
+        rollback_form.insert("platform".into(), live_platform_pc_link().into());
         rollback_form.insert("csrf".into(), csrf_for_rollback.clone());
         rollback_form.insert("csrf_token".into(), csrf_for_rollback);
         let _ = state
             .client
             .post_form("https://api.live.bilibili.com/room/v1/Room/stopLive", &rollback_form)
             .await;
-        return Err(format!("开播联动失败，已尝试回滚开播状态：{link_error}"));
+        return Err(format!("i18n.live.error.start_linkage_failed_with_rollback:{link_error}"));
     }
 
     let mut runtime = state.runtime.lock().await;
     runtime.session.is_live = true;
     if let Some(uid) = runtime.config.current_uid.clone() {
         if let Some(user) = runtime.config.users.get_mut(&uid) {
-            user.login_invalid = false;
-            user.auth_fail_count = 0;
-            user.last_auth_fail_at = 0;
+            clear_user_auth_flags(user);
         }
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -1466,7 +937,7 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
     let runtime = state.runtime.lock().await;
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), runtime.session.room_id.clone());
-    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
+    form.insert("platform".into(), live_platform_pc_link().into());
     form.insert("csrf".into(), runtime.session.csrf.clone());
     form.insert("csrf_token".into(), runtime.session.csrf.clone());
     drop(runtime);
@@ -1487,13 +958,7 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
                 runtime.config.on_live_stop_command.clone(),
             )
         };
-        let empty_context = CommandTemplateContext {
-            server: String::new(),
-            stream_key: String::new(),
-            stream_code: String::new(),
-            stream_url: String::new(),
-            protocol: String::new(),
-        };
+        let empty_context = empty_command_template_context();
         let linkage_result = match live_control_mode.as_str() {
             "obs_ws" => obs_ws_stop_stream(&obs_ws_url, &obs_ws_password).await,
             "command" => {
@@ -1510,9 +975,7 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
         runtime.session.is_live = false;
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
-                user.login_invalid = false;
-                user.auth_fail_count = 0;
-                user.last_auth_fail_at = 0;
+                clear_user_auth_flags(user);
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -1524,9 +987,9 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
                 &format!("stop_live code={code}, msg={}", error_message(&value, "")),
             )
             .await;
-            return Err("登录已失效，请重新扫码登录".into());
+            return Err("i18n.common.login_expired_relogin".into());
         }
-        Err(error_message(&value, "停播失败"))
+        Err(error_message(&value, "i18n.live.error.stop_live_failed"))
     }
 }
 
@@ -1534,7 +997,7 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
 pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult {
     let runtime = state.runtime.lock().await;
     if runtime.session.room_id.is_empty() {
-        return Err("未登录".into());
+        return Err("i18n.common.not_logged_in".into());
     }
 
     let room_id = runtime.session.room_id.clone();
@@ -1572,13 +1035,11 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
         let mut runtime = state.runtime.lock().await;
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
-                user.login_invalid = false;
-                user.auth_fail_count = 0;
-                user.last_auth_fail_at = 0;
+                clear_user_auth_flags(user);
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
-        Ok(wrap_ok(json!({ "msg": "发送成功" })))
+        Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_send_success" })))
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
@@ -1586,9 +1047,9 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
                 &format!("send_danmu code={code}, msg={}", error_message(&value, "")),
             )
             .await;
-            return Err("登录已失效，请重新扫码登录".into());
+            return Err("i18n.common.login_expired_relogin".into());
         }
-        Err(error_message(&value, "发送失败"))
+        Err(error_message(&value, "i18n.live.error.send_danmu_failed"))
     }
 }
 
@@ -1596,13 +1057,13 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
 pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if runtime.danmu_task.is_some() {
-        return Ok(wrap_ok(json!({ "msg": "already running" })));
+        return Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_monitor_already_running" })));
     }
 
     let room_id = runtime.session.room_id.clone();
     let uid = runtime.session.uid;
     if room_id.is_empty() {
-        return Err("未登录".into());
+        return Err("i18n.common.not_logged_in".into());
     }
     let client = state.client.clone();
 
@@ -1667,7 +1128,7 @@ pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> 
         }
     }));
 
-    Ok(wrap_ok(json!({ "msg": "started" })))
+    Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_monitor_started" })))
 }
 
 #[tauri::command]
@@ -1676,5 +1137,5 @@ pub async fn stop_danmu_monitor(state: State<'_, AppState>) -> CmdResult {
     if let Some(task) = runtime.danmu_task.take() {
         task.abort();
     }
-    Ok(wrap_ok(json!({ "msg": "stopped" })))
+    Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_monitor_stopped" })))
 }

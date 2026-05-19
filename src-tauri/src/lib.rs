@@ -6,6 +6,7 @@ mod config;
 mod constants;
 mod crypto;
 mod danmu;
+mod i18n;
 mod models;
 mod response;
 mod state;

@@ -29,6 +29,8 @@ struct AppSettingsFile {
     on_live_start_command: String,
     #[serde(default)]
     on_live_stop_command: String,
+    #[serde(default = "default_locale")]
+    locale: String,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -112,6 +114,10 @@ fn default_obs_ws_url() -> String {
 
 fn default_live_control_mode() -> String {
     "none".to_string()
+}
+
+fn default_locale() -> String {
+    "zh-CN".to_string()
 }
 
 fn default_live_client_version() -> String {
@@ -244,6 +250,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
         cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
         cfg.on_live_start_command = app_file.on_live_start_command;
         cfg.on_live_stop_command = app_file.on_live_stop_command;
+        cfg.locale = crate::i18n::normalize_locale(&app_file.locale).to_string();
 
         if cfg.live_control_mode.trim().is_empty() || cfg.live_control_mode == "none" {
             if cfg.obs_ws_enabled {
@@ -343,6 +350,7 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     app_file.obs_ws_auto_stop_on_live_end = cfg.obs_ws_auto_stop_on_live_end;
     app_file.on_live_start_command = cfg.on_live_start_command.clone();
     app_file.on_live_stop_command = cfg.on_live_stop_command.clone();
+    app_file.locale = cfg.locale.clone();
 
     let mut account_file = AccountFile::default();
     account_file.current_uid = cfg.current_uid.clone();

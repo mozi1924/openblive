@@ -21,26 +21,31 @@ struct TrayActionPayload<'a> {
 fn current_account_label(app: &AppHandle) -> String {
     let state = app.state::<AppState>();
     let Ok(runtime) = state.runtime.try_lock() else {
-        return "当前账号：读取中".to_string();
+        return crate::i18n::tr("zh-CN", "tray.account.loading");
     };
     let Some(uid) = runtime.config.current_uid.as_ref() else {
-        return "当前账号：未登录".to_string();
+        return crate::i18n::tr_config(&runtime.config, "tray.account.logged_out");
     };
     let Some(user) = runtime.config.users.get(uid) else {
-        return "当前账号：未登录".to_string();
+        return crate::i18n::tr_config(&runtime.config, "tray.account.logged_out");
     };
-    format!("当前账号：{} ({})", user.uname, user.uid)
+    format!(
+        "{}: {} ({})",
+        crate::i18n::tr_config(&runtime.config, "tray.account.current"),
+        user.uname,
+        user.uid
+    )
 }
 
 fn current_live_status_label(app: &AppHandle) -> String {
     let state = app.state::<AppState>();
     let Ok(runtime) = state.runtime.try_lock() else {
-        return "直播状态：读取中".to_string();
+        return crate::i18n::tr("zh-CN", "tray.live.loading");
     };
     if runtime.session.is_live {
-        "直播状态：直播中".to_string()
+        crate::i18n::tr_config(&runtime.config, "tray.live.on")
     } else {
-        "直播状态：未开播".to_string()
+        crate::i18n::tr_config(&runtime.config, "tray.live.off")
     }
 }
 
@@ -54,6 +59,14 @@ fn has_logged_in_user(app: &AppHandle) -> bool {
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let locale = {
+        let state = app.state::<AppState>();
+        state
+            .runtime
+            .try_lock()
+            .map(|runtime| runtime.config.locale.clone())
+            .unwrap_or_else(|_| "zh-CN".to_string())
+    };
     let account_info = MenuItem::with_id(
         app,
         MENU_ACCOUNT_INFO,
@@ -72,15 +85,33 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let toggle_window = MenuItem::with_id(
         app,
         MENU_TOGGLE_WINDOW,
-        "打开/隐藏主界面",
+        crate::i18n::tr(&locale, "tray.menu.toggle_window"),
         true,
         None::<&str>,
     )?;
     let logged_in = has_logged_in_user(app);
-    let start_live = MenuItem::with_id(app, MENU_START_LIVE, "开播", logged_in, None::<&str>)?;
-    let stop_live = MenuItem::with_id(app, MENU_STOP_LIVE, "下播", logged_in, None::<&str>)?;
+    let start_live = MenuItem::with_id(
+        app,
+        MENU_START_LIVE,
+        crate::i18n::tr(&locale, "tray.menu.start_live"),
+        logged_in,
+        None::<&str>,
+    )?;
+    let stop_live = MenuItem::with_id(
+        app,
+        MENU_STOP_LIVE,
+        crate::i18n::tr(&locale, "tray.menu.stop_live"),
+        logged_in,
+        None::<&str>,
+    )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, MENU_QUIT, "退出程序", true, None::<&str>)?;
+    let quit = MenuItem::with_id(
+        app,
+        MENU_QUIT,
+        crate::i18n::tr(&locale, "tray.menu.quit"),
+        true,
+        None::<&str>,
+    )?;
 
     Menu::with_items(
         app,
@@ -136,10 +167,18 @@ pub fn reveal_main_window(app: &AppHandle) {
 
 pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
     let menu = build_tray_menu(&app.handle().clone())?;
+    let locale = {
+        let state = app.state::<AppState>();
+        state
+            .runtime
+            .try_lock()
+            .map(|runtime| runtime.config.locale.clone())
+            .unwrap_or_else(|_| "zh-CN".to_string())
+    };
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip("OpenBlive Studio");
+        .tooltip(crate::i18n::tr(&locale, "tray.tooltip"));
     if let Some(icon) = app.default_window_icon().cloned() {
         builder = builder.icon(icon);
     }

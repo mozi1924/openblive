@@ -11,121 +11,23 @@ import type {
   User,
 } from "../types/studio";
 import { createSelfDanmuMessage, parseDanmuEvent } from "../utils/danmu";
+import { resolveBackendMessage } from "../utils/i18n";
 import { resolveQrPayload } from "../utils/qrcode";
 import { useWindowDrag } from "./useWindowDrag";
-
-const isValidUser = (value: User | null | undefined): value is User =>
-  Boolean(value?.uid);
-
-const splitTagInput = (raw: string) =>
-  raw
-    .split(/[,，]/)
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
-
-type StartLiveSource = "manual" | "tray" | "face_retry";
-type RecentArea = { parent: string; child: string };
-type StatusTone = "green" | "yellow" | "red";
-type SectionStatus = { tone: StatusTone; label: string; detail: string };
-const RECENT_AREAS_LIMIT = 6;
-
-const normalizeTags = (values: string[]) =>
-  [...new Set(values.map((tag) => tag.trim()).filter(Boolean))];
-
-const tagsToKey = (values: string[]) => normalizeTags(values).join(",");
-
-const recentAreasStorageKey = (uid: string) => `openblive.recent_areas.${uid}`;
-const unsavedLabelMap = {
-  title: "标题",
-  area: "分区",
-  tags: "标签",
-} as const;
-
-const defaultProfileState = (): LiveProfileState => ({
-  title: {
-    submitted: "",
-    effective: "",
-    transport: "idle",
-    review: "none",
-    message: "",
-    updated_at: 0,
-  },
-  area: {
-    submitted_parent: "",
-    submitted_child: "",
-    submitted_area_id: undefined,
-    effective_parent: "",
-    effective_child: "",
-    effective_area_id: undefined,
-    transport: "idle",
-    review: "none",
-    message: "",
-    updated_at: 0,
-  },
-  tags: {
-    submitted: [],
-    effective: [],
-    transport: "idle",
-    review: "none",
-    message: "",
-    updated_at: 0,
-  },
-});
-
-const normalizeProfileState = (
-  state: LiveProfileState | null | undefined,
-): LiveProfileState => {
-  const fallback = defaultProfileState();
-  if (!state) {
-    return fallback;
-  }
-  return {
-    title: {
-      ...fallback.title,
-      ...state.title,
-    },
-    area: {
-      ...fallback.area,
-      ...state.area,
-    },
-    tags: {
-      ...fallback.tags,
-      ...state.tags,
-      submitted: normalizeTags(state.tags?.submitted || []),
-      effective: normalizeTags(state.tags?.effective || []),
-    },
-  };
-};
-
-const buildSectionStatus = (
-  section: "title" | "area" | "tags",
-  isDirty: boolean,
-  profileState: LiveProfileState,
-): SectionStatus => {
-  const state = profileState[section];
-  if (isDirty) {
-    return { tone: "yellow", label: "未保存", detail: "当前修改尚未提交" };
-  }
-  if (state.transport === "failed") {
-    return { tone: "red", label: "提交失败", detail: state.message || "请稍后重试保存" };
-  }
-  if (state.review === "rejected") {
-    return { tone: "red", label: "审核未通过", detail: state.message || "请修改后重新提交" };
-  }
-  if (state.transport === "conflict") {
-    return { tone: "red", label: "远端已回退", detail: state.message || "远端当前值已不同于最近一次提交" };
-  }
-  if (state.transport === "saving") {
-    return { tone: "yellow", label: "保存中", detail: "正在提交到 B 站" };
-  }
-  if (state.review === "pending") {
-    return { tone: "yellow", label: "审核中", detail: state.message || "已提交，等待平台审核" };
-  }
-  if (state.review === "unknown") {
-    return { tone: "yellow", label: "待确认", detail: state.message || "已提交，等待远端状态确认" };
-  }
-  return { tone: "green", label: "已同步", detail: "最近一次提交已生效" };
-};
+import {
+  buildSectionStatus,
+  defaultProfileState,
+  isValidUser,
+  loadRecentAreasFromStorage,
+  normalizeProfileState,
+  normalizeTags,
+  pushRecentAreaToStorage,
+  splitTagInput,
+  StartLiveSource,
+  tagsToKey,
+  unsavedLabelMap,
+  type RecentArea,
+} from "./studio/controllerHelpers";
 
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
@@ -173,6 +75,8 @@ export function useStudioController() {
   const tagsDirtyRef = useRef(false);
   const activeUidRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
+  const parentRef = useRef("");
+  const childRef = useRef("");
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
 
@@ -233,69 +137,20 @@ export function useStudioController() {
     currentUserRef.current = currentUser;
   }, [currentUser]);
 
+  useEffect(() => {
+    parentRef.current = parent;
+    childRef.current = child;
+  }, [child, parent]);
+
   const loadRecentAreasForUid = useCallback((uid: string | null) => {
-    if (!uid) {
-      setRecentAreas([]);
-      return;
-    }
-    try {
-      const raw = window.localStorage.getItem(recentAreasStorageKey(uid));
-      if (!raw) {
-        setRecentAreas([]);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        setRecentAreas([]);
-        return;
-      }
-      const normalized = parsed
-        .filter(
-          (item): item is RecentArea =>
-            item &&
-            typeof item === "object" &&
-            typeof item.parent === "string" &&
-            typeof item.child === "string" &&
-            item.parent.length > 0 &&
-            item.child.length > 0,
-        )
-        .slice(0, RECENT_AREAS_LIMIT);
-      setRecentAreas(normalized);
-    } catch {
-      setRecentAreas([]);
-    }
+    setRecentAreas(loadRecentAreasFromStorage(uid));
   }, []);
 
   const pushRecentArea = useCallback((uid: string | null, area: RecentArea) => {
-    if (!uid || !area.parent || !area.child) {
-      return;
+    const next = pushRecentAreaToStorage(uid, area);
+    if (next.length > 0) {
+      setRecentAreas(next);
     }
-    const key = recentAreasStorageKey(uid);
-    const current = (() => {
-      try {
-        const raw = window.localStorage.getItem(key);
-        if (!raw) {
-          return [] as RecentArea[];
-        }
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [] as RecentArea[];
-      }
-    })();
-    const deduped = current.filter(
-      (item) =>
-        !(
-          item &&
-          typeof item.parent === "string" &&
-          typeof item.child === "string" &&
-          item.parent === area.parent &&
-          item.child === area.child
-        ),
-    );
-    const next = [area, ...deduped].slice(0, RECENT_AREAS_LIMIT);
-    window.localStorage.setItem(key, JSON.stringify(next));
-    setRecentAreas(next);
   }, []);
 
   const syncTrayMenu = useCallback(async () => {
@@ -375,6 +230,7 @@ export function useStudioController() {
         "obs_ws_auto_stop_on_live_end",
         "on_live_start_command",
         "on_live_stop_command",
+        "locale",
       ];
       for (const key of writableKeys) {
         await studioApi.setAppConfig(key, appConfig[key]);
@@ -384,7 +240,7 @@ export function useStudioController() {
       await loadLinkageStatus();
       await syncTrayMenu();
     } catch (error) {
-      append(`保存设置失败: ${String(error)}`);
+      append(`保存设置失败: ${resolveBackendMessage(String(error))}`);
     } finally {
       setSavingConfig(false);
     }
@@ -493,7 +349,7 @@ export function useStudioController() {
         await studioApi.syncLiveRoomProfile().catch(() => undefined);
       }
     } catch (error) {
-      append(`刷新用户信息失败: ${String(error)}`);
+      append(`刷新用户信息失败: ${resolveBackendMessage(String(error))}`);
       await loadAccounts();
     }
   }, [append, applyProfileState, applyUserDraftValues, loadAccounts]);
@@ -583,9 +439,9 @@ export function useStudioController() {
         return;
       }
 
-      append(`获取二维码失败: ${res.msg || "接口返回异常"}`);
+      append(`获取二维码失败: ${resolveBackendMessage(res.msg || "接口返回异常")}`);
     } catch (error) {
-      append(`获取二维码失败: ${String(error)}`);
+      append(`获取二维码失败: ${resolveBackendMessage(String(error))}`);
     } finally {
       qrcodeRefreshBusyRef.current = false;
     }
@@ -636,7 +492,7 @@ export function useStudioController() {
       }
 
       if (!silent || statusChanged) {
-        append(`登录状态: ${res.msg || "等待确认"} (${code})`);
+        append(`登录状态: ${resolveBackendMessage(res.msg || "等待确认")} (${code})`);
       }
     } finally {
       loginPollBusyRef.current = false;
@@ -665,7 +521,7 @@ export function useStudioController() {
           await syncLiveRoomProfile(true);
         }
       } catch (error) {
-        append(`切换账号失败: ${String(error)}`);
+        append(`切换账号失败: ${resolveBackendMessage(String(error))}`);
       }
     },
     [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile],
@@ -692,12 +548,25 @@ export function useStudioController() {
 
     setPartitions(res.data);
     const keys = Object.keys(res.data);
-    if (!parent && keys.length > 0) {
-      setParent(keys[0]);
-      setChild((res.data[keys[0]] || [])[0] || "");
+    if (keys.length > 0) {
+      const latestParent = parentRef.current;
+      const latestChild = childRef.current;
+
+      if (!latestParent) {
+        setParent(keys[0]);
+        setChild((res.data[keys[0]] || [])[0] || "");
+      } else if (!Object.prototype.hasOwnProperty.call(res.data, latestParent)) {
+        setParent(keys[0]);
+        setChild((res.data[keys[0]] || [])[0] || "");
+      } else {
+        const childrenForParent = res.data[latestParent] || [];
+        if (!latestChild || !childrenForParent.includes(latestChild)) {
+          setChild(childrenForParent[0] || "");
+        }
+      }
     }
     append("分区已同步");
-  }, [append, parent]);
+  }, [append]);
 
   const submitArea = useCallback(
     async (event: FormEvent) => {
@@ -725,10 +594,10 @@ export function useStudioController() {
         area: {
           ...prev.area,
           transport: "failed",
-          message: res.msg || "分区设置失败",
+          message: resolveBackendMessage(res.msg || "分区设置失败"),
         },
       }));
-      append(`分区设置失败: ${res.msg}`);
+      append(`分区设置失败: ${resolveBackendMessage(res.msg)}`);
     },
     [append, applyProfileState, child, parent],
   );
@@ -758,10 +627,10 @@ export function useStudioController() {
         title: {
           ...prev.title,
           transport: "failed",
-          message: res.msg || "标题更新失败",
+          message: resolveBackendMessage(res.msg || "标题更新失败"),
         },
       }));
-      append(`标题更新失败: ${res.msg}`);
+      append(`标题更新失败: ${resolveBackendMessage(res.msg)}`);
     },
     [append, applyProfileState, title],
   );
@@ -799,10 +668,10 @@ export function useStudioController() {
         tags: {
           ...prev.tags,
           transport: "failed",
-          message: res.msg || "标签更新失败",
+          message: resolveBackendMessage(res.msg || "标签更新失败"),
         },
       }));
-      append(`标签更新失败: ${res.msg}`);
+      append(`标签更新失败: ${resolveBackendMessage(res.msg)}`);
     },
     [append, applyProfileState, tags],
   );
@@ -861,7 +730,7 @@ export function useStudioController() {
       setActiveTab("stream");
       if (source === "tray") {
         await studioApi.revealMainWindow().catch((error) => {
-          append(`托盘唤起主界面失败: ${String(error)}`);
+          append(`托盘唤起主界面失败: ${resolveBackendMessage(String(error))}`);
         });
       }
       const qrPayload = await resolveFaceQrImage(res.qr || "");
@@ -879,7 +748,7 @@ export function useStudioController() {
       return;
     }
 
-    append(`开播失败: ${res.msg}`);
+    append(`开播失败: ${resolveBackendMessage(res.msg)}`);
     await loadLinkageStatus();
   }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, parent, pushRecentArea, refreshSession, resolveFaceQrImage, unsavedItems]);
 
@@ -900,7 +769,7 @@ export function useStudioController() {
 
   const stopLive = useCallback(async () => {
     const res = await studioApi.stopLive();
-    append(res.code === 0 ? "已停播" : `停播失败: ${res.msg}`);
+    append(res.code === 0 ? "已停播" : `停播失败: ${resolveBackendMessage(res.msg)}`);
     setRtmp(null);
     await refreshSession();
     await loadLinkageStatus();
@@ -912,7 +781,7 @@ export function useStudioController() {
       setDanmuListening(true);
       append("弹幕监听已启动");
     } else {
-      append(`弹幕监听失败: ${res.msg}`);
+      append(`弹幕监听失败: ${resolveBackendMessage(res.msg)}`);
     }
   }, [append]);
 
@@ -936,7 +805,7 @@ export function useStudioController() {
         ...prev,
       ]);
     } else {
-      append(`发送失败: ${res.msg}`);
+      append(`发送失败: ${resolveBackendMessage(res.msg)}`);
     }
 
     setDanmuText("");
@@ -1039,7 +908,9 @@ export function useStudioController() {
           }
           handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
-            append(`启动时 Cookie 刷新部分失败：${res.data.failed.join(" | ")}`);
+            append(
+              `启动时 Cookie 刷新部分失败：${res.data.failed.map(resolveBackendMessage).join(" | ")}`,
+            );
           }
           if (res.data.updated > 0) {
             await loadSavedUser();
@@ -1061,7 +932,9 @@ export function useStudioController() {
 
           handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
-            append(`Cookie 自动刷新部分失败：${res.data.failed.join(" | ")}`);
+            append(
+              `Cookie 自动刷新部分失败：${res.data.failed.map(resolveBackendMessage).join(" | ")}`,
+            );
           }
           if (res.data.updated > 0) {
             await loadSavedUser();

@@ -28,7 +28,10 @@ JNrRuoEUXpabUzGB8QIDAQAB
 -----END PUBLIC KEY-----";
 
 fn fill_profile_from_full(user: &mut UserRecord, full: &serde_json::Value) {
-    user.uname = full["uname"].as_str().unwrap_or("未知用户").to_string();
+    user.uname = full["uname"]
+        .as_str()
+        .unwrap_or("i18n.account.user.unknown_name")
+        .to_string();
     user.face = full["face"].as_str().unwrap_or("").to_string();
     user.level = full["level_info"]["current_level"].as_i64().unwrap_or(0);
     user.current_exp = full["level_info"]["current_exp"].as_i64().unwrap_or(0);
@@ -94,11 +97,11 @@ fn extract_refresh_csrf(html: &str) -> Option<String> {
 
 fn build_correspond_path(timestamp: i64) -> Result<String, String> {
     let public_key = RsaPublicKey::from_public_key_pem(COOKIE_REFRESH_PUBLIC_KEY)
-        .map_err(|error| format!("加载刷新公钥失败: {error}"))?;
+        .map_err(|error| format!("i18n.account.error.load_refresh_pubkey_failed: {error}"))?;
     let payload = format!("refresh_{timestamp}");
     let encrypted = public_key
         .encrypt(&mut OsRng, Oaep::new::<Sha256>(), payload.as_bytes())
-        .map_err(|error| format!("生成 correspondPath 失败: {error}"))?;
+        .map_err(|error| format!("i18n.account.error.build_correspond_path_failed: {error}"))?;
     Ok(hex::encode(encrypted))
 }
 
@@ -114,7 +117,7 @@ async fn refresh_cookie_with_official_flow(
         cookie_diagnostics(&user.cookie)
     );
     if user.refresh_token.is_empty() {
-        return Err("Cookie 需要刷新，但缺少 refresh_token，请重新扫码登录".into());
+        return Err("i18n.account.error.cookie_refresh_token_missing".into());
     }
 
     let csrf = parse_cookie_value(&user.cookie, "bili_jct")
@@ -125,7 +128,7 @@ async fn refresh_cookie_with_official_flow(
                 Some(user.csrf.clone())
             }
         })
-        .ok_or_else(|| "Cookie 需要刷新，但缺少 csrf".to_string())?;
+        .ok_or_else(|| "i18n.account.error.cookie_csrf_missing".to_string())?;
 
     let ts = if timestamp > 0 {
         timestamp
@@ -145,7 +148,7 @@ async fn refresh_cookie_with_official_flow(
         .map_err(|error| error.to_string())?;
     if !correspond_response.status().is_success() {
         return Err(format!(
-            "获取 refresh_csrf 失败: HTTP {}",
+            "i18n.account.error.fetch_refresh_csrf_http_failed:{}",
             correspond_response.status()
         ));
     }
@@ -159,7 +162,7 @@ async fn refresh_cookie_with_official_flow(
         .await
         .map_err(|error| error.to_string())?;
     let refresh_csrf = extract_refresh_csrf(&html)
-        .ok_or_else(|| "获取 refresh_csrf 失败: 页面缺少 token".to_string())?;
+        .ok_or_else(|| "i18n.account.error.refresh_csrf_token_missing".to_string())?;
     eprintln!(
         "[auth][refresh] uid={} refresh_csrf extracted len={}",
         user.uid,
@@ -190,7 +193,7 @@ async fn refresh_cookie_with_official_flow(
     if refresh_value["code"].as_i64().unwrap_or(-1) != 0 {
         let code = refresh_value["code"].as_i64().unwrap_or(-1);
         return Err(format!(
-            "Cookie 刷新失败({code}): {}",
+            "i18n.account.error.cookie_refresh_failed({code}): {}",
             error_message(&refresh_value, "unknown error")
         ));
     }
@@ -222,7 +225,7 @@ async fn refresh_cookie_with_official_flow(
                 Some(user.csrf.clone())
             }
         })
-        .ok_or_else(|| "Cookie 刷新确认失败: 缺少新的 csrf".to_string())?;
+        .ok_or_else(|| "i18n.account.error.cookie_refresh_confirm_csrf_missing".to_string())?;
     let mut confirm_form = BTreeMap::new();
     confirm_form.insert("csrf".to_string(), confirm_csrf);
     confirm_form.insert("refresh_token".to_string(), old_refresh_token);
@@ -244,7 +247,7 @@ async fn refresh_cookie_with_official_flow(
     if confirm_value["code"].as_i64().unwrap_or(-1) != 0 {
         let code = confirm_value["code"].as_i64().unwrap_or(-1);
         return Err(format!(
-            "Cookie 刷新确认失败({code}): {}",
+            "i18n.account.error.cookie_refresh_confirm_failed({code}): {}",
             error_message(&confirm_value, "unknown error")
         ));
     }
@@ -322,7 +325,7 @@ async fn refresh_cookie_for_uid(
             "[auth][check] uid={} local cookie missing, skip remote check",
             uid
         );
-        return RefreshCookieResult::Failed("本地凭证为空，请重新扫码登录".into());
+        return RefreshCookieResult::Failed("i18n.account.error.local_credential_empty".into());
     }
     eprintln!(
         "[auth][check] uid={} begin refresh_profile={}, refresh_token_len={}, {}",
@@ -367,7 +370,9 @@ async fn refresh_cookie_for_uid(
 
     if info["code"].as_i64().unwrap_or(-1) != 0 {
         let code = info["code"].as_i64().unwrap_or(-1);
-        let msg = info["message"].as_str().unwrap_or("Cookie 状态检查失败");
+        let msg = info["message"]
+            .as_str()
+            .unwrap_or("i18n.account.error.cookie_status_check_failed");
         eprintln!(
             "[auth][check] cookie/info failed for uid {uid}: code={code}, msg={msg}, {}",
             cookie_diagnostics(&user.cookie)
@@ -377,13 +382,15 @@ async fn refresh_cookie_for_uid(
             if fail_count < AUTH_INVALID_THRESHOLD {
                 clear_user_login_invalid_flag(uid, state).await;
                 return RefreshCookieResult::Failed(format!(
-                    "登录校验异常({code}): {msg}，第 {fail_count}/{AUTH_INVALID_THRESHOLD} 次"
+                    "i18n.account.error.login_verify_failed({code}): {msg},attempt={fail_count}/{AUTH_INVALID_THRESHOLD}"
                 ));
             }
 
             if !has_session_cookie(&user.cookie) {
                 mark_user_login_invalid(uid, state, true).await;
-                return RefreshCookieResult::Invalid("Cookie 缺少 SESSDATA，请重新登录".into());
+                return RefreshCookieResult::Invalid(
+                    "i18n.account.error.cookie_sessdata_missing".into(),
+                );
             }
             mark_user_login_invalid(uid, state, true).await;
             return RefreshCookieResult::Invalid(msg.to_string());
@@ -404,7 +411,7 @@ async fn refresh_cookie_for_uid(
                 uid, error
             );
             return RefreshCookieResult::Failed(format!(
-                "Cookie 需要刷新但刷新失败，第 {fail_count}/{AUTH_INVALID_THRESHOLD} 次：{error}"
+                "i18n.account.error.cookie_refresh_retry_failed:attempt={fail_count}/{AUTH_INVALID_THRESHOLD}:{error}"
             ));
         }
         state.client.apply_cookie_header(&user.cookie);
@@ -441,7 +448,9 @@ async fn refresh_cookie_for_uid(
 
     if nav["code"].as_i64().unwrap_or(-1) != 0 {
         let code = nav["code"].as_i64().unwrap_or(-1);
-        let msg = nav["message"].as_str().unwrap_or("获取用户信息失败");
+        let msg = nav["message"]
+            .as_str()
+            .unwrap_or("i18n.account.error.fetch_user_info_failed");
         eprintln!(
             "[auth][check] nav failed for uid {uid}: code={code}, msg={msg}, {}",
             cookie_diagnostics(&user.cookie)
@@ -451,13 +460,15 @@ async fn refresh_cookie_for_uid(
             if fail_count < AUTH_INVALID_THRESHOLD {
                 clear_user_login_invalid_flag(uid, state).await;
                 return RefreshCookieResult::Failed(format!(
-                    "登录校验异常({code}): {msg}，第 {fail_count}/{AUTH_INVALID_THRESHOLD} 次"
+                    "i18n.account.error.login_verify_failed({code}): {msg},attempt={fail_count}/{AUTH_INVALID_THRESHOLD}"
                 ));
             }
 
             if !has_session_cookie(&user.cookie) {
                 mark_user_login_invalid(uid, state, true).await;
-                return RefreshCookieResult::Invalid("Cookie 缺少 SESSDATA，请重新登录".into());
+                return RefreshCookieResult::Invalid(
+                    "i18n.account.error.cookie_sessdata_missing".into(),
+                );
             }
             mark_user_login_invalid(uid, state, true).await;
             return RefreshCookieResult::Invalid(msg.to_string());
@@ -570,7 +581,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
             nav_uid,
             cookie_diagnostics(&cookie_header)
         );
-        return Err("登录成功但未获取到有效 UID，请重试扫码登录".into());
+        return Err("i18n.account.error.login_uid_missing".into());
     }
     let csrf = parse_cookie_value(&cookie_header, "bili_jct").unwrap_or_default();
     let room = state
@@ -685,7 +696,7 @@ pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
             .config
             .current_uid
             .clone()
-            .ok_or_else(|| "未登录".to_string())?
+            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?
     };
     eprintln!("[auth][manual] refresh_current_user uid={}", uid);
     let refreshed = refresh_cookie_for_uid(&uid, &state, true).await;
@@ -694,8 +705,8 @@ pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
             let response_user = to_response_user(&state.config_path, &user);
             Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
         }
-        RefreshCookieResult::Missing => Err("未登录".into()),
-        RefreshCookieResult::Invalid(msg) => Err(format!("登录已失效，请重新登录：{msg}")),
+        RefreshCookieResult::Missing => Err("i18n.common.not_logged_in".into()),
+        RefreshCookieResult::Invalid(msg) => Err(format!("i18n.common.login_expired_relogin:{msg}")),
         RefreshCookieResult::Failed(error) => Err(error),
     };
 
@@ -737,7 +748,7 @@ pub async fn get_account_list(state: State<'_, AppState>) -> CmdResult {
 pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if !runtime.config.users.contains_key(&req.uid) {
-        return Err("账户不存在".into());
+        return Err("i18n.account.error.account_not_found".into());
     }
     if runtime
         .config
@@ -746,7 +757,7 @@ pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResul
         .map(|user| user.login_invalid)
         .unwrap_or(false)
     {
-        return Err("该账号登录已失效，请重新扫码登录".into());
+        return Err("i18n.account.error.account_login_invalid".into());
     }
 
     runtime.config.current_uid = Some(req.uid.clone());

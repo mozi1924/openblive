@@ -32,6 +32,24 @@ export function SettingsTab({
     <div className="relative mx-auto max-w-4xl space-y-6 pb-28">
       
       {/* Window Behavior */}
+      <section className="glass-panel space-y-4 rounded-3xl p-6">
+        <div className="text-xs text-gray-500">界面语言 / UI Language</div>
+        <select
+          className={inputClass}
+          value={appConfig.locale}
+          onChange={(event) =>
+            onChangeConfig(
+              "locale",
+              (event.target.value as AppConfig["locale"]) || "zh-CN",
+            )
+          }
+        >
+          <option value="zh-CN">简体中文</option>
+          <option value="en-US">English</option>
+        </select>
+      </section>
+
+      {/* Window Behavior */}
       <section className="glass-panel space-y-5 rounded-3xl p-6">
         <div>
           <div className="flex items-center space-x-2">

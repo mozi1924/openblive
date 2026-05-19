@@ -82,7 +82,7 @@ pub async fn fetch_full_user_data(client: &BiliClient) -> Result<serde_json::Val
         .get_json("https://api.bilibili.com/x/web-interface/nav", &[])
         .await?;
     if nav["code"].as_i64().unwrap_or(-1) != 0 {
-        return Err(anyhow!("获取用户信息失败"));
+        return Err(anyhow!("i18n.account.error.fetch_user_info_failed"));
     }
 
     let stat = client

@@ -240,6 +240,8 @@ pub struct PersistConfig {
     pub on_live_start_command: String,
     #[serde(default)]
     pub on_live_stop_command: String,
+    #[serde(default = "default_locale")]
+    pub locale: String,
     #[serde(default = "default_live_client_version")]
     pub live_client_version: String,
     #[serde(default = "default_live_client_build")]
@@ -262,6 +264,7 @@ impl Default for PersistConfig {
             obs_ws_auto_stop_on_live_end: false,
             on_live_start_command: String::new(),
             on_live_stop_command: String::new(),
+            locale: default_locale(),
             live_client_version: default_live_client_version(),
             live_client_build: default_live_client_build(),
             live_client_synced_at: default_live_client_synced_at(),
@@ -275,6 +278,10 @@ fn default_live_control_mode() -> String {
 
 fn default_obs_ws_url() -> String {
     "ws://127.0.0.1:4455".to_string()
+}
+
+fn default_locale() -> String {
+    "zh-CN".to_string()
 }
 
 #[derive(Deserialize)]

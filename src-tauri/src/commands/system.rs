@@ -1,4 +1,5 @@
 use crate::constants::CmdResult;
+use crate::i18n::normalize_locale;
 use crate::models::AppConfigReq;
 use crate::response::wrap_ok;
 use crate::{config::save_config, state::AppState};
@@ -26,7 +27,7 @@ async fn ensure_obs_ws_keepalive_task(app: AppHandle) {
                 task.abort();
             }
             runtime.obs_ws_connected = false;
-            runtime.obs_ws_last_error = "OBS 联动未启用".to_string();
+            runtime.obs_ws_last_error = "i18n.system.obs_ws_not_enabled".to_string();
             runtime.obs_ws_last_checked_at = chrono::Utc::now().timestamp();
             false
         } else if runtime.obs_ws_keepalive_task.is_some() {
@@ -57,7 +58,7 @@ async fn ensure_obs_ws_keepalive_task(app: AppHandle) {
                 let app_state = app_for_task.state::<AppState>();
                 let mut runtime = app_state.runtime.lock().await;
                 runtime.obs_ws_connected = false;
-                runtime.obs_ws_last_error = "OBS 联动未启用".to_string();
+                runtime.obs_ws_last_error = "i18n.system.obs_ws_not_enabled".to_string();
                 runtime.obs_ws_last_checked_at = chrono::Utc::now().timestamp();
                 runtime.obs_ws_keepalive_task = None;
                 break;
@@ -110,6 +111,7 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "obs_ws_auto_stop_on_live_end": runtime.config.obs_ws_auto_stop_on_live_end,
         "on_live_start_command": runtime.config.on_live_start_command,
         "on_live_stop_command": runtime.config.on_live_stop_command,
+        "locale": runtime.config.locale,
         "is_win32": cfg!(target_os = "windows"),
         "has_tray": crate::tray::has_tray(&app)
     })))
@@ -151,7 +153,10 @@ pub async fn set_app_config(app: AppHandle, req: AppConfigReq, state: State<'_, 
         "on_live_stop_command" => {
             runtime.config.on_live_stop_command = req.value.as_str().unwrap_or("").to_string();
         }
-        _ => return Err("Unknown config key".into()),
+        "locale" => {
+            runtime.config.locale = normalize_locale(req.value.as_str().unwrap_or("zh-CN")).to_string();
+        }
+        _ => return Err("i18n.system.error.unknown_config_key".into()),
     }
     runtime.config.obs_ws_enabled = runtime.config.live_control_mode == "obs_ws";
     save_config(&state.config_path, &runtime.config, &state.master_key);
