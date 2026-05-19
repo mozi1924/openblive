@@ -1,4 +1,4 @@
-import { Cpu, Terminal, Minimize2, LogOut, Save, Sliders, Server, EyeOff } from "lucide-react";
+import { Cpu, Terminal, Minimize2, LogOut, Save, Sliders, Server, EyeOff, ChevronDown } from "lucide-react";
 import type { AppConfig } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t } from "../../utils/i18n";
@@ -7,7 +7,9 @@ type SettingsTabProps = {
   appConfig: AppConfig | null;
   locale: LocaleSetting;
   savingConfig: boolean;
+  savingLocale: boolean;
   onChangeConfig: <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => void;
+  onChangeLocale: (locale: AppConfig["locale"]) => Promise<void>;
   onSaveConfig: () => Promise<void>;
 };
 
@@ -15,7 +17,9 @@ export function SettingsTab({
   appConfig,
   locale,
   savingConfig,
+  savingLocale,
   onChangeConfig,
+  onChangeLocale,
   onSaveConfig,
 }: SettingsTabProps) {
   if (!appConfig) {
@@ -31,6 +35,8 @@ export function SettingsTab({
     "flex min-h-36 items-start rounded-2xl border p-4 text-left transition-all duration-200";
   const inputClass =
     "w-full rounded-xl border border-white/8 bg-[#090b0f] px-3.5 py-3 text-xs text-white outline-none transition-all hover:border-white/12 focus:border-bili-blue/40";
+  const selectClass =
+    "h-11 w-full appearance-none rounded-xl border border-white/8 bg-gradient-to-br from-[#0b111c] to-[#090b0f] px-3.5 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none";
 
   return (
     <div className="relative mx-auto max-w-4xl space-y-6 pb-28">
@@ -38,20 +44,23 @@ export function SettingsTab({
       {/* Window Behavior */}
       <section className="glass-panel space-y-4 rounded-3xl p-6">
         <div className="text-xs text-gray-500">{t(locale, "ui.settings.locale.label")}</div>
-        <select
-          className={inputClass}
-          value={appConfig.locale}
-          onChange={(event) =>
-            onChangeConfig(
-              "locale",
-              (event.target.value as AppConfig["locale"]) || "auto",
-            )
-          }
-        >
-          <option value="auto">{t(locale, "ui.settings.locale.auto")}</option>
-          <option value="zh-CN">{t(locale, "ui.settings.locale.zh")}</option>
-          <option value="en-US">{t(locale, "ui.settings.locale.en")}</option>
-        </select>
+        <div className="relative">
+          <select
+            className={selectClass}
+            value={appConfig.locale}
+            disabled={savingLocale}
+            onChange={(event) =>
+              void onChangeLocale(
+                (event.target.value as AppConfig["locale"]) || "auto",
+              )
+            }
+          >
+            <option value="auto" className="bg-[#090b0f]">{t(locale, "ui.settings.locale.auto")}</option>
+            <option value="zh-CN" className="bg-[#090b0f]">{t(locale, "ui.settings.locale.zh")}</option>
+            <option value="en-US" className="bg-[#090b0f]">{t(locale, "ui.settings.locale.en")}</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+        </div>
       </section>
 
       {/* Window Behavior */}

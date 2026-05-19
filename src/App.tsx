@@ -39,7 +39,7 @@ function App() {
           onRefreshPartitions={actions.loadPartitions}
         />
 
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className={`flex-1 ${state.activeTab === "danmu" ? "overflow-hidden flex flex-col p-4 md:p-6" : "overflow-y-auto p-8"}`}>
           {state.activeTab === "account" && (
             <AccountTab
               locale={locale}
@@ -96,6 +96,7 @@ function App() {
           {state.activeTab === "danmu" && (
             <DanmuTab
               locale={locale}
+              currentUser={state.currentUser}
               danmuEndRef={refs.danmuEndRef}
               danmuListening={state.danmuListening}
               danmuText={state.danmuText}
@@ -113,7 +114,9 @@ function App() {
               appConfig={state.appConfig}
               locale={locale}
               savingConfig={state.savingConfig}
+              savingLocale={state.savingLocale}
               onChangeConfig={actions.updateAppConfig}
+              onChangeLocale={actions.updateLocaleConfig}
               onSaveConfig={actions.saveAppConfig}
             />
           )}

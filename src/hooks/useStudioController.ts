@@ -58,6 +58,7 @@ export function useStudioController() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [savingLocale, setSavingLocale] = useState(false);
   const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
   const [recentAreas, setRecentAreas] = useState<RecentArea[]>([]);
   const [profileState, setProfileState] = useState<LiveProfileState>(defaultProfileState);
@@ -213,6 +214,33 @@ export function useStudioController() {
       setAppConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
     },
     [],
+  );
+
+  const updateLocaleConfig = useCallback(
+    async (nextLocale: AppConfig["locale"]) => {
+      if (!appConfig) {
+        return;
+      }
+      const prevLocale = appConfig.locale;
+      setAppConfig((prev) => (prev ? { ...prev, locale: nextLocale } : prev));
+      setSavingLocale(true);
+      try {
+        await studioApi.setAppConfig("locale", nextLocale);
+        await loadAppConfig();
+        await syncTrayMenu();
+      } catch (error) {
+        setAppConfig((prev) => (prev ? { ...prev, locale: prevLocale } : prev));
+        append(
+          `${t(prevLocale, "ui.settings.save.failed")}: ${resolveBackendMessage(
+            String(error),
+            prevLocale,
+          )}`,
+        );
+      } finally {
+        setSavingLocale(false);
+      }
+    },
+    [appConfig, append, loadAppConfig, syncTrayMenu],
   );
 
   const saveAppConfig = useCallback(async () => {
@@ -731,6 +759,13 @@ export function useStudioController() {
       setRtmp(res.data || null);
       pushRecentArea(currentUser?.uid || null, { parent, child });
       append(t(localeSetting, "ui.ctrl.start_live_ok"));
+      const danmuRes = await studioApi.startDanmuMonitor();
+      if (danmuRes.code === 0) {
+        setDanmuListening(true);
+        append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
+      } else {
+        append(tf(localeSetting, "ui.ctrl.danmu_monitor_failed", { msg: resolveBackendMessage(danmuRes.msg, localeSetting) }));
+      }
       await refreshSession();
       await loadLinkageStatus();
       return;
@@ -1046,6 +1081,7 @@ export function useStudioController() {
       showFaceModal,
       showLogs,
       savingConfig,
+      savingLocale,
       tagInput,
       tags,
       title,
@@ -1071,6 +1107,7 @@ export function useStudioController() {
       setChild: changeChild,
       setDanmuText,
       updateAppConfig,
+      updateLocaleConfig,
       saveAppConfig,
       setTagInput,
       setTitle,

@@ -72,10 +72,10 @@ export function Sidebar({
           <button
             key={key}
             onClick={() => onSelectTab(key)}
-            className={`group flex w-full items-center rounded-xl border-l-4 px-4 py-3.5 text-left transition-all duration-200 no-drag ${
+            className={`group flex w-full items-center rounded-xl border-l-4 border-y-0 border-r-0 px-4 py-3.5 text-left transition-all duration-200 no-drag ${
               activeTab === key
-                ? "border-bili-blue bg-gradient-to-r from-bili-blue/8 to-transparent font-semibold text-white"
-                : "border-transparent text-gray-400 hover:bg-white/4 hover:text-white"
+                ? "border-l-bili-blue bg-gradient-to-r from-bili-blue/8 to-transparent font-semibold text-white"
+                : "border-l-transparent text-gray-400 hover:bg-white/4 hover:text-white"
             }`}
           >
             <Icon
