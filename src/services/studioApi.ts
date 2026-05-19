@@ -4,6 +4,7 @@ import type {
   AccountList,
   AppConfig,
   DanmuEventPayload,
+  LinkageStatus,
   LiveRoomProfile,
   Resp,
   Session,
@@ -20,6 +21,7 @@ const invokeCommand = <T>(
 export const studioApi = {
   getSession: () => invokeCommand<Session>("get_session"),
   getAppConfig: () => invokeCommand<AppConfig>("get_app_config"),
+  getLinkageStatus: () => invokeCommand<LinkageStatus>("get_linkage_status"),
   setAppConfig: (key: string, value: unknown) =>
     invokeCommand("set_app_config", { req: { key, value } }),
   refreshTrayMenu: () => invokeCommand("refresh_tray_menu"),

@@ -13,6 +13,8 @@ const LIVE_CACHE_CONFIG_FILE: &str = "live_cache.json";
 struct AppSettingsFile {
     #[serde(default = "default_min_to_tray")]
     min_to_tray: bool,
+    #[serde(default = "default_live_control_mode")]
+    live_control_mode: String,
     #[serde(default)]
     obs_ws_enabled: bool,
     #[serde(default = "default_obs_ws_url")]
@@ -104,6 +106,10 @@ fn default_min_to_tray() -> bool {
 
 fn default_obs_ws_url() -> String {
     "ws://127.0.0.1:4455".to_string()
+}
+
+fn default_live_control_mode() -> String {
+    "none".to_string()
 }
 
 fn default_live_client_version() -> String {
@@ -228,6 +234,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
 
     if let Some(app_file) = load_json::<AppSettingsFile>(&app_config_path(path)) {
         cfg.min_to_tray = app_file.min_to_tray;
+        cfg.live_control_mode = app_file.live_control_mode;
         cfg.obs_ws_enabled = app_file.obs_ws_enabled;
         cfg.obs_ws_url = app_file.obs_ws_url;
         cfg.obs_ws_password = app_file.obs_ws_password;
@@ -235,6 +242,16 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
         cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
         cfg.on_live_start_command = app_file.on_live_start_command;
         cfg.on_live_stop_command = app_file.on_live_stop_command;
+
+        if cfg.live_control_mode.trim().is_empty() || cfg.live_control_mode == "none" {
+            if cfg.obs_ws_enabled {
+                cfg.live_control_mode = "obs_ws".to_string();
+            } else if !cfg.on_live_start_command.trim().is_empty()
+                || !cfg.on_live_stop_command.trim().is_empty()
+            {
+                cfg.live_control_mode = "command".to_string();
+            }
+        }
     }
 
     if let Some(account_file) = load_json::<AccountFile>(&account_config_path(path)) {
@@ -314,6 +331,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
 pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     let mut app_file = AppSettingsFile::default();
     app_file.min_to_tray = cfg.min_to_tray;
+    app_file.live_control_mode = cfg.live_control_mode.clone();
     app_file.obs_ws_enabled = cfg.obs_ws_enabled;
     app_file.obs_ws_url = cfg.obs_ws_url.clone();
     app_file.obs_ws_password = cfg.obs_ws_password.clone();

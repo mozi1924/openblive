@@ -5,6 +5,7 @@ import type {
   ActiveTab,
   AppConfig,
   DanmuMsg,
+  LinkageStatus,
   Session,
   StreamInfo,
   User,
@@ -49,6 +50,7 @@ export function useStudioController() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
 
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,13 @@ export function useStudioController() {
     }
   }, []);
 
+  const loadLinkageStatus = useCallback(async () => {
+    const res = await studioApi.getLinkageStatus();
+    if (res.code === 0 && res.data) {
+      setLinkageStatus(res.data);
+    }
+  }, []);
+
   const updateAppConfig = useCallback(
     <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
       setAppConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -94,6 +103,7 @@ export function useStudioController() {
     try {
       const writableKeys: Array<keyof AppConfig> = [
         "min_to_tray",
+        "live_control_mode",
         "obs_ws_enabled",
         "obs_ws_url",
         "obs_ws_password",
@@ -107,13 +117,14 @@ export function useStudioController() {
       }
       append("设置已保存");
       await loadAppConfig();
+      await loadLinkageStatus();
       await syncTrayMenu();
     } catch (error) {
       append(`保存设置失败: ${String(error)}`);
     } finally {
       setSavingConfig(false);
     }
-  }, [appConfig, append, loadAppConfig, syncTrayMenu]);
+  }, [appConfig, append, loadAppConfig, loadLinkageStatus, syncTrayMenu]);
 
   const handleExpiredAccounts = useCallback(
     (uids: string[]) => {
@@ -422,6 +433,7 @@ export function useStudioController() {
       setRtmp(res.data || null);
       append("开播成功，已返回推流信息");
       await refreshSession();
+      await loadLinkageStatus();
       return;
     }
 
@@ -433,14 +445,16 @@ export function useStudioController() {
     }
 
     append(`开播失败: ${res.msg}`);
-  }, [append, refreshSession]);
+    await loadLinkageStatus();
+  }, [append, loadLinkageStatus, refreshSession]);
 
   const stopLive = useCallback(async () => {
     const res = await studioApi.stopLive();
     append(res.code === 0 ? "已停播" : `停播失败: ${res.msg}`);
     setRtmp(null);
     await refreshSession();
-  }, [append, refreshSession]);
+    await loadLinkageStatus();
+  }, [append, loadLinkageStatus, refreshSession]);
 
   const startDanmu = useCallback(async () => {
     const res = await studioApi.startDanmuMonitor();
@@ -518,7 +532,16 @@ export function useStudioController() {
     void loadAccounts();
     void loadPartitions();
     void loadAppConfig();
-  }, [loadAccounts, loadAppConfig, loadPartitions, loadSavedUser, refreshSession]);
+    void loadLinkageStatus();
+  }, [loadAccounts, loadAppConfig, loadLinkageStatus, loadPartitions, loadSavedUser, refreshSession]);
+
+  useEffect(() => {
+    void loadLinkageStatus();
+    const timer = window.setInterval(() => {
+      void loadLinkageStatus();
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [loadLinkageStatus]);
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -646,6 +669,7 @@ export function useStudioController() {
       danmus,
       faceQr,
       logs,
+      linkageStatus,
       parent,
       partitions,
       qrcode,

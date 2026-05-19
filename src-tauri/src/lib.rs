@@ -12,7 +12,7 @@ mod state;
 mod tray;
 
 use commands::{
-    get_account_list, get_app_config, get_login_qrcode, get_partitions, get_session, get_version,
+    get_account_list, get_app_config, get_linkage_status, get_login_qrcode, get_partitions, get_session, get_version,
     load_saved_config, logout, poll_login_status, refresh_all_account_cookies,
     refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
     send_danmu, set_app_config, start_danmu_monitor, start_live, stop_danmu_monitor, stop_live,
@@ -94,6 +94,7 @@ pub fn run() {
             send_danmu,
             get_session,
             get_app_config,
+            get_linkage_status,
             set_app_config,
             refresh_tray_menu,
             get_version

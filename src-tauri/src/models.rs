@@ -74,6 +74,8 @@ pub struct PersistConfig {
     pub users: HashMap<String, UserRecord>,
     pub current_uid: Option<String>,
     pub min_to_tray: bool,
+    #[serde(default = "default_live_control_mode")]
+    pub live_control_mode: String,
     #[serde(default)]
     pub obs_ws_enabled: bool,
     #[serde(default = "default_obs_ws_url")]
@@ -102,6 +104,7 @@ impl Default for PersistConfig {
             users: HashMap::new(),
             current_uid: None,
             min_to_tray: true,
+            live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),
             obs_ws_password: String::new(),
@@ -114,6 +117,10 @@ impl Default for PersistConfig {
             live_client_synced_at: default_live_client_synced_at(),
         }
     }
+}
+
+fn default_live_control_mode() -> String {
+    "none".to_string()
 }
 
 fn default_obs_ws_url() -> String {

@@ -57,6 +57,7 @@ function App() {
               partitions={state.partitions}
               rtmp={state.rtmp}
               session={state.session}
+              linkageStatus={state.linkageStatus}
               tagInput={state.tagInput}
               tags={state.tags}
               title={state.title}

@@ -10,7 +10,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { Session, StreamEndpoint, StreamInfo } from "../../types/studio";
+import type {
+  LinkageStatus,
+  Session,
+  StreamEndpoint,
+  StreamInfo,
+} from "../../types/studio";
 
 type StreamTabProps = {
   child: string;
@@ -20,6 +25,7 @@ type StreamTabProps = {
   partitions: Record<string, string[]>;
   rtmp: StreamInfo | null;
   session: Session | null;
+  linkageStatus: LinkageStatus | null;
   tagInput: string;
   tags: string[];
   title: string;
@@ -46,6 +52,7 @@ export function StreamTab({
   partitions,
   rtmp,
   session,
+  linkageStatus,
   tagInput,
   tags,
   title,
@@ -84,6 +91,40 @@ export function StreamTab({
     : isRoundPlay
       ? "border-amber-500/20 bg-amber-500/10 text-amber-400 shadow-lg shadow-amber-500/10"
       : "border-gray-500/20 bg-gray-500/10 text-gray-500";
+  const linkageModeLabel =
+    linkageStatus?.mode === "obs_ws"
+      ? "OBS WebSocket 联动"
+      : linkageStatus?.mode === "command"
+        ? "命令联动"
+        : "不联动";
+  const obsStatus = linkageStatus?.obs_ws;
+  const commandStatus = linkageStatus?.command;
+  const obsStateText =
+    linkageStatus?.mode === "obs_ws"
+      ? obsStatus?.connected
+        ? "已连接"
+        : "未连接"
+      : "未启用";
+  const obsStateClass =
+    linkageStatus?.mode === "obs_ws"
+      ? obsStatus?.connected
+        ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+        : "text-rose-300 border-rose-500/30 bg-rose-500/10"
+      : "text-gray-300 border-gray-500/30 bg-gray-500/10";
+  const commandStateText =
+    linkageStatus?.mode === "command"
+      ? commandStatus?.start_configured
+        ? "可用"
+        : "未配置开播命令"
+      : commandStatus?.start_configured
+        ? "已配置(未启用)"
+        : "未配置";
+  const commandStateClass =
+    linkageStatus?.mode === "command"
+      ? commandStatus?.start_configured
+        ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+        : "text-amber-300 border-amber-500/30 bg-amber-500/10"
+      : "text-gray-300 border-gray-500/30 bg-gray-500/10";
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
@@ -335,6 +376,52 @@ export function StreamTab({
               <p className="mt-2 max-w-xs text-xs leading-relaxed text-gray-500">
                 {statusHint}
               </p>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-3 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+                  当前联动模式
+                </span>
+                <span className="rounded-full border border-bili-blue/30 bg-bili-blue/10 px-2 py-0.5 text-[10px] text-bili-blue">
+                  {linkageModeLabel}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-[#0b1220]/70 p-2.5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs text-gray-300">OBS WS 连接状态</span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] ${obsStateClass}`}>
+                    {obsStateText}
+                  </span>
+                </div>
+                {linkageStatus?.mode === "obs_ws" && (
+                  <>
+                    <p className="truncate text-[11px] text-gray-500">
+                      {obsStatus?.url || "ws://127.0.0.1:4455"}
+                    </p>
+                    {obsStatus?.last_error && (
+                      <p className="mt-1 text-[11px] text-rose-300">
+                        {obsStatus.last_error}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-[#0b1220]/70 p-2.5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs text-gray-300">命令联动状态</span>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] ${commandStateClass}`}
+                  >
+                    {commandStateText}
+                  </span>
+                </div>
+                <p className="truncate text-[11px] text-gray-500">
+                  {commandStatus?.template_preview || "未设置开播命令模板"}
+                </p>
+              </div>
             </div>
           </div>
 

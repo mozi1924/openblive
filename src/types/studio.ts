@@ -9,6 +9,7 @@ export type ActiveTab = "account" | "stream" | "danmu" | "settings";
 
 export type AppConfig = {
   min_to_tray: boolean;
+  live_control_mode: "none" | "obs_ws" | "command";
   obs_ws_enabled: boolean;
   obs_ws_url: string;
   obs_ws_password: string;
@@ -106,4 +107,19 @@ export type DanmuEventPayload = {
 
 export type TrayActionPayload = {
   action?: "start_live" | "stop_live";
+};
+
+export type LinkageStatus = {
+  mode: "none" | "obs_ws" | "command";
+  obs_ws: {
+    connected: boolean;
+    last_error: string;
+    last_checked_at: number;
+    url: string;
+  };
+  command: {
+    start_configured: boolean;
+    stop_configured: boolean;
+    template_preview: string;
+  };
 };

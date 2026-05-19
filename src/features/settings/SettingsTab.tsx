@@ -56,22 +56,48 @@ export function SettingsTab({
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h3 className="text-base font-semibold text-white">OBS WebSocket 联动</h3>
+        <h3 className="text-base font-semibold text-white">开播联动模式（二选一）</h3>
         <p className="mt-1 text-xs text-gray-400">
-          先保存配置，后续可继续接入自动连 OBS、联动开播/下播执行。
+          可在 OBS WebSocket 联动 与 命令联动 之间切换。
         </p>
 
         <div className="mt-4 space-y-3 text-sm">
           <label className="flex items-center gap-2 text-gray-200">
             <input
-              type="checkbox"
-              checked={appConfig.obs_ws_enabled}
-              onChange={(event) =>
-                onChangeConfig("obs_ws_enabled", event.target.checked)
-              }
+              type="radio"
+              name="live-control-mode"
+              checked={appConfig.live_control_mode === "obs_ws"}
+              onChange={() => onChangeConfig("live_control_mode", "obs_ws")}
             />
-            启用 OBS WS 联动
+            OBS WebSocket 联动
           </label>
+          <label className="flex items-center gap-2 text-gray-200">
+            <input
+              type="radio"
+              name="live-control-mode"
+              checked={appConfig.live_control_mode === "command"}
+              onChange={() => onChangeConfig("live_control_mode", "command")}
+            />
+            命令联动（例如 FFmpeg）
+          </label>
+          <label className="flex items-center gap-2 text-gray-200">
+            <input
+              type="radio"
+              name="live-control-mode"
+              checked={appConfig.live_control_mode === "none"}
+              onChange={() => onChangeConfig("live_control_mode", "none")}
+            />
+            不联动（仅站内开播）
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h3 className="text-base font-semibold text-white">OBS WebSocket 设置</h3>
+        <p className="mt-1 text-xs text-gray-400">
+          当模式为 OBS WebSocket 时，程序会调用官方 v5 协议自动设置推流地址并开始/停止推流。
+        </p>
+        <div className="mt-4 space-y-3 text-sm">
           <label className="block text-gray-300">
             OBS WS 地址
             <input
@@ -95,36 +121,16 @@ export function SettingsTab({
               placeholder="可为空"
             />
           </label>
-          <label className="flex items-center gap-2 text-gray-200">
-            <input
-              type="checkbox"
-              checked={appConfig.obs_ws_auto_start_on_live}
-              onChange={(event) =>
-                onChangeConfig("obs_ws_auto_start_on_live", event.target.checked)
-              }
-            />
-            开播时联动 OBS 开始推流
-          </label>
-          <label className="flex items-center gap-2 text-gray-200">
-            <input
-              type="checkbox"
-              checked={appConfig.obs_ws_auto_stop_on_live_end}
-              onChange={(event) =>
-                onChangeConfig(
-                  "obs_ws_auto_stop_on_live_end",
-                  event.target.checked,
-                )
-              }
-            />
-            下播时联动 OBS 停止推流
-          </label>
         </div>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
         <h3 className="text-base font-semibold text-white">命令联动</h3>
         <p className="mt-1 text-xs text-gray-400">
-          预留命令字段，后续可实现开播/下播自动执行脚本。
+          当模式为“命令联动”时，开播/下播会执行以下命令。可选变量：
+          <code className="ml-1 text-[#9dc5ff]">
+            {"{server} {stream_key} {stream_url} {stream_code} {protocol}"}
+          </code>
         </p>
         <div className="mt-4 space-y-3 text-sm">
           <label className="block text-gray-300">
