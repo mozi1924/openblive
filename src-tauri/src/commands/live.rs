@@ -6,13 +6,30 @@ use crate::models::{DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq};
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use futures_util::{SinkExt, StreamExt};
+use serde::Serialize;
 use serde_json::json;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use tauri::{AppHandle, State};
 use tokio_tungstenite::tungstenite::Message;
+use url::form_urlencoded;
 
 const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
 const LIVE_PLATFORM_PC_LINK: &str = "pc_link";
+
+#[derive(Clone, Serialize)]
+struct StreamEndpoint {
+    protocol: String,
+    addr: String,
+    code: String,
+    full_url: String,
+    provider: String,
+    new_link: String,
+    stream_name: String,
+    stream_key: String,
+    schedule: String,
+    pflag: String,
+    query: BTreeMap<String, String>,
+}
 
 fn is_auth_invalid_code(code: i64) -> bool {
     matches!(code, -101 | 3 | 65530)
@@ -98,6 +115,160 @@ fn sanitized_live_client_version(version: &str, build: u64) -> (String, u64) {
     (normalized_version, normalized_build)
 }
 
+fn parse_stream_query(code: &str) -> BTreeMap<String, String> {
+    let query_str = code.trim().trim_start_matches('?');
+    if query_str.is_empty() {
+        return BTreeMap::new();
+    }
+
+    form_urlencoded::parse(query_str.as_bytes())
+        .into_owned()
+        .collect::<BTreeMap<_, _>>()
+}
+
+fn room_live_state(status: i64) -> bool {
+    status == 1
+}
+
+fn apply_room_status_to_session(
+    session: &mut crate::models::SessionState,
+    room_info: &serde_json::Value,
+) {
+    let live_status = room_info["live_status"].as_i64().unwrap_or(0);
+    session.live_status = Some(live_status);
+    session.is_live = room_live_state(live_status);
+    session.live_time = room_info["live_time"].as_str().unwrap_or("").to_string();
+
+    if let Some(room_id) = room_info["room_id"].as_i64() {
+        session.room_id = room_id.to_string();
+    }
+
+    let parent = room_info["parent_area_name"].as_str().unwrap_or("").to_string();
+    let child = room_info["area_name"].as_str().unwrap_or("").to_string();
+    if !parent.is_empty() && !child.is_empty() {
+        session.current_area_names = vec![parent, child];
+    }
+    if let Some(area_id) = room_info["area_id"].as_u64() {
+        session.current_area_id = Some(area_id);
+    }
+}
+
+fn parse_protocol_from_addr(addr: &str) -> String {
+    if let Some((scheme, _)) = addr.split_once("://") {
+        return scheme.trim().to_ascii_lowercase();
+    }
+    String::new()
+}
+
+fn parse_stream_endpoint(value: &serde_json::Value, fallback_protocol: &str) -> Option<StreamEndpoint> {
+    let addr = value["addr"].as_str().unwrap_or("").trim().to_string();
+    let code = value["code"].as_str().unwrap_or("").trim().to_string();
+    if addr.is_empty() && code.is_empty() {
+        return None;
+    }
+
+    let query = parse_stream_query(&code);
+    let mut protocol = value["protocol"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if protocol.is_empty() {
+        protocol = query
+            .get("schedule")
+            .map(|item| item.trim().to_ascii_lowercase())
+            .unwrap_or_default();
+    }
+    if protocol.is_empty() {
+        protocol = parse_protocol_from_addr(&addr);
+    }
+    if protocol.is_empty() {
+        protocol = fallback_protocol.to_ascii_lowercase();
+    }
+
+    let stream_key = query.get("key").cloned().unwrap_or_else(|| {
+        let cleaned = code.trim_start_matches('?').trim();
+        if cleaned.is_empty() || cleaned.contains('=') {
+            String::new()
+        } else {
+            cleaned.to_string()
+        }
+    });
+
+    Some(StreamEndpoint {
+        protocol,
+        full_url: format!("{addr}{code}"),
+        provider: value["provider"].as_str().unwrap_or("").to_string(),
+        new_link: value["new_link"].as_str().unwrap_or("").to_string(),
+        stream_name: query.get("streamname").cloned().unwrap_or_default(),
+        stream_key,
+        schedule: query.get("schedule").cloned().unwrap_or_default(),
+        pflag: query.get("pflag").cloned().unwrap_or_default(),
+        query,
+        addr,
+        code,
+    })
+}
+
+fn collect_stream_endpoints(data: &serde_json::Value) -> Vec<StreamEndpoint> {
+    let mut endpoints: Vec<StreamEndpoint> = Vec::new();
+    if let Some(primary) = parse_stream_endpoint(&data["rtmp"], "rtmp") {
+        endpoints.push(primary);
+    }
+    if let Some(protocols) = data["protocols"].as_array() {
+        for protocol in protocols {
+            if let Some(endpoint) = parse_stream_endpoint(protocol, "rtmp") {
+                endpoints.push(endpoint);
+            }
+        }
+    }
+
+    let mut dedup = HashSet::new();
+    endpoints
+        .into_iter()
+        .filter(|item| {
+            let key = format!("{}|{}|{}", item.protocol, item.addr, item.code);
+            dedup.insert(key)
+        })
+        .collect()
+}
+
+fn select_primary_endpoint(endpoints: &[StreamEndpoint]) -> Option<StreamEndpoint> {
+    if endpoints.is_empty() {
+        return None;
+    }
+    endpoints
+        .iter()
+        .find(|item| item.protocol == "rtmp")
+        .cloned()
+        .or_else(|| endpoints.first().cloned())
+}
+
+async fn fetch_room_info_by_room_id(
+    state: &AppState,
+    room_id: &str,
+    cookie_header: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    if let Some(cookie) = cookie_header {
+        if !cookie.trim().is_empty() {
+            state.client.apply_cookie_header(cookie);
+        }
+    }
+
+    let value = state
+        .client
+        .get_json(
+            "https://api.live.bilibili.com/room/v1/Room/get_info",
+            &[("room_id", room_id.to_string())],
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    if value["code"].as_i64().unwrap_or(-1) != 0 {
+        return Err(error_message(&value, "查询直播状态失败"));
+    }
+    Ok(value["data"].clone())
+}
+
 pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(String, u64), String> {
     let ts = chrono::Utc::now().timestamp().to_string();
     let mut params = BTreeMap::new();
@@ -135,6 +306,48 @@ pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(Stri
     runtime.config.live_client_synced_at = chrono::Utc::now().timestamp();
     save_config(&state.config_path, &runtime.config, &state.master_key);
     Ok((version, build))
+}
+
+#[tauri::command]
+pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
+    let (uid, room_id, cookie, fallback_session) = {
+        let runtime = state.runtime.lock().await;
+        let fallback = runtime.session.clone();
+        let Some(uid) = runtime.config.current_uid.clone() else {
+            return Ok(wrap_ok(serde_json::to_value(fallback).unwrap()));
+        };
+        let Some(user) = runtime.config.users.get(&uid) else {
+            return Ok(wrap_ok(serde_json::to_value(fallback).unwrap()));
+        };
+        let room_id = if user.room_id.trim().is_empty() {
+            runtime.session.room_id.clone()
+        } else {
+            user.room_id.clone()
+        };
+        (uid, room_id, user.cookie.clone(), fallback)
+    };
+
+    if room_id.trim().is_empty() {
+        return Ok(wrap_ok(serde_json::to_value(fallback_session).unwrap()));
+    }
+
+    let room_info = match fetch_room_info_by_room_id(&state, &room_id, Some(&cookie)).await {
+        Ok(data) => data,
+        Err(_) => return Ok(wrap_ok(serde_json::to_value(fallback_session).unwrap())),
+    };
+
+    let mut runtime = state.runtime.lock().await;
+    apply_room_status_to_session(&mut runtime.session, &room_info);
+    if let Some(room_id_long) = room_info["room_id"].as_i64() {
+        let room_id_text = room_id_long.to_string();
+        runtime.session.room_id = room_id_text.clone();
+        if let Some(user) = runtime.config.users.get_mut(&uid) {
+            user.room_id = room_id_text;
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+    }
+
+    Ok(wrap_ok(serde_json::to_value(runtime.session.clone()).unwrap()))
 }
 
 async fn resolve_live_client_version(state: &AppState, force_refresh: bool) -> (String, u64, bool) {
@@ -223,18 +436,10 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
         })));
     }
 
-    state.client.apply_cookie_header(&user.cookie);
-    let result = state
-        .client
-        .get_json(
-            "https://api.live.bilibili.com/room/v1/Room/get_info",
-            &[("room_id", user.room_id.clone())],
-        )
-        .await;
+    let result = fetch_room_info_by_room_id(&state, &user.room_id, Some(&user.cookie)).await;
 
     match result {
-        Ok(value) if value["code"].as_i64().unwrap_or(-1) == 0 => {
-            let data = &value["data"];
+        Ok(data) => {
             let title = data["title"]
                 .as_str()
                 .unwrap_or(&user.last_title)
@@ -271,6 +476,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 vec![parent.clone(), child.clone()]
             };
             runtime.session.current_tags = tags.clone();
+            apply_room_status_to_session(&mut runtime.session, &data);
             if !room_id.is_empty() {
                 runtime.session.room_id = room_id;
             }
@@ -285,7 +491,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 "from_cache": false
             })))
         }
-        _ => {
+        Err(_) => {
             let parent = user
                 .last_area_name
                 .first()
@@ -601,6 +807,10 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
         return Err(error_message(&response, "开播失败"));
     }
 
+    let stream_data = &response["data"];
+    let endpoints = collect_stream_endpoints(stream_data);
+    let primary = select_primary_endpoint(&endpoints);
+
     let mut runtime = state.runtime.lock().await;
     runtime.session.is_live = true;
     if let Some(uid) = runtime.config.current_uid.clone() {
@@ -611,9 +821,26 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
         }
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
+
+    let (primary_addr, primary_code) = primary
+        .as_ref()
+        .map(|item| (item.addr.clone(), item.code.clone()))
+        .unwrap_or_default();
+
     Ok(wrap_ok(json!({
-        "rtmp1": response["data"]["rtmp"],
-        "protocols": response["data"]["protocols"]
+        "rtmp1": {
+            "addr": primary_addr,
+            "code": primary_code
+        },
+        "protocols": stream_data["protocols"],
+        "endpoints": endpoints,
+        "primary_protocol": primary.as_ref().map(|item| item.protocol.clone()).unwrap_or_default(),
+        "live_key": stream_data["live_key"],
+        "sub_session_key": stream_data["sub_session_key"],
+        "status": stream_data["status"],
+        "need_face_auth": stream_data["need_face_auth"],
+        "service_source": stream_data["service_source"],
+        "up_stream_extra": stream_data["up_stream_extra"]
     })))
 }
 

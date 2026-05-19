@@ -21,6 +21,10 @@ const headerMeta: Record<ActiveTab, { title: string; description: string }> = {
     title: "弹幕互动终端",
     description: "弹幕、礼物、舰长等互动的全实时流及快速发言",
   },
+  settings: {
+    title: "系统设置中心",
+    description: "托盘、关闭行为、OBS 联动和开播命令的统一配置",
+  },
 };
 
 export function HeaderBar({

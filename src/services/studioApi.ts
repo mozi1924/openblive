@@ -2,11 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   AccountList,
+  AppConfig,
   DanmuEventPayload,
   LiveRoomProfile,
   Resp,
   Session,
   StreamInfo,
+  TrayActionPayload,
   User,
 } from "../types/studio";
 
@@ -17,6 +19,10 @@ const invokeCommand = <T>(
 
 export const studioApi = {
   getSession: () => invokeCommand<Session>("get_session"),
+  getAppConfig: () => invokeCommand<AppConfig>("get_app_config"),
+  setAppConfig: (key: string, value: unknown) =>
+    invokeCommand("set_app_config", { req: { key, value } }),
+  refreshTrayMenu: () => invokeCommand("refresh_tray_menu"),
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
   getAccountList: () => invokeCommand<AccountList>("get_account_list"),
   refreshAllAccountCookies: () =>
@@ -37,6 +43,7 @@ export const studioApi = {
     invokeCommand("update_area", { req: { parent, child } }),
   updateTitle: (title: string) =>
     invokeCommand("update_title", { req: { title } }),
+  syncLiveStatus: () => invokeCommand<Session>("sync_live_status"),
   syncLiveRoomProfile: () =>
     invokeCommand<LiveRoomProfile>("sync_live_room_profile"),
   updateLiveTags: (tags: string) =>
@@ -51,4 +58,6 @@ export const studioApi = {
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
   listenDanmuEvent: (handler: (payload: DanmuEventPayload) => void) =>
     listen<DanmuEventPayload>("danmu-event", (event) => handler(event.payload)),
+  listenTrayAction: (handler: (payload: TrayActionPayload) => void) =>
+    listen<TrayActionPayload>("tray-action", (event) => handler(event.payload)),
 };

@@ -2,8 +2,6 @@ import {
   Check,
   Compass,
   Copy,
-  Eye,
-  EyeOff,
   Link,
   Plus,
   Radio,
@@ -12,28 +10,26 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { Session, StreamInfo } from "../../types/studio";
+import type { Session, StreamEndpoint, StreamInfo } from "../../types/studio";
 
 type StreamTabProps = {
   child: string;
   children: string[];
-  copiedKey: "server" | "key" | null;
+  copiedKey: string | null;
   parent: string;
   partitions: Record<string, string[]>;
   rtmp: StreamInfo | null;
   session: Session | null;
-  showStreamKey: boolean;
   tagInput: string;
   tags: string[];
   title: string;
   onChangeChild: (value: string) => void;
   onChangeParent: (value: string) => void;
-  onChangeShowStreamKey: React.Dispatch<React.SetStateAction<boolean>>;
   onChangeTagInput: React.Dispatch<React.SetStateAction<string>>;
   onChangeTitle: React.Dispatch<React.SetStateAction<string>>;
   onAddTag: () => void;
   onRemoveTag: (tag: string) => void;
-  onCopyToClipboard: (text: string, type: "server" | "key") => Promise<void>;
+  onCopyToClipboard: (text: string, type: string) => Promise<void>;
   onSyncProfile: () => Promise<void>;
   onStartLive: () => Promise<void>;
   onStopLive: () => Promise<void>;
@@ -50,13 +46,11 @@ export function StreamTab({
   partitions,
   rtmp,
   session,
-  showStreamKey,
   tagInput,
   tags,
   title,
   onChangeChild,
   onChangeParent,
-  onChangeShowStreamKey,
   onChangeTagInput,
   onChangeTitle,
   onAddTag,
@@ -69,6 +63,28 @@ export function StreamTab({
   onSubmitTags,
   onSubmitTitle,
 }: StreamTabProps) {
+  const streamEndpoints = buildStreamEndpoints(rtmp);
+  const primaryEndpoint = streamEndpoints[0];
+  const liveStatus = session?.live_status ?? (session?.is_live ? 1 : 0);
+  const isLive = liveStatus === 1;
+  const isRoundPlay = liveStatus === 2;
+  const statusLabel = isLive ? "直播中" : isRoundPlay ? "轮播中" : "未开播";
+  const statusHint = isLive
+    ? "当前正在向哔哩哔哩直播服务器发送信号。修改标题和分区在直播中也会生效。"
+    : isRoundPlay
+      ? "直播间当前处于轮播状态。可直接开始正式直播，开播后会切换为直播中。"
+      : "开始直播后将从 B 站请求专属推流信息。";
+  const statusPillClass = isLive
+    ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+    : isRoundPlay
+      ? "border-amber-500/30 bg-amber-500/15 text-amber-300"
+      : "border-gray-500/30 bg-gray-500/15 text-gray-300";
+  const statusRingClass = isLive
+    ? "animate-pulse border-emerald-500/20 bg-emerald-500/10 text-emerald-500 shadow-lg shadow-emerald-500/10"
+    : isRoundPlay
+      ? "border-amber-500/20 bg-amber-500/10 text-amber-400 shadow-lg shadow-amber-500/10"
+      : "border-gray-500/20 bg-gray-500/10 text-gray-500";
+
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
       <div className="space-y-6 lg:col-span-7">
@@ -238,72 +254,54 @@ export function StreamTab({
           <div className="glass-panel glow-blue rounded-3xl border border-emerald-500/20 p-6 shadow-emerald-500/5">
             <h3 className="mb-5 flex items-center text-xs font-bold tracking-wider text-emerald-400 uppercase">
               <Link className="mr-2 h-4 w-4 animate-bounce" />
-              当前推流信息 (RTMP/FLV)
+              当前推流信息
             </h3>
 
-            <div className="space-y-4">
-              <StreamField
-                label="推流服务器"
-                value={rtmp.rtmp1?.addr || ""}
-                action={
-                  <button
-                    onClick={() =>
-                      void onCopyToClipboard(rtmp.rtmp1?.addr || "", "server")
-                    }
-                    className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors active:scale-95 hover:bg-white/10 hover:text-white"
-                    title="复制服务器"
-                  >
-                    {copiedKey === "server" ? (
-                      <Check className="h-3.5 w-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                }
-              />
-
-              <StreamField
-                label="串流密钥 (Stream Key)"
-                value={rtmp.rtmp1?.code || ""}
-                type={showStreamKey ? "text" : "password"}
-                className="tracking-widest"
-                action={
-                  <>
-                    <button
-                      onClick={() => onChangeShowStreamKey((prev) => !prev)}
-                      className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors active:scale-95 hover:bg-white/10 hover:text-white"
-                      title={showStreamKey ? "隐藏" : "显示"}
-                    >
-                      {showStreamKey ? (
-                        <EyeOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() =>
-                        void onCopyToClipboard(rtmp.rtmp1?.code || "", "key")
-                      }
-                      className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors active:scale-95 hover:bg-white/10 hover:text-white"
-                      title="复制密钥"
-                    >
-                      {copiedKey === "key" ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </>
-                }
-              />
-
-              {rtmp.protocols && rtmp.protocols.length > 0 && (
-                <div className="mt-4 space-y-1 rounded-2xl border border-emerald-500/10 bg-emerald-950/20 p-4 text-[11px] text-emerald-400/80">
-                  <p className="font-bold text-emerald-400">✅ 直播拉流就绪</p>
+            <div className="space-y-4 rounded-2xl border border-emerald-500/10 bg-emerald-950/20 p-4">
+              <p className="text-xs text-emerald-400/85">
+                推流地址与密钥属于敏感信息，默认不在界面明文展示。
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() =>
+                    void onCopyToClipboard(primaryEndpoint?.addr || "", "server")
+                  }
+                  className="inline-flex items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-gray-200 transition-all duration-150 active:scale-95 hover:border-white/20 hover:text-white"
+                  disabled={!primaryEndpoint?.addr}
+                >
+                  {copiedKey === "server" ? (
+                    <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  复制推流服务器
+                </button>
+                <button
+                  onClick={() =>
+                    void onCopyToClipboard(
+                      primaryEndpoint?.stream_key || primaryEndpoint?.code || "",
+                      "key",
+                    )
+                  }
+                  className="inline-flex items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-gray-200 transition-all duration-150 active:scale-95 hover:border-white/20 hover:text-white"
+                  disabled={!primaryEndpoint?.code}
+                >
+                  {copiedKey === "key" ? (
+                    <Check className="mr-1.5 h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  复制串流密钥
+                </button>
+              </div>
+              {primaryEndpoint && (
+                <div className="grid grid-cols-1 gap-2 text-[11px] text-emerald-400/80 md:grid-cols-2">
+                  <p>协议: {(primaryEndpoint.protocol || "unknown").toUpperCase()}</p>
                   <p>
-                    您现在可以将上述地址和密钥粘贴至 OBS、RTMP
-                    直播源或第三方编码器中开始推流。
+                    服务商: {primaryEndpoint.provider || "未知"}
                   </p>
+                  <p>schedule: {primaryEndpoint.schedule || "-"}</p>
+                  <p>live_key: {rtmp.live_key || "-"}</p>
                 </div>
               )}
             </div>
@@ -314,27 +312,28 @@ export function StreamTab({
       <div className="lg:col-span-5">
         <div className="glass-panel flex h-full flex-col justify-between space-y-8 rounded-3xl p-6 text-center">
           <div>
-            <h3 className="mb-6 text-left text-xs font-bold tracking-wider text-gray-400 uppercase">
-              开播状态控制台
-            </h3>
+            <div className="mb-6 flex items-center justify-between gap-3">
+              <h3 className="text-left text-xs font-bold tracking-wider text-gray-400 uppercase">
+                开播状态控制台
+              </h3>
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide ${statusPillClass}`}
+              >
+                当前状态: {statusLabel}
+              </span>
+            </div>
 
             <div className="flex flex-col items-center py-8">
               <div
-                className={`flex h-24 w-24 items-center justify-center rounded-full border-4 ${
-                  session?.is_live
-                    ? "animate-pulse border-emerald-500/20 bg-emerald-500/10 text-emerald-500 shadow-lg shadow-emerald-500/10"
-                    : "border-gray-500/20 bg-gray-500/10 text-gray-500"
-                }`}
+                className={`flex h-24 w-24 items-center justify-center rounded-full border-4 ${statusRingClass}`}
               >
                 <Radio className="h-12 w-12" />
               </div>
               <h4 className="mt-5 text-base font-bold text-white">
-                {session?.is_live ? "直播状态: 正在推流中" : "直播状态: 离线"}
+                直播状态: {statusLabel}
               </h4>
               <p className="mt-2 max-w-xs text-xs leading-relaxed text-gray-500">
-                {session?.is_live
-                  ? "当前正在向哔哩哔哩直播服务器发送信号。修改标题和分区在直播中也会生效。"
-                  : "开始直播后将从B站请求专属的推流RTMP地址及密钥。"}
+                {statusHint}
               </p>
             </div>
           </div>
@@ -342,9 +341,9 @@ export function StreamTab({
           <div className="space-y-3">
             <button
               onClick={() => void onStartLive()}
-              disabled={session?.is_live}
+              disabled={isLive}
               className={`glow-blue flex w-full items-center justify-center rounded-2xl py-4 text-xs font-bold transition-all duration-200 ${
-                session?.is_live
+                isLive
                   ? "cursor-not-allowed border border-white/5 bg-white/5 text-gray-500"
                   : "bg-gradient-to-r from-emerald-500 to-teal-400 text-white active:scale-98 hover:opacity-95"
               }`}
@@ -354,9 +353,9 @@ export function StreamTab({
             </button>
             <button
               onClick={() => void onStopLive()}
-              disabled={!session?.is_live}
+              disabled={!isLive}
               className={`flex w-full items-center justify-center rounded-2xl border py-4 text-xs font-bold transition-all duration-200 ${
-                !session?.is_live
+                !isLive
                   ? "cursor-not-allowed border-white/5 bg-transparent text-gray-600"
                   : "border-rose-500/25 bg-rose-500/10 text-rose-400 active:scale-98 hover:bg-rose-500/20"
               }`}
@@ -371,35 +370,31 @@ export function StreamTab({
   );
 }
 
-type StreamFieldProps = {
-  action: React.ReactNode;
-  className?: string;
-  label: string;
-  type?: "password" | "text";
-  value: string;
-};
+function buildStreamEndpoints(rtmp: StreamInfo | null): StreamEndpoint[] {
+  if (!rtmp) {
+    return [];
+  }
+  if (rtmp.endpoints && rtmp.endpoints.length > 0) {
+    return rtmp.endpoints;
+  }
 
-function StreamField({
-  action,
-  className,
-  label,
-  type = "text",
-  value,
-}: StreamFieldProps) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-[10px] font-semibold text-gray-500 uppercase">
-        {label}
-      </span>
-      <div className="flex items-center space-x-2 rounded-xl border border-white/5 bg-white/5 px-4 py-2">
-        <input
-          type={type}
-          readOnly
-          value={value}
-          className={`selectable-text flex-1 border-none bg-transparent text-xs text-white outline-none ${className || ""}`}
-        />
-        {action}
-      </div>
-    </div>
-  );
+  if (rtmp.rtmp1?.addr || rtmp.rtmp1?.code) {
+    return [
+      {
+        protocol: "rtmp",
+        addr: rtmp.rtmp1?.addr || "",
+        code: rtmp.rtmp1?.code || "",
+        full_url: `${rtmp.rtmp1?.addr || ""}${rtmp.rtmp1?.code || ""}`,
+        provider: "",
+        new_link: "",
+        stream_name: "",
+        stream_key: "",
+        schedule: "rtmp",
+        pflag: "",
+        query: {},
+      },
+    ];
+  }
+
+  return [];
 }

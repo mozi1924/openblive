@@ -13,6 +13,20 @@ const LIVE_CACHE_CONFIG_FILE: &str = "live_cache.json";
 struct AppSettingsFile {
     #[serde(default = "default_min_to_tray")]
     min_to_tray: bool,
+    #[serde(default)]
+    obs_ws_enabled: bool,
+    #[serde(default = "default_obs_ws_url")]
+    obs_ws_url: String,
+    #[serde(default)]
+    obs_ws_password: String,
+    #[serde(default)]
+    obs_ws_auto_start_on_live: bool,
+    #[serde(default)]
+    obs_ws_auto_stop_on_live_end: bool,
+    #[serde(default)]
+    on_live_start_command: String,
+    #[serde(default)]
+    on_live_stop_command: String,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -86,6 +100,10 @@ impl Default for LiveCacheFile {
 
 fn default_min_to_tray() -> bool {
     true
+}
+
+fn default_obs_ws_url() -> String {
+    "ws://127.0.0.1:4455".to_string()
 }
 
 fn default_live_client_version() -> String {
@@ -210,6 +228,13 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
 
     if let Some(app_file) = load_json::<AppSettingsFile>(&app_config_path(path)) {
         cfg.min_to_tray = app_file.min_to_tray;
+        cfg.obs_ws_enabled = app_file.obs_ws_enabled;
+        cfg.obs_ws_url = app_file.obs_ws_url;
+        cfg.obs_ws_password = app_file.obs_ws_password;
+        cfg.obs_ws_auto_start_on_live = app_file.obs_ws_auto_start_on_live;
+        cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
+        cfg.on_live_start_command = app_file.on_live_start_command;
+        cfg.on_live_stop_command = app_file.on_live_stop_command;
     }
 
     if let Some(account_file) = load_json::<AccountFile>(&account_config_path(path)) {
@@ -289,6 +314,13 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
 pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     let mut app_file = AppSettingsFile::default();
     app_file.min_to_tray = cfg.min_to_tray;
+    app_file.obs_ws_enabled = cfg.obs_ws_enabled;
+    app_file.obs_ws_url = cfg.obs_ws_url.clone();
+    app_file.obs_ws_password = cfg.obs_ws_password.clone();
+    app_file.obs_ws_auto_start_on_live = cfg.obs_ws_auto_start_on_live;
+    app_file.obs_ws_auto_stop_on_live_end = cfg.obs_ws_auto_stop_on_live_end;
+    app_file.on_live_start_command = cfg.on_live_start_command.clone();
+    app_file.on_live_stop_command = cfg.on_live_stop_command.clone();
 
     let mut account_file = AccountFile::default();
     account_file.current_uid = cfg.current_uid.clone();

@@ -19,6 +19,10 @@ pub struct SessionState {
     pub room_id: String,
     pub csrf: String,
     pub is_live: bool,
+    #[serde(default)]
+    pub live_status: Option<i64>,
+    #[serde(default)]
+    pub live_time: String,
     pub current_area_id: Option<u64>,
     #[serde(default)]
     pub current_area_names: Vec<String>,
@@ -70,6 +74,20 @@ pub struct PersistConfig {
     pub users: HashMap<String, UserRecord>,
     pub current_uid: Option<String>,
     pub min_to_tray: bool,
+    #[serde(default)]
+    pub obs_ws_enabled: bool,
+    #[serde(default = "default_obs_ws_url")]
+    pub obs_ws_url: String,
+    #[serde(default)]
+    pub obs_ws_password: String,
+    #[serde(default)]
+    pub obs_ws_auto_start_on_live: bool,
+    #[serde(default)]
+    pub obs_ws_auto_stop_on_live_end: bool,
+    #[serde(default)]
+    pub on_live_start_command: String,
+    #[serde(default)]
+    pub on_live_stop_command: String,
     #[serde(default = "default_live_client_version")]
     pub live_client_version: String,
     #[serde(default = "default_live_client_build")]
@@ -84,11 +102,22 @@ impl Default for PersistConfig {
             users: HashMap::new(),
             current_uid: None,
             min_to_tray: true,
+            obs_ws_enabled: false,
+            obs_ws_url: default_obs_ws_url(),
+            obs_ws_password: String::new(),
+            obs_ws_auto_start_on_live: false,
+            obs_ws_auto_stop_on_live_end: false,
+            on_live_start_command: String::new(),
+            on_live_stop_command: String::new(),
             live_client_version: default_live_client_version(),
             live_client_build: default_live_client_build(),
             live_client_synced_at: default_live_client_synced_at(),
         }
     }
+}
+
+fn default_obs_ws_url() -> String {
+    "ws://127.0.0.1:4455".to_string()
 }
 
 #[derive(Deserialize)]

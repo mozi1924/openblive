@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { studioApi } from "../services/studioApi";
 import type {
   ActiveTab,
+  AppConfig,
   DanmuMsg,
   Session,
   StreamInfo,
@@ -45,8 +46,9 @@ export function useStudioController() {
 
   const [faceQr, setFaceQr] = useState("");
   const [showFaceModal, setShowFaceModal] = useState(false);
-  const [showStreamKey, setShowStreamKey] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<"server" | "key" | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
@@ -65,6 +67,53 @@ export function useStudioController() {
     const ts = new Date().toLocaleTimeString();
     setLogs((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 300));
   }, []);
+
+  const syncTrayMenu = useCallback(async () => {
+    await studioApi.refreshTrayMenu().catch(() => undefined);
+  }, []);
+
+  const loadAppConfig = useCallback(async () => {
+    const res = await studioApi.getAppConfig();
+    if (res.code === 0 && res.data) {
+      setAppConfig(res.data);
+    }
+  }, []);
+
+  const updateAppConfig = useCallback(
+    <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
+      setAppConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
+    },
+    [],
+  );
+
+  const saveAppConfig = useCallback(async () => {
+    if (!appConfig) {
+      return;
+    }
+    setSavingConfig(true);
+    try {
+      const writableKeys: Array<keyof AppConfig> = [
+        "min_to_tray",
+        "obs_ws_enabled",
+        "obs_ws_url",
+        "obs_ws_password",
+        "obs_ws_auto_start_on_live",
+        "obs_ws_auto_stop_on_live_end",
+        "on_live_start_command",
+        "on_live_stop_command",
+      ];
+      for (const key of writableKeys) {
+        await studioApi.setAppConfig(key, appConfig[key]);
+      }
+      append("设置已保存");
+      await loadAppConfig();
+      await syncTrayMenu();
+    } catch (error) {
+      append(`保存设置失败: ${String(error)}`);
+    } finally {
+      setSavingConfig(false);
+    }
+  }, [appConfig, append, loadAppConfig, syncTrayMenu]);
 
   const handleExpiredAccounts = useCallback(
     (uids: string[]) => {
@@ -91,12 +140,15 @@ export function useStudioController() {
   );
 
   const refreshSession = useCallback(async () => {
-    const res = await studioApi.getSession();
+    const res = await studioApi
+      .syncLiveStatus()
+      .catch(() => studioApi.getSession());
     setSession(res.data || null);
     if (!res.data?.is_live) {
       setRtmp(null);
     }
-  }, []);
+    await syncTrayMenu();
+  }, [syncTrayMenu]);
 
   const loadSavedUser = useCallback(async () => {
     const res = await studioApi.loadSavedConfig();
@@ -104,6 +156,7 @@ export function useStudioController() {
 
     if (!user) {
       setCurrentUser(null);
+      await syncTrayMenu();
       return;
     }
 
@@ -117,7 +170,8 @@ export function useStudioController() {
     }
     setTags([...(user.last_tags || [])]);
     setTagInput("");
-  }, []);
+    await syncTrayMenu();
+  }, [syncTrayMenu]);
 
   const loadAccounts = useCallback(async () => {
     const res = await studioApi.getAccountList();
@@ -433,7 +487,7 @@ export function useStudioController() {
   );
 
   const copyToClipboard = useCallback(
-    async (text: string, type: "server" | "key") => {
+    async (text: string, type: string) => {
       try {
         await navigator.clipboard.writeText(text);
         setCopiedKey(type);
@@ -463,7 +517,8 @@ export function useStudioController() {
     void loadSavedUser();
     void loadAccounts();
     void loadPartitions();
-  }, [loadAccounts, loadPartitions, loadSavedUser, refreshSession]);
+    void loadAppConfig();
+  }, [loadAccounts, loadAppConfig, loadPartitions, loadSavedUser, refreshSession]);
 
   useEffect(() => {
     if (!currentUser?.uid) {
@@ -554,10 +609,34 @@ export function useStudioController() {
     };
   }, [append]);
 
+  useEffect(() => {
+    let active = true;
+
+    const unlistenPromise = studioApi.listenTrayAction((payload) => {
+      if (!active) {
+        return;
+      }
+      if (payload.action === "start_live") {
+        append("托盘菜单触发开播");
+        void startLive();
+      }
+      if (payload.action === "stop_live") {
+        append("托盘菜单触发下播");
+        void stopLive();
+      }
+    });
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [append, startLive, stopLive]);
+
   return {
     state: {
       accounts,
       activeTab,
+      appConfig,
       child,
       children,
       copiedKey,
@@ -574,7 +653,7 @@ export function useStudioController() {
       session,
       showFaceModal,
       showLogs,
-      showStreamKey,
+      savingConfig,
       tagInput,
       tags,
       title,
@@ -599,7 +678,8 @@ export function useStudioController() {
       setActiveTab,
       setChild,
       setDanmuText,
-      setShowStreamKey,
+      updateAppConfig,
+      saveAppConfig,
       setTagInput,
       setTitle,
       addTag,

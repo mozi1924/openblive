@@ -1,4 +1,12 @@
-import { Compass, ExternalLink, MessageSquare, Radio, Terminal, User as UserIcon } from "lucide-react";
+import {
+  Compass,
+  ExternalLink,
+  MessageSquare,
+  Radio,
+  Settings,
+  Terminal,
+  User as UserIcon,
+} from "lucide-react";
 import type { ActiveTab } from "../../types/studio";
 
 type SidebarProps = {
@@ -20,6 +28,7 @@ const tabs: Array<{
   { key: "account", label: "账户管理", icon: UserIcon },
   { key: "stream", label: "直播控制", icon: Compass },
   { key: "danmu", label: "直播互动", icon: MessageSquare },
+  { key: "settings", label: "系统设置", icon: Settings },
 ];
 
 export function Sidebar({

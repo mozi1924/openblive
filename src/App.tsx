@@ -5,6 +5,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { FaceAuthModal } from "./components/shared/FaceAuthModal";
 import { AccountTab } from "./features/account/AccountTab";
 import { DanmuTab } from "./features/danmu/DanmuTab";
+import { SettingsTab } from "./features/settings/SettingsTab";
 import { StreamTab } from "./features/stream/StreamTab";
 import { useStudioController } from "./hooks/useStudioController";
 
@@ -56,13 +57,11 @@ function App() {
               partitions={state.partitions}
               rtmp={state.rtmp}
               session={state.session}
-              showStreamKey={state.showStreamKey}
               tagInput={state.tagInput}
               tags={state.tags}
               title={state.title}
               onChangeChild={actions.setChild}
               onChangeParent={actions.changeParent}
-              onChangeShowStreamKey={actions.setShowStreamKey}
               onChangeTagInput={actions.setTagInput}
               onChangeTitle={actions.setTitle}
               onAddTag={actions.addTag}
@@ -88,6 +87,15 @@ function App() {
               onSendDanmu={actions.submitDanmu}
               onStartDanmu={actions.startDanmu}
               onStopDanmu={actions.stopDanmu}
+            />
+          )}
+
+          {state.activeTab === "settings" && (
+            <SettingsTab
+              appConfig={state.appConfig}
+              savingConfig={state.savingConfig}
+              onChangeConfig={actions.updateAppConfig}
+              onSaveConfig={actions.saveAppConfig}
             />
           )}
         </div>
