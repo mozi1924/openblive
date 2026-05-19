@@ -13,6 +13,7 @@ export type ReviewStatus = "none" | "pending" | "approved" | "rejected" | "unkno
 
 export type AppConfig = {
   min_to_tray: boolean;
+  hide_dock_on_minimize: boolean;
   live_control_mode: "none" | "obs_ws" | "command";
   obs_ws_enabled: boolean;
   obs_ws_url: string;
@@ -23,6 +24,7 @@ export type AppConfig = {
   on_live_stop_command: string;
   locale: "auto" | "zh-CN" | "en-US";
   is_win32: boolean;
+  is_macos: boolean;
   has_tray: boolean;
 };
 

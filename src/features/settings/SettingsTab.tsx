@@ -117,6 +117,35 @@ export function SettingsTab({
             </div>
           </button>
         </div>
+
+        {appConfig.is_macos && (
+          <button
+            type="button"
+            onClick={() =>
+              onChangeConfig("hide_dock_on_minimize", !appConfig.hide_dock_on_minimize)
+            }
+            disabled={!appConfig.min_to_tray}
+            className={`flex w-full items-start rounded-2xl border p-4 text-left transition-all duration-200 ${
+              appConfig.hide_dock_on_minimize
+                ? "border-bili-blue/35 bg-bili-blue/5 text-white"
+                : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
+            } ${!appConfig.min_to_tray ? "cursor-not-allowed opacity-50" : ""}`}
+          >
+            <EyeOff
+              className={`mr-3 mt-0.5 h-5 w-5 shrink-0 ${
+                appConfig.hide_dock_on_minimize ? "text-bili-blue" : "text-gray-500"
+              }`}
+            />
+            <div>
+              <span className="block text-xs font-bold text-gray-200">
+                {t(locale, "ui.settings.window_behavior.hide_dock.title")}
+              </span>
+              <span className="mt-1 block text-[10px] leading-normal text-gray-500">
+                {t(locale, "ui.settings.window_behavior.hide_dock.desc")}
+              </span>
+            </div>
+          </button>
+        )}
       </section>
 
       {/* Linkage Mode Select */}

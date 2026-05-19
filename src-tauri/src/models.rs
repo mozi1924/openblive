@@ -218,6 +218,7 @@ pub struct PersistConfig {
     pub users: HashMap<String, UserRecord>,
     pub current_uid: Option<String>,
     pub min_to_tray: bool,
+    pub hide_dock_on_minimize: bool,
     #[serde(default = "default_live_control_mode")]
     pub live_control_mode: String,
     #[serde(default)]
@@ -250,6 +251,7 @@ impl Default for PersistConfig {
             users: HashMap::new(),
             current_uid: None,
             min_to_tray: true,
+            hide_dock_on_minimize: false,
             live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),

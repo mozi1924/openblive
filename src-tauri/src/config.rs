@@ -15,6 +15,8 @@ const LIVE_CACHE_CONFIG_FILE: &str = "live_cache.json";
 struct AppSettingsFile {
     #[serde(default = "default_min_to_tray")]
     min_to_tray: bool,
+    #[serde(default = "default_hide_dock_on_minimize")]
+    hide_dock_on_minimize: bool,
     #[serde(default = "default_live_control_mode")]
     live_control_mode: String,
     #[serde(default)]
@@ -108,6 +110,10 @@ impl Default for LiveCacheFile {
 
 fn default_min_to_tray() -> bool {
     true
+}
+
+fn default_hide_dock_on_minimize() -> bool {
+    false
 }
 
 fn default_obs_ws_url() -> String {
@@ -244,6 +250,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
 
     if let Some(app_file) = load_json::<AppSettingsFile>(&app_config_path(path)) {
         cfg.min_to_tray = app_file.min_to_tray;
+        cfg.hide_dock_on_minimize = app_file.hide_dock_on_minimize;
         cfg.live_control_mode = app_file.live_control_mode;
         cfg.obs_ws_enabled = app_file.obs_ws_enabled;
         cfg.obs_ws_url = app_file.obs_ws_url;
@@ -344,6 +351,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
 pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     let mut app_file = AppSettingsFile::default();
     app_file.min_to_tray = cfg.min_to_tray;
+    app_file.hide_dock_on_minimize = cfg.hide_dock_on_minimize;
     app_file.live_control_mode = cfg.live_control_mode.clone();
     app_file.obs_ws_enabled = cfg.obs_ws_enabled;
     app_file.obs_ws_url = cfg.obs_ws_url.clone();

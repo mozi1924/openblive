@@ -331,6 +331,7 @@ export function useStudioController() {
     try {
       const writableKeys: Array<keyof AppConfig> = [
         "min_to_tray",
+        "hide_dock_on_minimize",
         "live_control_mode",
         "obs_ws_enabled",
         "obs_ws_url",

@@ -103,6 +103,7 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
     let runtime = state.runtime.lock().await;
     Ok(wrap_ok(json!({
         "min_to_tray": runtime.config.min_to_tray,
+        "hide_dock_on_minimize": runtime.config.hide_dock_on_minimize,
         "live_control_mode": runtime.config.live_control_mode,
         "obs_ws_enabled": runtime.config.obs_ws_enabled,
         "obs_ws_url": runtime.config.obs_ws_url,
@@ -113,6 +114,7 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "on_live_stop_command": runtime.config.on_live_stop_command,
         "locale": runtime.config.locale,
         "is_win32": cfg!(target_os = "windows"),
+        "is_macos": cfg!(target_os = "macos"),
         "has_tray": crate::tray::has_tray(&app)
     })))
 }
@@ -127,6 +129,9 @@ pub async fn set_app_config(
     match req.key.as_str() {
         "min_to_tray" => {
             runtime.config.min_to_tray = req.value.as_bool().unwrap_or(true);
+        }
+        "hide_dock_on_minimize" => {
+            runtime.config.hide_dock_on_minimize = req.value.as_bool().unwrap_or(false);
         }
         "live_control_mode" => {
             let mode = req.value.as_str().unwrap_or("none").trim();
@@ -167,6 +172,7 @@ pub async fn set_app_config(
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);
     ensure_obs_ws_keepalive_task(app.clone()).await;
+    crate::tray::sync_dock_visibility(&app);
     crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(json!({})))
 }

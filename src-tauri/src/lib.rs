@@ -48,7 +48,7 @@ pub fn run() {
         master_key,
     };
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(app_state)
         .setup(|app| {
@@ -103,6 +103,17 @@ pub fn run() {
             reveal_main_window,
             get_version
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows,
+            ..
+        } = event
+        {
+            tray::on_reopen_event(app_handle, has_visible_windows);
+        }
+    });
 }

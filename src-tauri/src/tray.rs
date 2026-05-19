@@ -3,6 +3,8 @@ use serde::Serialize;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Emitter, Manager, Window, WindowEvent};
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 
 const TRAY_ID: &str = "main-tray";
 const MENU_ACCOUNT_INFO: &str = "tray.account_info";
@@ -169,12 +171,43 @@ pub fn refresh_tray_menu(app: &AppHandle) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn should_hide_dock_on_minimize(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    state
+        .runtime
+        .try_lock()
+        .map(|runtime| runtime.config.hide_dock_on_minimize)
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn set_dock_visible(app: &AppHandle, visible: bool) {
+    let policy = if visible {
+        ActivationPolicy::Regular
+    } else {
+        ActivationPolicy::Accessory
+    };
+    let _ = app.set_activation_policy(policy);
+    let _ = app.set_dock_visibility(visible);
+}
+
+#[cfg(target_os = "macos")]
+fn apply_hidden_window_dock_policy(app: &AppHandle) {
+    let hide_dock = should_hide_dock_on_minimize(app);
+    set_dock_visible(app, !hide_dock);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_hidden_window_dock_policy(_app: &AppHandle) {}
+
 pub fn toggle_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
     if window.is_visible().unwrap_or(true) {
         let _ = window.hide();
+        apply_hidden_window_dock_policy(app);
     } else {
         reveal_main_window(app);
     }
@@ -184,9 +217,37 @@ pub fn reveal_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
+    #[cfg(target_os = "macos")]
+    set_dock_visible(app, true);
     let _ = window.show();
     let _ = window.set_focus();
 }
+
+#[cfg(target_os = "macos")]
+pub fn sync_dock_visibility(app: &AppHandle) {
+    let visible = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(true);
+    if visible {
+        set_dock_visible(app, true);
+    } else {
+        apply_hidden_window_dock_policy(app);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn sync_dock_visibility(_app: &AppHandle) {}
+
+#[cfg(target_os = "macos")]
+pub fn on_reopen_event(app: &AppHandle, has_visible_windows: bool) {
+    if !has_visible_windows {
+        reveal_main_window(app);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn on_reopen_event(_app: &AppHandle, _has_visible_windows: bool) {}
 
 pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
     let handle = app.handle().clone();
@@ -252,6 +313,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             if should_min_to_tray {
                 api.prevent_close();
                 let _ = window.hide();
+                apply_hidden_window_dock_policy(&window.app_handle());
             }
         }
         #[cfg(not(target_os = "macos"))]
