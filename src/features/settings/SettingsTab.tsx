@@ -23,12 +23,16 @@ export function SettingsTab({
   }
 
   const variables = ["{server}", "{stream_key}", "{stream_url}", "{stream_code}", "{protocol}"];
+  const optionCardClass =
+    "flex min-h-36 items-start rounded-2xl border p-4 text-left transition-all duration-200";
+  const inputClass =
+    "w-full rounded-xl border border-white/8 bg-[#090b0f] px-3.5 py-3 text-xs text-white outline-none transition-all hover:border-white/12 focus:border-bili-blue/40";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-12 relative">
+    <div className="relative mx-auto max-w-4xl space-y-6 pb-28">
       
       {/* Window Behavior */}
-      <section className="glass-panel rounded-3xl p-6 space-y-5">
+      <section className="glass-panel space-y-5 rounded-3xl p-6">
         <div>
           <div className="flex items-center space-x-2">
             <Minimize2 className="h-4.5 w-4.5 text-bili-blue" />
@@ -45,7 +49,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("min_to_tray", true)}
-            className={`flex items-start rounded-2xl border p-4 text-left transition-all duration-200 ${
+            className={`${optionCardClass} ${
               appConfig.min_to_tray
                 ? "border-bili-blue/35 bg-bili-blue/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
@@ -63,7 +67,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("min_to_tray", false)}
-            className={`flex items-start rounded-2xl border p-4 text-left transition-all duration-200 ${
+            className={`${optionCardClass} ${
               !appConfig.min_to_tray
                 ? "border-bili-blue/35 bg-bili-blue/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
@@ -81,7 +85,7 @@ export function SettingsTab({
       </section>
 
       {/* Linkage Mode Select */}
-      <section className="glass-panel rounded-3xl p-6 space-y-5">
+      <section className="glass-panel space-y-5 rounded-3xl p-6">
         <div>
           <div className="flex items-center space-x-2">
             <Cpu className="h-4.5 w-4.5 text-bili-pink" />
@@ -98,7 +102,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("live_control_mode", "obs_ws")}
-            className={`flex flex-col items-start rounded-2xl border p-4 text-left transition-all duration-200 ${
+            className={`${optionCardClass} flex-col ${
               appConfig.live_control_mode === "obs_ws"
                 ? "border-bili-blue/35 bg-bili-blue/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
@@ -116,7 +120,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("live_control_mode", "command")}
-            className={`flex flex-col items-start rounded-2xl border p-4 text-left transition-all duration-200 ${
+            className={`${optionCardClass} flex-col ${
               appConfig.live_control_mode === "command"
                 ? "border-bili-pink/35 bg-bili-pink/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
@@ -134,7 +138,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("live_control_mode", "none")}
-            className={`flex flex-col items-start rounded-2xl border p-4 text-left transition-all duration-200 ${
+            className={`${optionCardClass} flex-col ${
               appConfig.live_control_mode === "none"
                 ? "border-amber-500/35 bg-amber-500/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
@@ -153,7 +157,7 @@ export function SettingsTab({
 
       {/* OBS WS Setup */}
       {appConfig.live_control_mode === "obs_ws" && (
-        <section className="glass-panel rounded-3xl p-6 space-y-4">
+        <section className="glass-panel space-y-4 rounded-3xl p-6">
           <div>
             <div className="flex items-center space-x-2">
               <Server className="h-4.5 w-4.5 text-bili-blue" />
@@ -170,7 +174,7 @@ export function SettingsTab({
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">服务器地址</span>
               <input
-                className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-3.5 py-2.5 text-xs text-white outline-none focus:border-bili-blue/40"
+                className={inputClass}
                 value={appConfig.obs_ws_url}
                 onChange={(event) =>
                   onChangeConfig("obs_ws_url", event.target.value)
@@ -183,7 +187,7 @@ export function SettingsTab({
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">访问密码</span>
               <div className="relative">
                 <input
-                  className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-3.5 py-2.5 text-xs text-white outline-none focus:border-bili-blue/40 pr-10"
+                  className={`${inputClass} pr-10`}
                   type="password"
                   value={appConfig.obs_ws_password}
                   onChange={(event) =>
@@ -200,7 +204,7 @@ export function SettingsTab({
 
       {/* Command Linkage triggers */}
       {appConfig.live_control_mode === "command" && (
-        <section className="glass-panel rounded-3xl p-6 space-y-4">
+        <section className="glass-panel space-y-4 rounded-3xl p-6">
           <div>
             <div className="flex items-center space-x-2">
               <Terminal className="h-4.5 w-4.5 text-bili-pink" />
@@ -228,7 +232,7 @@ export function SettingsTab({
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">开播触发命令</span>
               <input
-                className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-4 py-3 text-xs text-gray-300 font-mono focus:border-bili-pink/40 focus:outline-none"
+                className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-4 py-3 text-xs font-mono text-gray-300 outline-none transition-all hover:border-white/12 focus:border-bili-pink/40"
                 value={appConfig.on_live_start_command}
                 onChange={(event) =>
                   onChangeConfig("on_live_start_command", event.target.value)
@@ -240,7 +244,7 @@ export function SettingsTab({
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">下播触发命令</span>
               <input
-                className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-4 py-3 text-xs text-gray-300 font-mono focus:border-bili-pink/40 focus:outline-none"
+                className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-4 py-3 text-xs font-mono text-gray-300 outline-none transition-all hover:border-white/12 focus:border-bili-pink/40"
                 value={appConfig.on_live_stop_command}
                 onChange={(event) =>
                   onChangeConfig("on_live_stop_command", event.target.value)
@@ -253,15 +257,18 @@ export function SettingsTab({
       )}
 
       {/* Sticky footer for saving configuration */}
-      <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-8 border-t border-white/5 bg-[#070a0f]/80 px-6 py-4 backdrop-blur-md flex items-center justify-between rounded-b-3xl">
-        <p className="text-[10px] font-semibold text-gray-500">
-          保存后设置将被写入本地 `config.json` 配置文件。
-        </p>
+      <div className="sticky bottom-[-2rem] z-20 mt-8 flex items-center justify-between gap-4 rounded-3xl border border-white/8 bg-[#070a0f]/88 px-6 py-4 shadow-[0_-10px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+        <div>
+          <p className="text-[11px] font-semibold text-gray-300">保存后立即生效</p>
+          <p className="mt-1 text-[10px] text-gray-500">
+            配置会写入本地 `config.json`，下次启动仍会保留。
+          </p>
+        </div>
         
         <button
           onClick={() => void onSaveConfig()}
           disabled={savingConfig}
-          className="btn-primary flex items-center justify-center rounded-2xl px-6 py-3 text-xs font-bold text-white shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn-primary flex h-11 min-w-[148px] items-center justify-center rounded-2xl px-6 text-xs font-bold text-white shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save className="mr-2 h-4 w-4" />
           {savingConfig ? "保存中..." : "保存全部设置"}

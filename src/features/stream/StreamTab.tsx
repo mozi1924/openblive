@@ -1,5 +1,6 @@
 import {
   Check,
+  ChevronDown,
   Compass,
   Copy,
   Link,
@@ -77,16 +78,18 @@ export function StreamTab({
 }: StreamTabProps) {
   const streamEndpoints = buildStreamEndpoints(rtmp);
   const primaryEndpoint = streamEndpoints[0];
+  const actionButtonClass =
+    "flex h-11 items-center justify-center rounded-xl text-xs font-bold transition-all duration-150";
   const liveStatus = session?.live_status ?? (session?.is_live ? 1 : 0);
   const isLive = liveStatus === 1;
   const isRoundPlay = liveStatus === 2;
   const statusLabel = isLive ? "直播中" : isRoundPlay ? "轮播中" : "未开播";
   
   const statusHint = isLive
-    ? "当前正在向哔哩哔哩直播服务器发送信号。修改标题和分区在直播中也会立即生效。"
+    ? "推流已建立，标题、分区和标签调整会直接同步到当前直播间。"
     : isRoundPlay
-      ? "直播间当前处于轮播状态。开始直播后将接管轮播切换为正式直播中。"
-      : "开始直播后，程序将自动向 B 站请求推流参数并根据设置自动开启联动设备。";
+      ? "当前仍在轮播，正式开播后会接管轮播状态并切换到直播中。"
+      : "开始直播后会拉取推流参数，并按当前设置执行本地联动。";
 
   const statusColorPill = isLive
     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
@@ -104,43 +107,56 @@ export function StreamTab({
 
   const obsStatus = linkageStatus?.obs_ws;
   const commandStatus = linkageStatus?.command;
+  const activeLinkageMode = linkageStatus?.mode ?? "none";
+  const isObsConfigured = Boolean(obsStatus?.url);
+  const isCommandConfigured = Boolean(
+    commandStatus?.start_configured || commandStatus?.stop_configured || commandStatus?.template_preview,
+  );
+  const hasActiveLinkage = activeLinkageMode === "obs_ws"
+    ? isObsConfigured
+    : activeLinkageMode === "command"
+      ? isCommandConfigured
+      : false;
 
-  const obsStateText =
-    linkageStatus?.mode === "obs_ws"
-      ? obsStatus?.connected
-        ? "已连接"
-        : "连接断开"
-      : "未启用";
+  const linkageTitle = activeLinkageMode === "obs_ws"
+    ? "OBS WebSocket"
+    : activeLinkageMode === "command"
+      ? "命令联动"
+      : "未配置联动";
 
-  const obsStateClass =
-    linkageStatus?.mode === "obs_ws"
-      ? obsStatus?.connected
-        ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
-        : "text-rose-400 border-rose-500/20 bg-rose-500/10 animate-pulse"
-      : "text-gray-500 border-white/5 bg-white/2";
-
-  const commandStateText =
-    linkageStatus?.mode === "command"
+  const linkageStateText = activeLinkageMode === "obs_ws"
+    ? obsStatus?.connected
+      ? "已连接"
+      : "连接断开"
+    : activeLinkageMode === "command"
       ? commandStatus?.start_configured
         ? "已部署"
-        : "未配置命令"
-      : commandStatus?.start_configured
-        ? "就绪"
-        : "未配置";
+        : commandStatus?.stop_configured
+          ? "仅配置停播命令"
+          : "未配置命令"
+      : "待配置";
 
-  const commandStateClass =
-    linkageStatus?.mode === "command"
-      ? commandStatus?.start_configured
+  const linkageStateClass = activeLinkageMode === "obs_ws"
+    ? obsStatus?.connected
+      ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
+      : "text-rose-400 border-rose-500/20 bg-rose-500/10"
+    : activeLinkageMode === "command"
+      ? commandStatus?.start_configured || commandStatus?.stop_configured
         ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
         : "text-amber-400 border-amber-500/20 bg-amber-500/10"
-      : "text-gray-500 border-white/5 bg-white/2";
+      : "text-gray-400 border-white/8 bg-white/4";
+  const linkageHint = activeLinkageMode === "obs_ws"
+    ? "通过 WebSocket 与 OBS Studio 保持联动。"
+    : activeLinkageMode === "command"
+      ? "按配置的本地命令执行开播和停播动作。"
+      : "当前仅控制 B 站直播间信息，不触发本地设备。";
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
       {/* Parameters Setup */}
       <div className="space-y-6 lg:col-span-7">
         <div className="glass-panel rounded-3xl p-6">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
               <Compass className="h-4.5 w-4.5 text-bili-blue" />
               <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
@@ -150,7 +166,7 @@ export function StreamTab({
             
             <button
               onClick={() => void onSyncProfile()}
-              className="flex items-center rounded-xl border border-white/8 bg-white/4 px-3.5 py-2 text-xs font-bold text-gray-300 transition-all duration-150 active:scale-95 hover:border-bili-blue/30 hover:bg-white/8 hover:text-white"
+              className={`${actionButtonClass} shrink-0 border border-white/8 bg-white/4 px-4 text-gray-300 active:scale-95 hover:border-bili-blue/30 hover:bg-white/8 hover:text-white`}
             >
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               同步B站设置
@@ -163,7 +179,7 @@ export function StreamTab({
               <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
                 直播间标题
               </label>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={title}
@@ -173,7 +189,7 @@ export function StreamTab({
                 />
                 <button
                   type="submit"
-                  className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue hover:text-white"
+                  className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-5 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
                 >
                   更新
                 </button>
@@ -190,37 +206,43 @@ export function StreamTab({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col space-y-1">
                   <span className="text-[9px] font-bold text-gray-500">主分区</span>
-                  <select
-                    value={parent}
-                    onChange={(event) => onChangeParent(event.target.value)}
-                    className="rounded-xl border border-white/8 bg-[#090b0f] px-3 py-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:outline-none"
-                  >
-                    {Object.keys(partitions).map((partition) => (
-                      <option key={partition} value={partition} className="bg-[#090b0f]">
-                        {partition}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={parent}
+                      onChange={(event) => onChangeParent(event.target.value)}
+                      className="h-11 w-full appearance-none rounded-xl border border-white/8 bg-gradient-to-br from-[#0b111c] to-[#090b0f] px-3.5 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
+                    >
+                      {Object.keys(partitions).map((partition) => (
+                        <option key={partition} value={partition} className="bg-[#090b0f]">
+                          {partition}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                  </div>
                 </div>
                 <div className="flex flex-col space-y-1">
                   <span className="text-[9px] font-bold text-gray-500">子分区</span>
-                  <select
-                    value={child}
-                    onChange={(event) => onChangeChild(event.target.value)}
-                    className="rounded-xl border border-white/8 bg-[#090b0f] px-3 py-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:outline-none"
-                  >
-                    {children.map((partition) => (
-                      <option key={partition} value={partition} className="bg-[#090b0f]">
-                        {partition}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={child}
+                      onChange={(event) => onChangeChild(event.target.value)}
+                      className="h-11 w-full appearance-none rounded-xl border border-white/8 bg-gradient-to-br from-[#0b111c] to-[#090b0f] px-3.5 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
+                    >
+                      {children.map((partition) => (
+                        <option key={partition} value={partition} className="bg-[#090b0f]">
+                          {partition}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                  </div>
                 </div>
               </div>
               <div className="flex justify-end pt-1">
                 <button
                   type="submit"
-                  className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-6 py-2.5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue hover:text-white"
+                  className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-6 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
                 >
                   保存分区
                 </button>
@@ -236,7 +258,7 @@ export function StreamTab({
               </label>
               
               {/* Display Current Tags */}
-              <div className="min-h-12 rounded-xl border border-white/5 bg-white/2 p-2.5">
+              <div className="min-h-12 rounded-xl border border-white/5 bg-white/2.5 p-2.5">
                 {tags.length === 0 ? (
                   <p className="px-1.5 py-1 text-xs text-gray-500">
                     暂无标签，可在下方输入添加
@@ -264,7 +286,7 @@ export function StreamTab({
               </div>
 
               {/* Tag inputs */}
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={tagInput}
@@ -281,13 +303,13 @@ export function StreamTab({
                 <button
                   type="button"
                   onClick={onAddTag}
-                  className="rounded-xl border border-white/8 bg-white/4 px-4 text-xs font-semibold text-gray-300 transition-all duration-150 hover:bg-white/8 hover:text-white"
+                  className={`${actionButtonClass} border border-white/8 bg-white/4 px-4 font-semibold text-gray-300 hover:bg-white/8 hover:text-white`}
                 >
                   <Plus className="h-4 w-4" />
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue hover:text-white"
+                  className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-5 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
                 >
                   保存标签
                 </button>
@@ -425,55 +447,85 @@ export function StreamTab({
             {/* Linkage status dashboards */}
             <div className="space-y-3.5 rounded-2xl border border-white/5 bg-[#05070a] p-4 text-left">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold tracking-widest text-gray-500 uppercase">
-                  EQUIPMENT LINKAGE
-                </span>
-                
-                <button
-                  onClick={() => onSelectTab("settings")}
-                  className="flex items-center text-[10px] font-bold text-bili-blue hover:underline"
-                >
-                  配置联动
-                  <ExternalLink className="ml-1 h-3 w-3" />
-                </button>
-              </div>
-
-              {/* OBS WS Status */}
-              <div className="rounded-xl border border-white/5 bg-white/2 p-3 font-mono text-[11px] transition-all hover:bg-white/4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-300">OBS WebSocket</span>
-                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-extrabold ${obsStateClass}`}>
-                    {obsStateText}
+                <div>
+                  <span className="text-[10px] font-extrabold tracking-widest text-gray-500 uppercase">
+                    EQUIPMENT LINKAGE
                   </span>
-                </div>
-                {linkageStatus?.mode === "obs_ws" && (
-                  <div className="space-y-1">
-                    <p className="truncate text-[10px] text-gray-500">
-                      地址: {obsStatus?.url || "ws://127.0.0.1:4455"}
-                    </p>
-                    {obsStatus?.last_error && (
-                      <p className="truncate text-[9px] text-rose-400 leading-tight">
-                        ERR: {obsStatus.last_error}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Command Link */}
-              <div className="rounded-xl border border-white/5 bg-white/2 p-3 font-mono text-[11px] transition-all hover:bg-white/4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-300">命令联动</span>
-                  <span className={`rounded-md border px-2 py-0.5 text-[9px] font-extrabold ${commandStateClass}`}>
-                    {commandStateText}
-                  </span>
-                </div>
-                {commandStatus?.template_preview && (
-                  <p className="truncate rounded bg-black/40 px-2 py-1 text-[9px] text-gray-500 select-text">
-                    CMD: {commandStatus.template_preview}
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    {linkageHint}
                   </p>
-                )}
+                </div>
               </div>
+
+              {!hasActiveLinkage ? (
+                <div className="rounded-xl border border-dashed border-white/10 bg-white/2 p-4">
+                  <p className="text-sm font-bold text-gray-200">未配置联动</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                    当前不会触发任何本地串流或设备动作。
+                  </p>
+                  <button
+                    onClick={() => onSelectTab("settings")}
+                    className="mt-3 inline-flex items-center text-[11px] font-bold text-bili-blue hover:underline"
+                  >
+                    前往设置配置联动
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-white/5 bg-white/2 p-3 font-mono text-[11px] transition-all hover:bg-white/4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-300">{linkageTitle}</span>
+                      <p className="mt-1 text-[10px] font-sans text-gray-500">
+                        {activeLinkageMode === "obs_ws" ? "当前开停播将同步到 OBS。" : "当前开停播将执行本地命令。"}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[9px] font-extrabold ${linkageStateClass}`}>
+                      {linkageStateText}
+                    </span>
+                  </div>
+
+                  {activeLinkageMode === "obs_ws" && (
+                    <div className="space-y-1">
+                      <p className="truncate text-[10px] text-gray-500">
+                        地址: {obsStatus?.url || "ws://127.0.0.1:4455"}
+                      </p>
+                      {obsStatus?.last_error && (
+                        <p className="truncate text-[9px] text-rose-400 leading-tight">
+                          ERR: {obsStatus.last_error}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {activeLinkageMode === "command" && (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`rounded-md border px-2 py-1 text-[9px] font-bold ${
+                          commandStatus?.start_configured
+                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                            : "border-white/8 bg-white/4 text-gray-500"
+                        }`}>
+                          开播命令{commandStatus?.start_configured ? "已配置" : "未配置"}
+                        </span>
+                        <span className={`rounded-md border px-2 py-1 text-[9px] font-bold ${
+                          commandStatus?.stop_configured
+                            ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                            : "border-white/8 bg-white/4 text-gray-500"
+                        }`}>
+                          停播命令{commandStatus?.stop_configured ? "已配置" : "未配置"}
+                        </span>
+                      </div>
+
+                      {commandStatus?.template_preview && (
+                        <p className="truncate rounded bg-black/40 px-2 py-1 text-[9px] text-gray-500 select-text">
+                          CMD: {commandStatus.template_preview}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -482,7 +534,7 @@ export function StreamTab({
             <button
               onClick={() => void onStartLive()}
               disabled={isLive}
-              className={`flex w-full items-center justify-center rounded-2xl py-4 text-xs font-bold transition-all duration-200 ${
+              className={`flex h-13 w-full items-center justify-center rounded-2xl text-xs font-bold transition-all duration-200 ${
                 isLive
                   ? "cursor-not-allowed border border-white/5 bg-white/3 text-gray-600"
                   : "bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/20 active:scale-98 hover:opacity-95 hover:shadow-emerald-500/30"
@@ -495,7 +547,7 @@ export function StreamTab({
             <button
               onClick={() => void onStopLive()}
               disabled={!isLive}
-              className={`flex w-full items-center justify-center rounded-2xl border py-4 text-xs font-bold transition-all duration-200 ${
+              className={`flex h-13 w-full items-center justify-center rounded-2xl border text-xs font-bold transition-all duration-200 ${
                 !isLive
                   ? "cursor-not-allowed border-white/5 bg-transparent text-gray-600"
                   : "border-rose-500/20 bg-rose-500/8 text-rose-400 active:scale-98 hover:bg-rose-500/15"
@@ -539,4 +591,3 @@ function buildStreamEndpoints(rtmp: StreamInfo | null): StreamEndpoint[] {
 
   return [];
 }
-

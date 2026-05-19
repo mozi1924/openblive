@@ -63,6 +63,7 @@ export function useStudioController() {
   const loginStatusCodeRef = useRef<number | null>(null);
   const qrcodeRefreshBusyRef = useRef(false);
   const startupCookieRefreshDoneRef = useRef(false);
+  const areaDirtyRef = useRef(false);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
 
@@ -181,6 +182,7 @@ export function useStudioController() {
     if (user.last_area_name.length >= 2) {
       setParent(user.last_area_name[0]);
       setChild(user.last_area_name[1]);
+      areaDirtyRef.current = false;
     }
     setTags([...(user.last_tags || [])]);
     setTagInput("");
@@ -219,7 +221,7 @@ export function useStudioController() {
     }
   }, [append, loadAccounts]);
 
-  const syncLiveRoomProfile = useCallback(async () => {
+  const syncLiveRoomProfile = useCallback(async (forceArea = false) => {
     try {
       const res = await studioApi.syncLiveRoomProfile();
       if (res.code !== 0 || !res.data) {
@@ -231,11 +233,14 @@ export function useStudioController() {
       }
       setTags([...(res.data.tags || [])]);
       setTagInput("");
-      if (res.data.parent) {
+      if ((forceArea || !areaDirtyRef.current) && res.data.parent) {
         setParent(res.data.parent);
       }
-      if (res.data.child) {
+      if ((forceArea || !areaDirtyRef.current) && res.data.child) {
         setChild(res.data.child);
+      }
+      if (forceArea && res.data.parent && res.data.child) {
+        areaDirtyRef.current = false;
       }
 
       append(
@@ -296,10 +301,20 @@ export function useStudioController() {
       if (res.code === 0 && res.data) {
         loginStatusCodeRef.current = 0;
         setCurrentUser(res.data);
+        areaDirtyRef.current = false;
+        if (res.data.last_title) {
+          setTitle(res.data.last_title);
+        }
+        if (res.data.last_area_name.length >= 2) {
+          setParent(res.data.last_area_name[0]);
+          setChild(res.data.last_area_name[1]);
+        }
+        setTags([...(res.data.last_tags || [])]);
+        setTagInput("");
         append(`登录成功：${res.data.uname || "用户"}`);
         await refreshSession();
         await loadAccounts();
-        await syncLiveRoomProfile();
+        await syncLiveRoomProfile(true);
         setQrcode("");
         setQrcodeKey("");
         return;
@@ -332,10 +347,20 @@ export function useStudioController() {
         if (res.code === 0 && res.data) {
           setCurrentUser(res.data);
           setShowFaceModal(false);
+          areaDirtyRef.current = false;
+          if (res.data.last_title) {
+            setTitle(res.data.last_title);
+          }
+          if (res.data.last_area_name.length >= 2) {
+            setParent(res.data.last_area_name[0]);
+            setChild(res.data.last_area_name[1]);
+          }
+          setTags([...(res.data.last_tags || [])]);
+          setTagInput("");
           append(`已切换账号：${res.data.uname}`);
           await refreshSession();
           await loadAccounts();
-          await syncLiveRoomProfile();
+          await syncLiveRoomProfile(true);
         }
       } catch (error) {
         append(`切换账号失败: ${String(error)}`);
@@ -376,6 +401,9 @@ export function useStudioController() {
     async (event: FormEvent) => {
       event.preventDefault();
       const res = await studioApi.updateArea(parent, child);
+      if (res.code === 0) {
+        areaDirtyRef.current = false;
+      }
       append(
         res.code === 0
           ? `分区设置成功: ${parent} / ${child}`
@@ -544,12 +572,18 @@ export function useStudioController() {
 
   const changeParent = useCallback(
     (newParent: string) => {
+      areaDirtyRef.current = true;
       setParent(newParent);
       const subList = partitions[newParent] || [];
       setChild(subList[0] || "");
     },
     [partitions],
   );
+
+  const changeChild = useCallback((newChild: string) => {
+    areaDirtyRef.current = true;
+    setChild(newChild);
+  }, []);
 
   useEffect(() => {
     danmuEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -576,7 +610,7 @@ export function useStudioController() {
     if (!currentUser?.uid) {
       return;
     }
-    void syncLiveRoomProfile();
+    void syncLiveRoomProfile(true);
   }, [currentUser?.uid, syncLiveRoomProfile]);
 
   useEffect(() => {
@@ -730,7 +764,7 @@ export function useStudioController() {
         await startLive("face_retry");
       },
       setActiveTab,
-      setChild,
+      setChild: changeChild,
       setDanmuText,
       updateAppConfig,
       saveAppConfig,
@@ -747,7 +781,7 @@ export function useStudioController() {
       submitTags,
       submitTitle,
       switchAccount,
-      syncLiveRoomProfile,
+      syncLiveRoomProfile: async () => syncLiveRoomProfile(true),
       toggleLogs: () => setShowLogs((prev) => !prev),
     },
     refs: {

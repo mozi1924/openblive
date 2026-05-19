@@ -20,7 +20,9 @@ struct TrayActionPayload<'a> {
 
 fn current_account_label(app: &AppHandle) -> String {
     let state = app.state::<AppState>();
-    let runtime = state.runtime.blocking_lock();
+    let Ok(runtime) = state.runtime.try_lock() else {
+        return "当前账号：读取中".to_string();
+    };
     let Some(uid) = runtime.config.current_uid.as_ref() else {
         return "当前账号：未登录".to_string();
     };
@@ -32,7 +34,9 @@ fn current_account_label(app: &AppHandle) -> String {
 
 fn current_live_status_label(app: &AppHandle) -> String {
     let state = app.state::<AppState>();
-    let runtime = state.runtime.blocking_lock();
+    let Ok(runtime) = state.runtime.try_lock() else {
+        return "直播状态：读取中".to_string();
+    };
     if runtime.session.is_live {
         "直播状态：直播中".to_string()
     } else {
@@ -42,8 +46,11 @@ fn current_live_status_label(app: &AppHandle) -> String {
 
 fn has_logged_in_user(app: &AppHandle) -> bool {
     let state = app.state::<AppState>();
-    let runtime = state.runtime.blocking_lock();
-    runtime.config.current_uid.is_some()
+    state
+        .runtime
+        .try_lock()
+        .map(|runtime| runtime.config.current_uid.is_some())
+        .unwrap_or(false)
 }
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
@@ -166,9 +173,12 @@ pub fn on_tray_icon_event(app: &AppHandle, event: &TrayIconEvent) {
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
         let state = window.state::<AppState>();
-        let runtime = state.runtime.blocking_lock();
-        let should_min_to_tray = runtime.config.min_to_tray && has_tray(&window.app_handle());
-        drop(runtime);
+        let should_min_to_tray = state
+            .runtime
+            .try_lock()
+            .map(|runtime| runtime.config.min_to_tray)
+            .unwrap_or(false)
+            && has_tray(&window.app_handle());
         if should_min_to_tray {
             api.prevent_close();
             let _ = window.hide();
