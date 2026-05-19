@@ -22,6 +22,7 @@ function App() {
         sessionLive={state.session?.is_live ?? false}
         showLogs={state.showLogs}
         sidebarDragRef={refs.sidebarDragRef}
+        currentUser={state.currentUser}
         onSelectTab={actions.setActiveTab}
         onToggleLogs={actions.toggleLogs}
       />
@@ -61,6 +62,7 @@ function App() {
               tagInput={state.tagInput}
               tags={state.tags}
               title={state.title}
+              onSelectTab={actions.setActiveTab}
               onChangeChild={actions.setChild}
               onChangeParent={actions.changeParent}
               onChangeTagInput={actions.setTagInput}

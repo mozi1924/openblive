@@ -1,4 +1,4 @@
-import { LogOut, QrCode, RefreshCw, ShieldAlert } from "lucide-react";
+import { LogOut, QrCode, RefreshCw, ShieldAlert, Users, Heart, Coins, Sparkles, UserPlus, Trash2 } from "lucide-react";
 import type { User } from "../../types/studio";
 
 type AccountTabProps = {
@@ -24,74 +24,93 @@ export function AccountTab({
 }: AccountTabProps) {
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
+      {/* Left Column: Account Info & Switcher */}
       <div className="space-y-6 lg:col-span-7">
-        <div className="glass-panel glow-blue rounded-3xl p-6">
-          <h3 className="mb-5 text-xs font-bold tracking-wider text-gray-400 uppercase">
-            当前登录账号
-          </h3>
+        
+        {/* Current Active Account */}
+        <div className="glass-panel glow-blue overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-[#111927] via-[#0d111a] to-[#151c2c] p-6 shadow-xl">
+          <div className="mb-4 flex items-center justify-between">
+            <span className="text-[10px] font-extrabold tracking-widest text-bili-blue uppercase">
+              CURRENT SESSION
+            </span>
+            <span className="rounded-full bg-bili-blue/10 px-2.5 py-0.5 text-[10px] font-bold text-bili-blue border border-bili-blue/20">
+              当前开播账号
+            </span>
+          </div>
 
           {currentUser ? (
             <div className="space-y-6">
               <div className="flex items-center space-x-5">
-                <img
-                  src={currentUser.face}
-                  alt={currentUser.uname}
-                  className="h-16 w-16 rounded-2xl border-2 border-bili-blue/30 object-cover shadow-lg"
-                />
+                <div className="relative">
+                  <img
+                    src={currentUser.face}
+                    alt={currentUser.uname}
+                    className="h-16 w-16 rounded-2xl border-2 border-bili-blue/30 object-cover shadow-md transition-transform duration-300 hover:scale-105"
+                  />
+                  <div className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-lg bg-gradient-to-r from-bili-blue to-teal-400 text-[8px] font-black text-white shadow-sm border border-[#0d111a]">
+                    LV{currentUser.level}
+                  </div>
+                </div>
+                
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center space-x-2">
-                    <h4 className="truncate text-lg font-bold text-white">
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <h4 className="text-lg font-bold text-white tracking-wide">
                       {currentUser.uname}
                     </h4>
-                    <span className="rounded bg-bili-blue/20 px-2 py-0.5 text-[10px] font-bold text-bili-blue">
-                      UL {currentUser.level}
-                    </span>
                     {currentUser.login_invalid ? (
-                      <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+                      <span className="rounded-lg bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 text-[9px] font-bold text-rose-300 animate-pulse">
                         登录失效
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold text-emerald-300">
+                        在线
+                      </span>
+                    )}
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-gray-500 font-mono">
                     UID: {currentUser.uid}
                   </p>
                 </div>
+                
                 <button
                   onClick={() => void onRefreshCurrentUser()}
-                  className="rounded-xl p-2 text-gray-400 transition-all duration-150 active:scale-95 hover:bg-white/10 hover:text-white"
+                  className="rounded-xl border border-white/5 bg-white/5 p-2.5 text-gray-400 transition-all duration-150 active:scale-95 hover:bg-white/10 hover:text-white"
                   title="刷新当前账号信息"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="h-4.5 w-4.5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 rounded-2xl border border-white/5 bg-white/5 px-4 py-4 md:grid-cols-4">
-                <StatBlock label="粉丝数" value={currentUser.follower} />
-                <StatBlock label="关注数" value={currentUser.following ?? "-"} />
-                <StatBlock
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard
+                  icon={<Users className="h-4 w-4 text-bili-blue" />}
+                  label="粉丝数"
+                  value={currentUser.follower}
+                />
+                <StatCard
+                  icon={<Heart className="h-4 w-4 text-rose-400" />}
+                  label="关注数"
+                  value={currentUser.following ?? "-"}
+                />
+                <StatCard
+                  icon={<Coins className="h-4 w-4 text-amber-500" />}
                   label="金瓜子"
-                  value={
-                    currentUser.money
-                      ? currentUser.money.toLocaleString()
-                      : "-"
-                  }
+                  value={currentUser.money ? currentUser.money.toLocaleString() : "-"}
                   className="text-amber-500"
                 />
-                <StatBlock
+                <StatCard
+                  icon={<Sparkles className="h-4 w-4 text-bili-pink" />}
                   label="B币余额"
-                  value={
-                    currentUser.bcoin
-                      ? currentUser.bcoin.toLocaleString()
-                      : "-"
-                  }
+                  value={currentUser.bcoin ? currentUser.bcoin.toLocaleString() : "-"}
                   className="text-bili-pink"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <div className="flex justify-end pt-2">
                 <button
                   onClick={() => void onLogout(currentUser.uid)}
-                  className="flex items-center rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-400 transition-all duration-150 active:scale-95 hover:bg-rose-500/20"
+                  className="flex items-center rounded-xl border border-rose-500/20 bg-rose-500/10 px-4.5 py-2.5 text-xs font-semibold text-rose-400 transition-all duration-150 active:scale-95 hover:bg-rose-500/20 hover:text-rose-300"
                 >
                   <LogOut className="mr-1.5 h-3.5 w-3.5" />
                   退出当前账号
@@ -99,26 +118,35 @@ export function AccountTab({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-yellow-500/20 bg-yellow-500/10 text-yellow-500">
-                <ShieldAlert className="h-6 w-6" />
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-yellow-500/10 bg-yellow-500/5 text-yellow-500">
+                <ShieldAlert className="h-7 w-7 animate-pulse" />
               </div>
               <h4 className="text-sm font-bold text-white">当前未登录账号</h4>
-              <p className="mt-1 max-w-xs text-xs text-gray-500">
-                使用右侧的二维码进行扫码登录以启用开播相关功能
+              <p className="mt-2 max-w-xs text-xs text-gray-500 leading-relaxed">
+                请在右侧生成登录二维码并进行扫码，即可启用开播、弹幕等完整功能。
               </p>
             </div>
           )}
         </div>
 
+        {/* Account Switcher */}
         <div className="glass-panel rounded-3xl p-6">
-          <h3 className="mb-5 text-xs font-bold tracking-wider text-gray-400 uppercase">
-            切换已登录账户
-          </h3>
+          <div className="mb-5 flex items-center justify-between">
+            <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+              SAVED ACCOUNTS
+            </span>
+            <span className="text-[10px] font-bold text-gray-500">
+              已保存 {accounts.length} 个账号
+            </span>
+          </div>
+
           {accounts.length <= 1 ? (
-            <p className="py-4 text-center text-xs text-gray-500">
-              暂无多余已保存的账号，您可以扫码添加更多账号
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-white/5 rounded-2xl bg-white/2">
+              <p className="text-xs text-gray-500">
+                暂无其他已保存的账号，您可以扫码添加更多账号
+              </p>
+            </div>
           ) : (
             <div className="max-h-[320px] overflow-y-auto pr-1 space-y-3">
               {accounts
@@ -126,24 +154,29 @@ export function AccountTab({
                 .map((user) => (
                   <div
                     key={user.uid}
-                    className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-200 hover:border-bili-blue/20 hover:bg-white/10"
+                    className="group flex items-center justify-between rounded-2xl border border-white/5 bg-white/2.5 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-bili-blue/20 hover:bg-white/5 hover:shadow-md"
                   >
                     <div className="flex items-center space-x-4 min-w-0 flex-1">
-                      <img
-                        src={user.face}
-                        alt={user.uname}
-                        className="h-10 w-10 rounded-xl border border-white/10 object-cover shadow-md"
-                      />
+                      <div className="relative">
+                        <img
+                          src={user.face}
+                          alt={user.uname}
+                          className="h-10 w-10 rounded-xl border border-white/10 object-cover shadow-sm"
+                        />
+                        <span className="absolute -bottom-1 -right-1 rounded-md bg-[#131b26] px-1 text-[7px] font-bold text-bili-blue border border-white/5">
+                          L{user.level}
+                        </span>
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="truncate text-sm font-bold text-white">
+                        <h4 className="truncate text-sm font-bold text-white transition-colors group-hover:text-bili-blue">
                           {user.uname}
                         </h4>
-                        <p className="mt-0.5 truncate text-[10px] text-gray-400">
+                        <p className="mt-0.5 truncate text-[10px] text-gray-500 font-mono">
                           UID: {user.uid}
                         </p>
                         {user.login_invalid ? (
-                          <p className="mt-1 text-[10px] font-semibold text-rose-300">
-                            登录失效，请重新扫码
+                          <p className="mt-1 text-[9px] font-semibold text-rose-400 animate-pulse">
+                            登录失效，请删除后重新扫码
                           </p>
                         ) : null}
                       </div>
@@ -152,16 +185,20 @@ export function AccountTab({
                       <button
                         onClick={() => void onSwitchAccount(user.uid)}
                         disabled={Boolean(user.login_invalid)}
-                        className="rounded-xl bg-bili-blue/15 px-3.5 py-1.5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue/25 hover:text-white"
+                        className={`rounded-xl px-4 py-2 text-xs font-bold transition-all duration-150 active:scale-95 ${
+                          user.login_invalid
+                            ? "bg-rose-500/10 text-rose-400 cursor-not-allowed"
+                            : "bg-bili-blue/10 text-bili-blue border border-bili-blue/20 hover:bg-bili-blue hover:text-white"
+                        }`}
                       >
-                        {user.login_invalid ? "需重登" : "切换"}
+                        {user.login_invalid ? "失效" : "切换"}
                       </button>
                       <button
                         onClick={() => void onLogout(user.uid)}
-                        className="rounded-xl p-2 text-gray-400 transition-all duration-150 active:scale-95 hover:bg-rose-500/10 hover:text-rose-400"
+                        className="rounded-xl border border-transparent p-2 text-gray-500 transition-all duration-150 hover:border-rose-500/15 hover:bg-rose-500/10 hover:text-rose-400"
                         title="删除此账号"
                       >
-                        <LogOut className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -171,21 +208,36 @@ export function AccountTab({
         </div>
       </div>
 
+      {/* Right Column: QR Code scanner */}
       <div className="lg:col-span-5 lg:sticky lg:top-8">
         <div className="glass-panel glow-pink flex flex-col items-center rounded-3xl p-6 transition-all duration-300 hover:shadow-2xl">
-          <h3 className="mb-6 w-full text-xs font-bold tracking-wider text-gray-400 uppercase">
-            扫码新增账号
-          </h3>
+          <div className="mb-6 flex w-full items-center justify-between">
+            <span className="text-[10px] font-extrabold tracking-widest text-bili-pink uppercase">
+              ADD ACCOUNT
+            </span>
+            <span className="rounded-full bg-bili-pink/10 px-2 py-0.5 text-[10px] font-bold text-bili-pink border border-bili-pink/20">
+              扫码新增账号
+            </span>
+          </div>
 
           {qrcode ? (
             <div className="flex flex-col items-center space-y-6 w-full">
-              <div className="group relative overflow-hidden rounded-3xl border-4 border-bili-pink/20 bg-white p-4 shadow-xl transition-all duration-300">
+              {/* QR Container with Cyber Scanline */}
+              <div className="group relative overflow-hidden rounded-3xl border-4 border-bili-pink/25 bg-white p-4 shadow-xl transition-all duration-300">
                 <img
                   src={qrcode}
                   alt="login qrcode"
                   className="h-48 w-48 rounded-xl object-contain"
                 />
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                
+                {/* Laser Scanline */}
+                <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-bili-pink to-transparent shadow-[0_0_8px_var(--color-bili-pink)] pointer-events-none opacity-80"
+                     style={{
+                       animation: "scanline 2s linear infinite"
+                     }}
+                />
+
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 opacity-0 transition-opacity duration-200 group-hover:opacity-100 backdrop-blur-sm">
                   <button
                     onClick={() => void onLoadQrcode()}
                     className="rounded-full bg-white/20 p-3 text-white backdrop-blur-md transition-all duration-150 active:scale-95 hover:bg-white/30"
@@ -198,47 +250,62 @@ export function AccountTab({
                   </span>
                 </div>
               </div>
-              <div className="space-y-1 text-center">
+              
+              <style>{`
+                @keyframes scanline {
+                  0% { top: 0%; }
+                  50% { top: 100%; }
+                  100% { top: 0%; }
+                }
+              `}</style>
+
+              <div className="space-y-1.5 text-center">
                 <p className="text-sm font-bold text-white">
-                  使用哔哩哔哩APP扫码
+                  请使用哔哩哔哩手机APP扫码
                 </p>
-                <p className="text-xs text-gray-500">
-                  二维码状态会自动检测，扫码并确认后将自动登录
+                <p className="text-[11px] leading-relaxed text-gray-500 max-w-xs mx-auto">
+                  二维码状态会自动检测，扫码并确认后将自动登录此账号
                 </p>
               </div>
+
               <div className="flex w-full space-x-2">
                 <button
                   onClick={() => void onLoadQrcode()}
-                  className="flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5 py-3 text-xs font-semibold transition-all duration-150 active:scale-95 hover:border-white/20 hover:bg-white/10"
+                  className="flex flex-1 items-center justify-center rounded-2xl border border-white/8 bg-white/5 py-3 text-xs font-semibold text-gray-300 transition-all duration-150 active:scale-95 hover:border-white/15 hover:bg-white/10 hover:text-white"
                 >
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  刷新二维码
+                  刷新
                 </button>
                 <button
                   onClick={() => void onPollLogin()}
-                  className="glow-pink flex flex-1 items-center justify-center rounded-2xl bg-gradient-to-r from-bili-pink to-[#ff8bb2] py-3 text-xs font-bold text-white transition-all duration-150 active:scale-95 hover:opacity-95"
+                  className="btn-secondary flex flex-1 items-center justify-center rounded-2xl py-3 text-xs font-bold text-white active:scale-95"
                 >
                   <QrCode className="mr-2 h-3.5 w-3.5" />
-                  立即检查
+                  手动刷新状态
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center py-12 text-center w-full">
-              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-tr from-bili-pink/20 to-transparent">
-                <QrCode className="h-10 w-10 text-bili-pink" />
+            <div className="flex flex-col items-center py-10 text-center w-full">
+              {/* Dotted Scan Area */}
+              <div className="mb-6 flex h-40 w-40 items-center justify-center rounded-3xl border-2 border-dashed border-bili-pink/20 bg-white/[0.02] transition-colors hover:border-bili-pink/40">
+                <div className="animate-float flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-tr from-bili-pink/15 to-transparent">
+                  <UserPlus className="h-9 w-9 text-bili-pink" />
+                </div>
               </div>
-              <h4 className="mb-2 text-base font-bold text-white">
-                获取快捷登录二维码
+              
+              <h4 className="mb-2.5 text-base font-bold text-white">
+                获取授权登录二维码
               </h4>
               <p className="mb-8 max-w-xs text-xs leading-relaxed text-gray-500">
-                我们将通过B站官方API向您提供安全的授权登录二维码。登录后，您的
-                Cookie 将以高级加密保存在系统 Keychain 中。
+                通过哔哩哔哩官方扫码接口安全登录。您的登录凭证（Cookie）将安全存储于本地系统Keychain中，拒绝任何第三方服务器上传。
               </p>
+              
               <button
                 onClick={() => void onLoadQrcode()}
-                className="glow-blue rounded-2xl bg-gradient-to-r from-bili-blue to-[#4fc3f7] px-8 py-3 text-xs font-bold text-white transition-all duration-200 active:scale-95 hover:opacity-95"
+                className="btn-primary flex items-center justify-center rounded-2xl px-8 py-3.5 text-xs font-bold text-white active:scale-95"
               >
+                <QrCode className="mr-2 h-4 w-4" />
                 获取扫码登录二维码
               </button>
             </div>
@@ -249,19 +316,22 @@ export function AccountTab({
   );
 }
 
-type StatBlockProps = {
+type StatCardProps = {
+  icon: React.ReactNode;
   label: string;
   value: string | number;
   className?: string;
 };
 
-function StatBlock({ label, value, className }: StatBlockProps) {
+function StatCard({ icon, label, value, className }: StatCardProps) {
   return (
-    <div className="text-center md:text-left">
-      <p className="text-[10px] font-medium text-gray-500 uppercase">{label}</p>
-      <p className={`mt-0.5 text-base font-bold text-white ${className || ""}`}>
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/2 px-3 py-3 text-center transition-all duration-200 hover:border-white/8 hover:bg-white/4">
+      <div className="mb-1">{icon}</div>
+      <p className="text-[9px] font-bold text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`mt-0.5 text-sm font-bold text-white truncate w-full ${className || ""}`}>
         {value}
       </p>
     </div>
   );
 }
+
