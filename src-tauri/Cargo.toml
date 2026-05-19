@@ -1,12 +1,12 @@
 [package]
-name = "tauri-app"
+name = "openblive-studio"
 version = "0.1.0"
-description = "Bilibili live desktop tool"
+description = "OpenBlive Studio desktop assistant for Bilibili streamers"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "tauri_app_lib"
+name = "openblive_studio_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

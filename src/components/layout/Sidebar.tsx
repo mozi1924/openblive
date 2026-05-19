@@ -2,11 +2,11 @@ import {
   Compass,
   ExternalLink,
   MessageSquare,
-  Radio,
   Settings,
   Terminal,
   User as UserIcon,
 } from "lucide-react";
+import { AppLogo } from "../branding/AppLogo";
 import type { ActiveTab, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t } from "../../utils/i18n";
@@ -56,9 +56,7 @@ export function Sidebar({
       />
 
       <div className="flex shrink-0 items-center space-x-3 px-6 py-4">
-        <div className="glow-blue flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-bili-blue via-[#8b5cf6] to-bili-pink shadow-lg">
-          <Radio className="h-4.5 w-4.5 animate-pulse text-white" />
-        </div>
+        <AppLogo className="shrink-0" size={38} />
         <div>
           <h1 className="text-sm font-extrabold leading-tight tracking-wider text-white uppercase">
             OpenBlive

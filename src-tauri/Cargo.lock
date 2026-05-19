@@ -2694,6 +2694,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "openblive-studio"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "base64 0.22.1",
+ "brotli 6.0.0",
+ "bytes",
+ "chrono",
+ "dirs",
+ "flate2",
+ "futures-util",
+ "hex",
+ "keyring",
+ "md5",
+ "rand 0.8.6",
+ "reqwest 0.12.28",
+ "rsa",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tokio",
+ "tokio-tungstenite",
+ "url",
+]
+
+[[package]]
 name = "openssl"
 version = "0.10.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4199,37 +4230,6 @@ dependencies = [
  "webview2-com",
  "window-vibrancy",
  "windows",
-]
-
-[[package]]
-name = "tauri-app"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "base64 0.22.1",
- "brotli 6.0.0",
- "bytes",
- "chrono",
- "dirs",
- "flate2",
- "futures-util",
- "hex",
- "keyring",
- "md5",
- "rand 0.8.6",
- "reqwest 0.12.28",
- "rsa",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tokio",
- "tokio-tungstenite",
- "url",
 ]
 
 [[package]]
