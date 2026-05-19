@@ -33,6 +33,8 @@ export function SettingsTab({
   const variables = ["{server}", "{stream_key}", "{stream_url}", "{stream_code}", "{protocol}"];
   const optionCardClass =
     "flex min-h-36 items-start rounded-2xl border p-4 text-left transition-all duration-200";
+  const windowBehaviorCardClass =
+    "flex min-h-20 items-start rounded-2xl border p-3.5 text-left transition-all duration-200";
   const inputClass =
     "w-full rounded-xl border border-white/8 bg-[#090b0f] px-3.5 py-3 text-xs text-white outline-none transition-all hover:border-white/12 focus:border-bili-blue/40";
   const selectClass =
@@ -84,7 +86,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("min_to_tray", true)}
-            className={`${optionCardClass} ${
+            className={`${windowBehaviorCardClass} ${
               appConfig.min_to_tray
                 ? "border-bili-blue/35 bg-bili-blue/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
@@ -102,7 +104,7 @@ export function SettingsTab({
           <button
             type="button"
             onClick={() => onChangeConfig("min_to_tray", false)}
-            className={`${optionCardClass} ${
+            className={`${windowBehaviorCardClass} ${
               !appConfig.min_to_tray
                 ? "border-bili-blue/35 bg-bili-blue/5 text-white"
                 : "border-white/5 bg-white/2.5 text-gray-400 hover:border-white/10 hover:bg-white/5"
