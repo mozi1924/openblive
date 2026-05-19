@@ -1,5 +1,5 @@
 use crate::crypto::{decrypt_text, encrypt_text};
-use crate::models::{PersistConfig, UserRecord};
+use crate::models::{sync_live_profile_state_defaults, LiveProfileState, PersistConfig, UserRecord};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -75,6 +75,8 @@ struct LiveUserCacheFile {
     last_area_name: Vec<String>,
     #[serde(default)]
     last_tags: Vec<String>,
+    #[serde(default)]
+    live_profile_state: LiveProfileState,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -291,11 +293,13 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
                 user.last_area_id = cache.last_area_id;
                 user.last_area_name = cache.last_area_name;
                 user.last_tags = cache.last_tags;
+                user.live_profile_state = cache.live_profile_state;
             }
         }
     }
 
     for (uid, user) in cfg.users.iter_mut() {
+        sync_live_profile_state_defaults(user);
         user.cookie = match decrypt_text(&user.enc_cookie, key) {
             Ok(value) => value,
             Err(error) => {
@@ -399,6 +403,7 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
                 last_area_id: user.last_area_id.clone(),
                 last_area_name: user.last_area_name.clone(),
                 last_tags: user.last_tags.clone(),
+                live_profile_state: user.live_profile_state.clone(),
             },
         );
     }

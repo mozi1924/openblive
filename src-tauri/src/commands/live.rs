@@ -2,7 +2,10 @@ use crate::bili::{app_sign, get_danmu_info, wbi_signed};
 use crate::config::save_config;
 use crate::constants::{CmdResult, DEFAULT_LIVEHIME_BUILD, DEFAULT_LIVEHIME_VERSION};
 use crate::danmu::decode_and_emit;
-use crate::models::{DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq};
+use crate::models::{
+    sync_live_profile_state_defaults, DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
+    UserRecord,
+};
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use base64::Engine;
@@ -95,6 +98,111 @@ fn split_tags(raw: &str) -> Vec<String> {
         .collect()
 }
 
+fn current_timestamp() -> i64 {
+    chrono::Utc::now().timestamp()
+}
+
+fn title_review_from_audit_status(status: Option<i64>) -> &'static str {
+    match status {
+        Some(2) => "pending",
+        Some(0) => "none",
+        Some(_) => "unknown",
+        None => "none",
+    }
+}
+
+fn same_tags(left: &[String], right: &[String]) -> bool {
+    left == right
+}
+
+fn apply_profile_state_from_remote(
+    user: &mut UserRecord,
+    title: &str,
+    parent: &str,
+    child: &str,
+    area_id: Option<u64>,
+    tags: &[String],
+) {
+    sync_live_profile_state_defaults(user);
+    let now = current_timestamp();
+    let title_matches_submitted = user.live_profile_state.title.submitted == title;
+
+    if user.live_profile_state.title.submitted.is_empty() {
+        user.live_profile_state.title.submitted = title.to_string();
+        user.last_title = title.to_string();
+    }
+    user.live_profile_state.title.effective = title.to_string();
+    if title_matches_submitted {
+        user.live_profile_state.title.transport = "synced".to_string();
+        if matches!(
+            user.live_profile_state.title.review.as_str(),
+            "pending" | "unknown"
+        ) {
+            user.live_profile_state.title.review = "none".to_string();
+        }
+        user.live_profile_state.title.message.clear();
+    } else if user.live_profile_state.title.review != "pending" {
+        user.live_profile_state.title.transport = "conflict".to_string();
+        user.live_profile_state.title.message = "远端标题与最近一次提交不同".to_string();
+    }
+    user.live_profile_state.title.updated_at = now;
+
+    if user.live_profile_state.area.submitted_parent.is_empty()
+        && user.live_profile_state.area.submitted_child.is_empty()
+    {
+        user.live_profile_state.area.submitted_parent = parent.to_string();
+        user.live_profile_state.area.submitted_child = child.to_string();
+        user.live_profile_state.area.submitted_area_id = area_id;
+        if !parent.is_empty() && !child.is_empty() {
+            user.last_area_name = vec![parent.to_string(), child.to_string()];
+        }
+        if let Some(area_id) = area_id {
+            user.last_area_id = area_id.to_string();
+        }
+    }
+    user.live_profile_state.area.effective_parent = parent.to_string();
+    user.live_profile_state.area.effective_child = child.to_string();
+    user.live_profile_state.area.effective_area_id = area_id;
+    if user.live_profile_state.area.submitted_area_id == Some(0)
+        && user.live_profile_state.area.submitted_parent == parent
+        && user.live_profile_state.area.submitted_child == child
+    {
+        user.live_profile_state.area.submitted_area_id = area_id;
+        if let Some(area_id) = area_id {
+            user.last_area_id = area_id.to_string();
+        }
+    }
+    if user.live_profile_state.area.submitted_parent == parent
+        && user.live_profile_state.area.submitted_child == child
+        && user.live_profile_state.area.submitted_area_id == area_id
+    {
+        user.live_profile_state.area.transport = "synced".to_string();
+        if user.live_profile_state.area.message == "远端分区与最近一次提交不同" {
+            user.live_profile_state.area.message.clear();
+        }
+    } else {
+        user.live_profile_state.area.transport = "conflict".to_string();
+        user.live_profile_state.area.message = "远端分区与最近一次提交不同".to_string();
+    }
+    user.live_profile_state.area.updated_at = now;
+
+    if user.live_profile_state.tags.submitted.is_empty() && !tags.is_empty() {
+        user.live_profile_state.tags.submitted = tags.to_vec();
+        user.last_tags = tags.to_vec();
+    }
+    user.live_profile_state.tags.effective = tags.to_vec();
+    if same_tags(&user.live_profile_state.tags.submitted, tags) {
+        user.live_profile_state.tags.transport = "synced".to_string();
+        if user.live_profile_state.tags.message == "远端标签与最近一次提交不同" {
+            user.live_profile_state.tags.message.clear();
+        }
+    } else {
+        user.live_profile_state.tags.transport = "conflict".to_string();
+        user.live_profile_state.tags.message = "远端标签与最近一次提交不同".to_string();
+    }
+    user.live_profile_state.tags.updated_at = now;
+}
+
 fn build_room_update_form(room_id: &str, csrf: &str) -> BTreeMap<String, String> {
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id.to_string());
@@ -145,7 +253,12 @@ fn apply_room_status_to_session(
     if let Some(room_id) = room_info["room_id"].as_i64() {
         session.room_id = room_id.to_string();
     }
+}
 
+fn apply_room_area_to_session(
+    session: &mut crate::models::SessionState,
+    room_info: &serde_json::Value,
+) {
     let parent = room_info["parent_area_name"].as_str().unwrap_or("").to_string();
     let child = room_info["area_name"].as_str().unwrap_or("").to_string();
     if !parent.is_empty() && !child.is_empty() {
@@ -780,6 +893,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
             "child": child,
             "area_id": user.last_area_id.parse::<u64>().ok(),
             "tags": user.last_tags,
+            "profile_state": user.live_profile_state,
             "from_cache": true
         })));
     }
@@ -805,14 +919,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
 
             let mut runtime = state.runtime.lock().await;
             if let Some(current) = runtime.config.users.get_mut(&uid) {
-                current.last_title = title.clone();
-                current.last_area_id = area_id.map(|value| value.to_string()).unwrap_or_default();
-                current.last_area_name = if parent.is_empty() || child.is_empty() {
-                    current.last_area_name.clone()
-                } else {
-                    vec![parent.clone(), child.clone()]
-                };
-                current.last_tags = tags.clone();
+                apply_profile_state_from_remote(current, &title, &parent, &child, area_id, &tags);
                 if !room_id.is_empty() {
                     current.room_id = room_id.clone();
                 }
@@ -825,6 +932,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
             };
             runtime.session.current_tags = tags.clone();
             apply_room_status_to_session(&mut runtime.session, &data);
+            apply_room_area_to_session(&mut runtime.session, &data);
             if !room_id.is_empty() {
                 runtime.session.room_id = room_id;
             }
@@ -836,6 +944,11 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 "child": child,
                 "area_id": area_id,
                 "tags": tags,
+                "profile_state": runtime
+                    .config
+                    .users
+                    .get(&uid)
+                    .map(|user| user.live_profile_state.clone()),
                 "from_cache": false
             })))
         }
@@ -862,6 +975,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 "child": child,
                 "area_id": user.last_area_id.parse::<u64>().ok(),
                 "tags": user.last_tags,
+                "profile_state": user.live_profile_state,
                 "from_cache": true
             })))
         }
@@ -890,7 +1004,10 @@ pub async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
             if let Some(children) = parent["list"].as_array() {
                 for child in children {
                     let child_name = child["name"].as_str().unwrap_or("").to_string();
-                    let child_id = child["id"].as_u64().unwrap_or(0);
+                    let child_id = child["id"]
+                        .as_u64()
+                        .or_else(|| child["id"].as_str().and_then(|value| value.parse::<u64>().ok()))
+                        .unwrap_or(0);
                     sub_map.insert(child_name.clone(), child_id);
                     names.push(json!(child_name));
                 }
@@ -905,25 +1022,92 @@ pub async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
 
 #[tauri::command]
 pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdResult {
-    let mut runtime = state.runtime.lock().await;
-    let area_id = runtime
-        .partition_map
-        .get(&req.parent)
-        .and_then(|map| map.get(&req.child))
-        .copied()
-        .ok_or_else(|| "invalid partition".to_string())?;
+    let (uid, room_id, csrf, cookie, area_id) = {
+        let runtime = state.runtime.lock().await;
+        let uid = runtime
+            .config
+            .current_uid
+            .clone()
+            .ok_or_else(|| "未登录".to_string())?;
+        let user = runtime
+            .config
+            .users
+            .get(&uid)
+            .ok_or_else(|| "未登录".to_string())?;
+        let area_id = runtime
+            .partition_map
+            .get(&req.parent)
+            .and_then(|map| map.get(&req.child))
+            .copied()
+            .ok_or_else(|| "invalid partition".to_string())?;
+        (
+            uid,
+            user.room_id.clone(),
+            user.csrf.clone(),
+            user.cookie.clone(),
+            area_id,
+        )
+    };
 
-    runtime.session.current_area_id = Some(area_id);
-    runtime.session.current_area_names = vec![req.parent.clone(), req.child.clone()];
-    if let Some(uid) = runtime.config.current_uid.clone() {
-        if let Some(user) = runtime.config.users.get_mut(&uid) {
-            user.last_area_id = area_id.to_string();
-            user.last_area_name = vec![req.parent, req.child];
-        }
+    if room_id.is_empty() {
+        return Err("未获取到直播间号".into());
+    }
+    if csrf.is_empty() {
+        return Err("未获取到 csrf，请尝试刷新账号信息".into());
     }
 
+    state.client.apply_cookie_header(&cookie);
+    let mut form = build_room_update_form(&room_id, &csrf);
+    form.insert("area_id".into(), area_id.to_string());
+    let value = state
+        .client
+        .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("update_area code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("登录已失效，请重新扫码登录".into());
+        }
+        return Err(error_message(&value, "分区设置失败"));
+    }
+
+    let mut runtime = state.runtime.lock().await;
+    if let Some(user) = runtime.config.users.get_mut(&uid) {
+        sync_live_profile_state_defaults(user);
+        user.last_area_id = area_id.to_string();
+        user.last_area_name = vec![req.parent.clone(), req.child.clone()];
+        user.live_profile_state.area.submitted_parent = req.parent.clone();
+        user.live_profile_state.area.submitted_child = req.child.clone();
+        user.live_profile_state.area.submitted_area_id = Some(area_id);
+        user.live_profile_state.area.effective_parent = req.parent.clone();
+        user.live_profile_state.area.effective_child = req.child.clone();
+        user.live_profile_state.area.effective_area_id = Some(area_id);
+        user.live_profile_state.area.transport = "synced".to_string();
+        user.live_profile_state.area.review = "none".to_string();
+        user.live_profile_state.area.message.clear();
+        user.live_profile_state.area.updated_at = current_timestamp();
+        user.login_invalid = false;
+        user.auth_fail_count = 0;
+        user.last_auth_fail_at = 0;
+    }
+    runtime.session.current_area_id = Some(area_id);
+    runtime.session.current_area_names = vec![req.parent.clone(), req.child.clone()];
     save_config(&state.config_path, &runtime.config, &state.master_key);
-    Ok(wrap_ok(json!({ "area_id": area_id })))
+    Ok(wrap_ok(json!({
+        "area_id": area_id,
+        "profile_state": runtime
+            .config
+            .users
+            .get(&uid)
+            .map(|user| user.live_profile_state.clone())
+    })))
 }
 
 #[tauri::command]
@@ -949,17 +1133,40 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
 
     let code = value["code"].as_i64().unwrap_or(-1);
     if code == 0 {
+        let audit_info = value["data"]["audit_info"].clone();
+        let audit_status = audit_info["audit_title_status"].as_i64();
+        let review = title_review_from_audit_status(audit_status);
+        let message = audit_info["audit_title_reason"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
         let mut runtime = state.runtime.lock().await;
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
+                sync_live_profile_state_defaults(user);
                 user.last_title = req.title.clone();
+                user.live_profile_state.title.submitted = req.title.clone();
+                user.live_profile_state.title.transport = "synced".to_string();
+                user.live_profile_state.title.review = review.to_string();
+                user.live_profile_state.title.message = message.clone();
+                user.live_profile_state.title.updated_at = current_timestamp();
+                if review == "none" {
+                    user.live_profile_state.title.effective = req.title.clone();
+                }
                 user.login_invalid = false;
                 user.auth_fail_count = 0;
                 user.last_auth_fail_at = 0;
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
-        Ok(wrap_ok(json!({})))
+        Ok(wrap_ok(json!({
+            "profile_state": runtime
+                .config
+                .current_uid
+                .as_ref()
+                .and_then(|uid| runtime.config.users.get(uid))
+                .map(|user| user.live_profile_state.clone())
+        })))
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
@@ -1078,7 +1285,14 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
 
     let mut runtime = state.runtime.lock().await;
     if let Some(user) = runtime.config.users.get_mut(&uid) {
+        sync_live_profile_state_defaults(user);
         user.last_tags = desired_tags.clone();
+        user.live_profile_state.tags.submitted = desired_tags.clone();
+        user.live_profile_state.tags.effective = desired_tags.clone();
+        user.live_profile_state.tags.transport = "synced".to_string();
+        user.live_profile_state.tags.review = "none".to_string();
+        user.live_profile_state.tags.message.clear();
+        user.live_profile_state.tags.updated_at = current_timestamp();
         user.login_invalid = false;
         user.auth_fail_count = 0;
         user.last_auth_fail_at = 0;
@@ -1089,7 +1303,12 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
     Ok(wrap_ok(json!({
         "tags": desired_tags,
         "added": to_add,
-        "removed": to_del
+        "removed": to_del,
+        "profile_state": runtime
+            .config
+            .users
+            .get(&uid)
+            .map(|user| user.live_profile_state.clone())
     })))
 }
 

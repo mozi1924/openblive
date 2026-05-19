@@ -10,6 +10,9 @@ import type {
   Session,
   StreamInfo,
   TrayActionPayload,
+  UpdateAreaResp,
+  UpdateTagsResp,
+  UpdateTitleResp,
   User,
 } from "../types/studio";
 
@@ -43,14 +46,14 @@ export const studioApi = {
   getPartitions: () =>
     invokeCommand<Record<string, string[]>>("get_partitions"),
   updateArea: (parent: string, child: string) =>
-    invokeCommand("update_area", { req: { parent, child } }),
+    invokeCommand<UpdateAreaResp>("update_area", { req: { parent, child } }),
   updateTitle: (title: string) =>
-    invokeCommand("update_title", { req: { title } }),
+    invokeCommand<UpdateTitleResp>("update_title", { req: { title } }),
   syncLiveStatus: () => invokeCommand<Session>("sync_live_status"),
   syncLiveRoomProfile: () =>
     invokeCommand<LiveRoomProfile>("sync_live_room_profile"),
   updateLiveTags: (tags: string) =>
-    invokeCommand<{ tags: string[]; added: string[]; removed: string[] }>(
+    invokeCommand<UpdateTagsResp>(
       "update_live_tags",
       { req: { tags } },
     ),

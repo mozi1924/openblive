@@ -3,7 +3,7 @@ use crate::bili::fetch_full_user_data;
 use crate::client::parse_cookie_value;
 use crate::config::save_config;
 use crate::constants::CmdResult;
-use crate::models::{PollReq, UidReq, UserRecord};
+use crate::models::{sync_live_profile_state_defaults, PollReq, UidReq, UserRecord};
 use crate::response::wrap_ok;
 use crate::state::{restore_session_from_current, AppState};
 use rand::rngs::OsRng;
@@ -623,11 +623,13 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         last_area_id: old.last_area_id,
         last_area_name: old.last_area_name,
         last_tags: old.last_tags,
+        live_profile_state: old.live_profile_state,
         login_invalid: false,
         auth_fail_count: 0,
         last_auth_fail_at: 0,
     };
     let mut user = user;
+    sync_live_profile_state_defaults(&mut user);
     fill_profile_from_full(&mut user, &full);
     if let Err(error) =
         refresh_avatar_cache(&state.client, &state.config_path, &uid_str, &user.face).await

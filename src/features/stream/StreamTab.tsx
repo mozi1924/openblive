@@ -16,6 +16,7 @@ import {
 import type {
   ActiveTab,
   LinkageStatus,
+  LiveProfileState,
   Session,
   StreamEndpoint,
   StreamInfo,
@@ -33,6 +34,17 @@ type StreamTabProps = {
   tagInput: string;
   tags: string[];
   title: string;
+  recentAreas: Array<{ parent: string; child: string }>;
+  hasUnsavedChanges: boolean;
+  hasAttentionStatus: boolean;
+  profileState: LiveProfileState;
+  sectionStatus: {
+    title: { tone: "green" | "yellow" | "red"; label: string; detail: string };
+    area: { tone: "green" | "yellow" | "red"; label: string; detail: string };
+    tags: { tone: "green" | "yellow" | "red"; label: string; detail: string };
+  };
+  dirtyStatus: { title: boolean; area: boolean; tags: boolean };
+  unsavedItems: string[];
   onSelectTab: (tab: ActiveTab) => void;
   onChangeChild: (value: string) => void;
   onChangeParent: (value: string) => void;
@@ -44,10 +56,43 @@ type StreamTabProps = {
   onSyncProfile: () => Promise<void>;
   onStartLive: () => Promise<void>;
   onStopLive: () => Promise<void>;
+  onApplyRecentArea: (parent: string, child: string) => void;
   onSubmitArea: (event: React.FormEvent) => Promise<void>;
   onSubmitTags: (event: React.FormEvent) => Promise<void>;
   onSubmitTitle: (event: React.FormEvent) => Promise<void>;
 };
+
+function SectionBadge({
+  label,
+  state,
+}: {
+  label: string;
+  state: { tone: "green" | "yellow" | "red"; label: string; detail: string };
+}) {
+  const toneClass =
+    state.tone === "green"
+      ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
+      : state.tone === "red"
+        ? "border-rose-500/25 bg-rose-500/10 text-rose-300"
+        : "border-amber-500/25 bg-amber-500/10 text-amber-300";
+  const dotClass =
+    state.tone === "green"
+      ? "bg-emerald-400"
+      : state.tone === "red"
+        ? "bg-rose-400"
+        : "bg-amber-400";
+
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
+      <div className="flex items-center gap-2 text-[11px] font-bold">
+        <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+        <span>{label}</span>
+        <span className="opacity-90">{state.label}</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed opacity-90">{state.detail}</p>
+    </div>
+  );
+}
 
 export function StreamTab({
   child,
@@ -61,6 +106,13 @@ export function StreamTab({
   tagInput,
   tags,
   title,
+  recentAreas,
+  hasUnsavedChanges,
+  hasAttentionStatus,
+  profileState,
+  sectionStatus,
+  dirtyStatus,
+  unsavedItems,
   onSelectTab,
   onChangeChild,
   onChangeParent,
@@ -72,6 +124,7 @@ export function StreamTab({
   onSyncProfile,
   onStartLive,
   onStopLive,
+  onApplyRecentArea,
   onSubmitArea,
   onSubmitTags,
   onSubmitTitle,
@@ -150,6 +203,9 @@ export function StreamTab({
     : activeLinkageMode === "command"
       ? "按配置的本地命令执行开播和停播动作。"
       : "当前仅控制 B 站直播间信息，不触发本地设备。";
+  const titleAuditDetail = profileState.title.message && sectionStatus.title.tone !== "green"
+    ? `上次提交：${profileState.title.submitted || "未记录"}`
+    : "";
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
@@ -176,9 +232,21 @@ export function StreamTab({
           <div className="space-y-6">
             {/* Title setting */}
             <form onSubmit={(event) => void onSubmitTitle(event)} className="space-y-2">
-              <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
-                直播间标题
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
+                  直播间标题
+                </label>
+                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
+                  <span className={`h-2 w-2 rounded-full ${
+                    sectionStatus.title.tone === "green"
+                      ? "bg-emerald-400"
+                      : sectionStatus.title.tone === "red"
+                        ? "bg-rose-400"
+                        : "bg-amber-400"
+                  }`} />
+                  <span className="text-gray-200">{sectionStatus.title.label}</span>
+                </div>
+              </div>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -194,15 +262,32 @@ export function StreamTab({
                   更新
                 </button>
               </div>
+              {titleAuditDetail && (
+                <p className="text-[10px] leading-relaxed text-amber-200/90">
+                  {titleAuditDetail} · {profileState.title.message}
+                </p>
+              )}
             </form>
 
             <div className="h-px bg-white/5" />
 
             {/* Partition Area setting */}
             <form onSubmit={(event) => void onSubmitArea(event)} className="space-y-3">
-              <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
-                开播分区设置
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
+                  开播分区设置
+                </label>
+                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
+                  <span className={`h-2 w-2 rounded-full ${
+                    sectionStatus.area.tone === "green"
+                      ? "bg-emerald-400"
+                      : sectionStatus.area.tone === "red"
+                        ? "bg-rose-400"
+                        : "bg-amber-400"
+                  }`} />
+                  <span className="text-gray-200">{sectionStatus.area.label}</span>
+                </div>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col space-y-1">
                   <span className="text-[9px] font-bold text-gray-500">主分区</span>
@@ -239,7 +324,23 @@ export function StreamTab({
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex min-h-11 flex-1 flex-wrap items-center gap-1.5">
+                  {recentAreas.map((area) => {
+                    const key = `${area.parent}/${area.child}`;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onApplyRecentArea(area.parent, area.child)}
+                        className="rounded-lg border border-white/10 bg-white/4 px-2.5 py-1 text-[10px] text-gray-300 transition-all hover:border-bili-blue/30 hover:bg-bili-blue/10 hover:text-bili-blue"
+                        title={`${area.parent} / ${area.child}`}
+                      >
+                        {area.parent} / {area.child}
+                      </button>
+                    );
+                  })}
+                </div>
                 <button
                   type="submit"
                   className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-6 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
@@ -253,9 +354,21 @@ export function StreamTab({
 
             {/* Tags setting */}
             <form onSubmit={(event) => void onSubmitTags(event)} className="space-y-3">
-              <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
-                直播间标签
-              </label>
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
+                  直播间标签
+                </label>
+                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
+                  <span className={`h-2 w-2 rounded-full ${
+                    sectionStatus.tags.tone === "green"
+                      ? "bg-emerald-400"
+                      : sectionStatus.tags.tone === "red"
+                        ? "bg-rose-400"
+                        : "bg-amber-400"
+                  }`} />
+                  <span className="text-gray-200">{sectionStatus.tags.label}</span>
+                </div>
+              </div>
               
               {/* Display Current Tags */}
               <div className="min-h-12 rounded-xl border border-white/5 bg-white/2.5 p-2.5">
@@ -442,6 +555,27 @@ export function StreamTab({
               <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-500">
                 {statusHint}
               </p>
+              {(hasUnsavedChanges || hasAttentionStatus) && (
+                <div className="mt-3 w-full max-w-sm rounded-2xl border border-white/8 bg-white/3 p-3 text-left">
+                  {hasUnsavedChanges ? (
+                    <div className="mb-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300">
+                      <p>检测到未保存信息：{unsavedItems.join("、")}。请先保存后再开播。</p>
+                      <p className="mt-1 text-amber-200/90">
+                        标题：{dirtyStatus.title ? "已修改" : "未修改"} · 分区：{dirtyStatus.area ? "已修改" : "未修改"} · 标签：{dirtyStatus.tags ? "已修改" : "未修改"}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mb-3 text-[10px] leading-relaxed text-gray-400">
+                      当前没有未保存内容，但部分项目仍在等待审核、确认或需要处理。
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    <SectionBadge label="标题" state={sectionStatus.title} />
+                    <SectionBadge label="分区" state={sectionStatus.area} />
+                    <SectionBadge label="标签" state={sectionStatus.tags} />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Linkage status dashboards */}

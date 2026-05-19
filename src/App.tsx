@@ -73,6 +73,14 @@ function App() {
               onSyncProfile={actions.syncLiveRoomProfile}
               onStartLive={actions.startLive}
               onStopLive={actions.stopLive}
+              recentAreas={state.recentAreas}
+              hasUnsavedChanges={state.hasUnsavedChanges}
+              hasAttentionStatus={state.hasAttentionStatus}
+              profileState={state.profileState}
+              sectionStatus={state.sectionStatus}
+              dirtyStatus={state.dirtyStatus}
+              unsavedItems={state.unsavedItems}
+              onApplyRecentArea={actions.applyRecentArea}
               onSubmitArea={actions.submitArea}
               onSubmitTags={actions.submitTags}
               onSubmitTitle={actions.submitTitle}

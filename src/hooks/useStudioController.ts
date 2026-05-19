@@ -5,6 +5,7 @@ import type {
   AppConfig,
   DanmuMsg,
   LinkageStatus,
+  LiveProfileState,
   Session,
   StreamInfo,
   User,
@@ -23,6 +24,108 @@ const splitTagInput = (raw: string) =>
     .filter((tag) => tag.length > 0);
 
 type StartLiveSource = "manual" | "tray" | "face_retry";
+type RecentArea = { parent: string; child: string };
+type StatusTone = "green" | "yellow" | "red";
+type SectionStatus = { tone: StatusTone; label: string; detail: string };
+const RECENT_AREAS_LIMIT = 6;
+
+const normalizeTags = (values: string[]) =>
+  [...new Set(values.map((tag) => tag.trim()).filter(Boolean))];
+
+const tagsToKey = (values: string[]) => normalizeTags(values).join(",");
+
+const recentAreasStorageKey = (uid: string) => `openblive.recent_areas.${uid}`;
+const unsavedLabelMap = {
+  title: "标题",
+  area: "分区",
+  tags: "标签",
+} as const;
+
+const defaultProfileState = (): LiveProfileState => ({
+  title: {
+    submitted: "",
+    effective: "",
+    transport: "idle",
+    review: "none",
+    message: "",
+    updated_at: 0,
+  },
+  area: {
+    submitted_parent: "",
+    submitted_child: "",
+    submitted_area_id: undefined,
+    effective_parent: "",
+    effective_child: "",
+    effective_area_id: undefined,
+    transport: "idle",
+    review: "none",
+    message: "",
+    updated_at: 0,
+  },
+  tags: {
+    submitted: [],
+    effective: [],
+    transport: "idle",
+    review: "none",
+    message: "",
+    updated_at: 0,
+  },
+});
+
+const normalizeProfileState = (
+  state: LiveProfileState | null | undefined,
+): LiveProfileState => {
+  const fallback = defaultProfileState();
+  if (!state) {
+    return fallback;
+  }
+  return {
+    title: {
+      ...fallback.title,
+      ...state.title,
+    },
+    area: {
+      ...fallback.area,
+      ...state.area,
+    },
+    tags: {
+      ...fallback.tags,
+      ...state.tags,
+      submitted: normalizeTags(state.tags?.submitted || []),
+      effective: normalizeTags(state.tags?.effective || []),
+    },
+  };
+};
+
+const buildSectionStatus = (
+  section: "title" | "area" | "tags",
+  isDirty: boolean,
+  profileState: LiveProfileState,
+): SectionStatus => {
+  const state = profileState[section];
+  if (isDirty) {
+    return { tone: "yellow", label: "未保存", detail: "当前修改尚未提交" };
+  }
+  if (state.transport === "failed") {
+    return { tone: "red", label: "提交失败", detail: state.message || "请稍后重试保存" };
+  }
+  if (state.review === "rejected") {
+    return { tone: "red", label: "审核未通过", detail: state.message || "请修改后重新提交" };
+  }
+  if (state.transport === "conflict") {
+    return { tone: "red", label: "远端已回退", detail: state.message || "远端当前值已不同于最近一次提交" };
+  }
+  if (state.transport === "saving") {
+    return { tone: "yellow", label: "保存中", detail: "正在提交到 B 站" };
+  }
+  if (state.review === "pending") {
+    return { tone: "yellow", label: "审核中", detail: state.message || "已提交，等待平台审核" };
+  }
+  if (state.review === "unknown") {
+    return { tone: "yellow", label: "待确认", detail: state.message || "已提交，等待远端状态确认" };
+  }
+  return { tone: "green", label: "已同步", detail: "最近一次提交已生效" };
+};
 
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
@@ -54,6 +157,8 @@ export function useStudioController() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
   const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
+  const [recentAreas, setRecentAreas] = useState<RecentArea[]>([]);
+  const [profileState, setProfileState] = useState<LiveProfileState>(defaultProfileState);
 
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
@@ -63,7 +168,11 @@ export function useStudioController() {
   const loginStatusCodeRef = useRef<number | null>(null);
   const qrcodeRefreshBusyRef = useRef(false);
   const startupCookieRefreshDoneRef = useRef(false);
+  const titleDirtyRef = useRef(false);
   const areaDirtyRef = useRef(false);
+  const tagsDirtyRef = useRef(false);
+  const activeUidRef = useRef<string | null>(null);
+  const currentUserRef = useRef<User | null>(null);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
 
@@ -72,6 +181,121 @@ export function useStudioController() {
   const append = useCallback((line: string) => {
     const ts = new Date().toLocaleTimeString();
     setLogs((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 300));
+  }, []);
+
+  const dirtyStatus = useMemo(
+    () => ({
+      title: title.trim() !== profileState.title.submitted.trim(),
+      area:
+        parent !== profileState.area.submitted_parent ||
+        child !== profileState.area.submitted_child,
+      tags: tagsToKey(tags) !== tagsToKey(profileState.tags.submitted),
+    }),
+    [child, parent, profileState, tags, title],
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    return dirtyStatus.title || dirtyStatus.area || dirtyStatus.tags;
+  }, [dirtyStatus]);
+
+  const unsavedItems = useMemo(() => {
+    const items: Array<(typeof unsavedLabelMap)[keyof typeof unsavedLabelMap]> = [];
+    if (dirtyStatus.title) {
+      items.push(unsavedLabelMap.title);
+    }
+    if (dirtyStatus.area) {
+      items.push(unsavedLabelMap.area);
+    }
+    if (dirtyStatus.tags) {
+      items.push(unsavedLabelMap.tags);
+    }
+    return items;
+  }, [dirtyStatus]);
+
+  const sectionStatus = useMemo(
+    () => ({
+      title: buildSectionStatus("title", dirtyStatus.title, profileState),
+      area: buildSectionStatus("area", dirtyStatus.area, profileState),
+      tags: buildSectionStatus("tags", dirtyStatus.tags, profileState),
+    }),
+    [dirtyStatus, profileState],
+  );
+
+  const hasAttentionStatus = useMemo(
+    () =>
+      sectionStatus.title.tone !== "green" ||
+      sectionStatus.area.tone !== "green" ||
+      sectionStatus.tags.tone !== "green",
+    [sectionStatus],
+  );
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  const loadRecentAreasForUid = useCallback((uid: string | null) => {
+    if (!uid) {
+      setRecentAreas([]);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(recentAreasStorageKey(uid));
+      if (!raw) {
+        setRecentAreas([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setRecentAreas([]);
+        return;
+      }
+      const normalized = parsed
+        .filter(
+          (item): item is RecentArea =>
+            item &&
+            typeof item === "object" &&
+            typeof item.parent === "string" &&
+            typeof item.child === "string" &&
+            item.parent.length > 0 &&
+            item.child.length > 0,
+        )
+        .slice(0, RECENT_AREAS_LIMIT);
+      setRecentAreas(normalized);
+    } catch {
+      setRecentAreas([]);
+    }
+  }, []);
+
+  const pushRecentArea = useCallback((uid: string | null, area: RecentArea) => {
+    if (!uid || !area.parent || !area.child) {
+      return;
+    }
+    const key = recentAreasStorageKey(uid);
+    const current = (() => {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) {
+          return [] as RecentArea[];
+        }
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [] as RecentArea[];
+      }
+    })();
+    const deduped = current.filter(
+      (item) =>
+        !(
+          item &&
+          typeof item.parent === "string" &&
+          typeof item.child === "string" &&
+          item.parent === area.parent &&
+          item.child === area.child
+        ),
+    );
+    const next = [area, ...deduped].slice(0, RECENT_AREAS_LIMIT);
+    window.localStorage.setItem(key, JSON.stringify(next));
+    setRecentAreas(next);
   }, []);
 
   const syncTrayMenu = useCallback(async () => {
@@ -91,6 +315,42 @@ export function useStudioController() {
       setLinkageStatus(res.data);
     }
   }, []);
+
+  const applyProfileState = useCallback((nextState?: LiveProfileState | null) => {
+    const normalized = normalizeProfileState(nextState);
+    setProfileState(normalized);
+  }, []);
+
+  const applyUserDraftValues = useCallback(
+    (
+      user: User,
+      options?: {
+        forceTitle?: boolean;
+        forceArea?: boolean;
+        forceTags?: boolean;
+      },
+    ) => {
+      const forceTitle = options?.forceTitle ?? false;
+      const forceArea = options?.forceArea ?? false;
+      const forceTags = options?.forceTags ?? false;
+
+      if (forceTitle || !titleDirtyRef.current) {
+        setTitle(user.last_title || "");
+      }
+      if (
+        (forceArea || !areaDirtyRef.current) &&
+        user.last_area_name.length >= 2
+      ) {
+        setParent(user.last_area_name[0] || "");
+        setChild(user.last_area_name[1] || "");
+      }
+      if (forceTags || !tagsDirtyRef.current) {
+        setTags([...(user.last_tags || [])]);
+        setTagInput("");
+      }
+    },
+    [],
+  );
 
   const updateAppConfig = useCallback(
     <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
@@ -171,23 +431,38 @@ export function useStudioController() {
 
     if (!user) {
       setCurrentUser(null);
+      applyProfileState(defaultProfileState());
+      activeUidRef.current = null;
+      titleDirtyRef.current = false;
+      areaDirtyRef.current = false;
+      tagsDirtyRef.current = false;
+      setTitle("测试开播");
+      setParent("");
+      setChild("");
+      setTags([]);
+      setTagInput("");
+      loadRecentAreasForUid(null);
       await syncTrayMenu();
       return;
     }
 
+    const isAccountSwitched = activeUidRef.current !== user.uid;
+    activeUidRef.current = user.uid;
     setCurrentUser(user);
-    if (user.last_title) {
-      setTitle(user.last_title);
-    }
-    if (user.last_area_name.length >= 2) {
-      setParent(user.last_area_name[0]);
-      setChild(user.last_area_name[1]);
+    applyProfileState(user.live_profile_state);
+    applyUserDraftValues(user, {
+      forceTitle: isAccountSwitched,
+      forceArea: isAccountSwitched,
+      forceTags: isAccountSwitched,
+    });
+    if (isAccountSwitched) {
+      titleDirtyRef.current = false;
       areaDirtyRef.current = false;
+      tagsDirtyRef.current = false;
     }
-    setTags([...(user.last_tags || [])]);
-    setTagInput("");
+    loadRecentAreasForUid(user.uid);
     await syncTrayMenu();
-  }, [syncTrayMenu]);
+  }, [applyProfileState, applyUserDraftValues, loadRecentAreasForUid, syncTrayMenu]);
 
   const loadAccounts = useCallback(async () => {
     const res = await studioApi.getAccountList();
@@ -211,6 +486,8 @@ export function useStudioController() {
       const res = await studioApi.refreshCurrentUser();
       if (res.code === 0 && res.data) {
         setCurrentUser(res.data);
+        applyProfileState(res.data.live_profile_state);
+        applyUserDraftValues(res.data);
         append("用户信息已刷新");
         await loadAccounts();
         await studioApi.syncLiveRoomProfile().catch(() => undefined);
@@ -219,29 +496,56 @@ export function useStudioController() {
       append(`刷新用户信息失败: ${String(error)}`);
       await loadAccounts();
     }
-  }, [append, loadAccounts]);
+  }, [append, applyProfileState, applyUserDraftValues, loadAccounts]);
 
-  const syncLiveRoomProfile = useCallback(async (forceArea = false) => {
+  const syncLiveRoomProfile = useCallback(async (forceAllDrafts = false) => {
     try {
       const res = await studioApi.syncLiveRoomProfile();
       if (res.code !== 0 || !res.data) {
         return;
       }
 
-      if (res.data.title) {
-        setTitle(res.data.title);
-      }
-      setTags([...(res.data.tags || [])]);
-      setTagInput("");
-      if ((forceArea || !areaDirtyRef.current) && res.data.parent) {
-        setParent(res.data.parent);
-      }
-      if ((forceArea || !areaDirtyRef.current) && res.data.child) {
-        setChild(res.data.child);
-      }
-      if (forceArea && res.data.parent && res.data.child) {
-        areaDirtyRef.current = false;
-      }
+      const nextProfileState = normalizeProfileState(res.data.profile_state);
+      applyProfileState(nextProfileState);
+      const profilePatch = {
+        last_title: res.data.title || nextProfileState.title.submitted,
+        last_area_name: [
+          res.data.parent || nextProfileState.area.submitted_parent,
+          res.data.child || nextProfileState.area.submitted_child,
+        ].filter(Boolean),
+        last_tags: Array.isArray(res.data.tags)
+          ? normalizeTags(res.data.tags)
+          : nextProfileState.tags.submitted,
+        live_profile_state: nextProfileState,
+      } as Pick<User, "last_title" | "last_area_name" | "last_tags" | "live_profile_state">;
+      const draftUser = {
+        ...(currentUserRef.current || {
+          uid: activeUidRef.current || "",
+          uname: "",
+          face: "",
+          level: 0,
+          follower: 0,
+          last_title: "",
+          last_area_name: [],
+          last_tags: [],
+          live_profile_state: nextProfileState,
+        }),
+        ...profilePatch,
+      } as User;
+      applyUserDraftValues(draftUser, {
+        forceTitle: forceAllDrafts,
+        forceArea: forceAllDrafts,
+        forceTags: forceAllDrafts,
+      });
+      setCurrentUser((prev) => {
+        if (!prev) {
+          return draftUser;
+        }
+        return {
+          ...prev,
+          ...profilePatch,
+        };
+      });
 
       append(
         res.data.from_cache
@@ -251,7 +555,7 @@ export function useStudioController() {
     } catch {
       append("直播间配置同步失败，已保留本地缓存");
     }
-  }, [append]);
+  }, [append, applyProfileState, applyUserDraftValues]);
 
   const loadQrcode = useCallback(async () => {
     if (qrcodeRefreshBusyRef.current) {
@@ -301,16 +605,15 @@ export function useStudioController() {
       if (res.code === 0 && res.data) {
         loginStatusCodeRef.current = 0;
         setCurrentUser(res.data);
+        applyProfileState(res.data.live_profile_state);
+        titleDirtyRef.current = false;
         areaDirtyRef.current = false;
-        if (res.data.last_title) {
-          setTitle(res.data.last_title);
-        }
-        if (res.data.last_area_name.length >= 2) {
-          setParent(res.data.last_area_name[0]);
-          setChild(res.data.last_area_name[1]);
-        }
-        setTags([...(res.data.last_tags || [])]);
-        setTagInput("");
+        tagsDirtyRef.current = false;
+        applyUserDraftValues(res.data, {
+          forceTitle: true,
+          forceArea: true,
+          forceTags: true,
+        });
         append(`登录成功：${res.data.uname || "用户"}`);
         await refreshSession();
         await loadAccounts();
@@ -338,7 +641,7 @@ export function useStudioController() {
     } finally {
       loginPollBusyRef.current = false;
     }
-  }, [append, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile]);
+  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
@@ -346,17 +649,16 @@ export function useStudioController() {
         const res = await studioApi.switchAccount(uid);
         if (res.code === 0 && res.data) {
           setCurrentUser(res.data);
+          applyProfileState(res.data.live_profile_state);
           setShowFaceModal(false);
+          titleDirtyRef.current = false;
           areaDirtyRef.current = false;
-          if (res.data.last_title) {
-            setTitle(res.data.last_title);
-          }
-          if (res.data.last_area_name.length >= 2) {
-            setParent(res.data.last_area_name[0]);
-            setChild(res.data.last_area_name[1]);
-          }
-          setTags([...(res.data.last_tags || [])]);
-          setTagInput("");
+          tagsDirtyRef.current = false;
+          applyUserDraftValues(res.data, {
+            forceTitle: true,
+            forceArea: true,
+            forceTags: true,
+          });
           append(`已切换账号：${res.data.uname}`);
           await refreshSession();
           await loadAccounts();
@@ -366,7 +668,7 @@ export function useStudioController() {
         append(`切换账号失败: ${String(error)}`);
       }
     },
-    [append, loadAccounts, refreshSession, syncLiveRoomProfile],
+    [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile],
   );
 
   const logout = useCallback(
@@ -400,45 +702,109 @@ export function useStudioController() {
   const submitArea = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
+      setProfileState((prev) => ({
+        ...prev,
+        area: {
+          ...prev.area,
+          transport: "saving",
+          message: "",
+        },
+      }));
       const res = await studioApi.updateArea(parent, child);
-      if (res.code === 0) {
+      if (res.code === 0 && res.data?.profile_state) {
+        applyProfileState(res.data.profile_state);
+        setCurrentUser((prev) =>
+          prev ? { ...prev, last_area_name: [parent, child], live_profile_state: res.data?.profile_state } : prev,
+        );
         areaDirtyRef.current = false;
+        append(`分区设置成功: ${parent} / ${child}`);
+        return;
       }
-      append(
-        res.code === 0
-          ? `分区设置成功: ${parent} / ${child}`
-          : `分区设置失败: ${res.msg}`,
-      );
-      await refreshSession();
+      setProfileState((prev) => ({
+        ...prev,
+        area: {
+          ...prev.area,
+          transport: "failed",
+          message: res.msg || "分区设置失败",
+        },
+      }));
+      append(`分区设置失败: ${res.msg}`);
     },
-    [append, child, parent, refreshSession],
+    [append, applyProfileState, child, parent],
   );
 
   const submitTitle = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
+      setProfileState((prev) => ({
+        ...prev,
+        title: {
+          ...prev.title,
+          transport: "saving",
+          message: "",
+        },
+      }));
       const res = await studioApi.updateTitle(title);
-      append(res.code === 0 ? "标题更新成功" : `标题更新失败: ${res.msg}`);
+      if (res.code === 0 && res.data?.profile_state) {
+        applyProfileState(res.data.profile_state);
+        setCurrentUser((prev) =>
+          prev ? { ...prev, last_title: title, live_profile_state: res.data?.profile_state } : prev,
+        );
+        append("标题更新成功");
+        return;
+      }
+      setProfileState((prev) => ({
+        ...prev,
+        title: {
+          ...prev.title,
+          transport: "failed",
+          message: res.msg || "标题更新失败",
+        },
+      }));
+      append(`标题更新失败: ${res.msg}`);
     },
-    [append, title],
+    [append, applyProfileState, title],
   );
 
   const submitTags = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
-      const normalized = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+      const normalized = normalizeTags(tags);
+      setProfileState((prev) => ({
+        ...prev,
+        tags: {
+          ...prev.tags,
+          transport: "saving",
+          message: "",
+        },
+      }));
       const res = await studioApi.updateLiveTags(normalized.join(","));
       if (res.code === 0 && res.data) {
-        setTags([...(res.data.tags || [])]);
+        const nextTags = normalizeTags(res.data.tags || []);
+        setTags([...nextTags]);
         setTagInput("");
+        if (res.data.profile_state) {
+          applyProfileState(res.data.profile_state);
+        }
+        setCurrentUser((prev) =>
+          prev ? { ...prev, last_tags: nextTags, live_profile_state: res.data?.profile_state } : prev,
+        );
         append(
           `标签更新成功 (+${res.data.added.length} / -${res.data.removed.length})`,
         );
         return;
       }
+      setProfileState((prev) => ({
+        ...prev,
+        tags: {
+          ...prev.tags,
+          transport: "failed",
+          message: res.msg || "标签更新失败",
+        },
+      }));
       append(`标签更新失败: ${res.msg}`);
     },
-    [append, tags],
+    [append, applyProfileState, tags],
   );
 
   const addTag = useCallback(() => {
@@ -470,9 +836,21 @@ export function useStudioController() {
   }, []);
 
   const startLive = useCallback(async (source: StartLiveSource = "manual") => {
+    if (hasUnsavedChanges) {
+      const warning = `检测到未保存信息：${unsavedItems.join("、")}。请先保存后再开播。`;
+      append(warning);
+      setActiveTab("stream");
+      if (source === "tray") {
+        await studioApi.revealMainWindow().catch(() => undefined);
+      }
+      window.alert(warning);
+      return;
+    }
+
     const res = await studioApi.startLive();
     if (res.code === 0) {
       setRtmp(res.data || null);
+      pushRecentArea(currentUser?.uid || null, { parent, child });
       append("开播成功，已返回推流信息");
       await refreshSession();
       await loadLinkageStatus();
@@ -503,7 +881,22 @@ export function useStudioController() {
 
     append(`开播失败: ${res.msg}`);
     await loadLinkageStatus();
-  }, [append, loadLinkageStatus, refreshSession, resolveFaceQrImage]);
+  }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, parent, pushRecentArea, refreshSession, resolveFaceQrImage, unsavedItems]);
+
+  const applyRecentArea = useCallback((nextParent: string, nextChild: string) => {
+    if (!nextParent || !nextChild) {
+      return;
+    }
+    const availableChildren = partitions[nextParent] || [];
+    if (!availableChildren.includes(nextChild)) {
+      append(`快速分区已失效: ${nextParent} / ${nextChild}`);
+      return;
+    }
+    areaDirtyRef.current = true;
+    setParent(nextParent);
+    setChild(nextChild);
+    append(`已应用快速分区: ${nextParent} / ${nextChild}`);
+  }, [append, partitions]);
 
   const stopLive = useCallback(async () => {
     const res = await studioApi.stopLive();
@@ -584,6 +977,15 @@ export function useStudioController() {
     areaDirtyRef.current = true;
     setChild(newChild);
   }, []);
+
+  useEffect(() => {
+    titleDirtyRef.current = title.trim() !== profileState.title.submitted.trim();
+    areaDirtyRef.current =
+      parent !== profileState.area.submitted_parent ||
+      child !== profileState.area.submitted_child;
+    tagsDirtyRef.current =
+      tagsToKey(tags) !== tagsToKey(profileState.tags.submitted);
+  }, [child, parent, profileState, tags, title]);
 
   useEffect(() => {
     danmuEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -734,6 +1136,13 @@ export function useStudioController() {
       faceQrContent,
       logs,
       linkageStatus,
+      recentAreas,
+      hasUnsavedChanges,
+      hasAttentionStatus,
+      profileState,
+      sectionStatus,
+      dirtyStatus,
+      unsavedItems,
       parent,
       partitions,
       qrcode,
@@ -774,6 +1183,7 @@ export function useStudioController() {
       removeTag,
       startDanmu,
       startLive,
+      applyRecentArea,
       stopDanmu,
       stopLive,
       submitArea,

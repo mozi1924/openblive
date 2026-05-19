@@ -7,6 +7,10 @@ export type Resp<T> = {
 
 export type ActiveTab = "account" | "stream" | "danmu" | "settings";
 
+export type TransportStatus = "idle" | "saving" | "synced" | "conflict" | "failed";
+
+export type ReviewStatus = "none" | "pending" | "approved" | "rejected" | "unknown";
+
 export type AppConfig = {
   min_to_tray: boolean;
   live_control_mode: "none" | "obs_ws" | "command";
@@ -44,7 +48,45 @@ export type User = {
   last_title: string;
   last_area_name: string[];
   last_tags?: string[];
+  live_profile_state?: LiveProfileState;
   login_invalid?: boolean;
+};
+
+export type TitleProfileState = {
+  submitted: string;
+  effective: string;
+  transport: TransportStatus;
+  review: ReviewStatus;
+  message: string;
+  updated_at: number;
+};
+
+export type AreaProfileState = {
+  submitted_parent: string;
+  submitted_child: string;
+  submitted_area_id?: number;
+  effective_parent: string;
+  effective_child: string;
+  effective_area_id?: number;
+  transport: TransportStatus;
+  review: ReviewStatus;
+  message: string;
+  updated_at: number;
+};
+
+export type TagsProfileState = {
+  submitted: string[];
+  effective: string[];
+  transport: TransportStatus;
+  review: ReviewStatus;
+  message: string;
+  updated_at: number;
+};
+
+export type LiveProfileState = {
+  title: TitleProfileState;
+  area: AreaProfileState;
+  tags: TagsProfileState;
 };
 
 export type StreamInfo = {
@@ -83,7 +125,24 @@ export type LiveRoomProfile = {
   child: string;
   area_id?: number;
   tags: string[];
+  profile_state?: LiveProfileState;
   from_cache: boolean;
+};
+
+export type UpdateAreaResp = {
+  area_id: number;
+  profile_state?: LiveProfileState;
+};
+
+export type UpdateTitleResp = {
+  profile_state?: LiveProfileState;
+};
+
+export type UpdateTagsResp = {
+  tags: string[];
+  added: string[];
+  removed: string[];
+  profile_state?: LiveProfileState;
 };
 
 export type DanmuMsg = {

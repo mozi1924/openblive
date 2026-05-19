@@ -13,6 +13,14 @@ fn default_live_client_synced_at() -> i64 {
     0
 }
 
+fn default_transport_status() -> String {
+    "idle".to_string()
+}
+
+fn default_review_status() -> String {
+    "none".to_string()
+}
+
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct SessionState {
     pub uid: u64,
@@ -28,6 +36,72 @@ pub struct SessionState {
     pub current_area_names: Vec<String>,
     #[serde(default)]
     pub current_tags: Vec<String>,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TitleProfileState {
+    #[serde(default)]
+    pub submitted: String,
+    #[serde(default)]
+    pub effective: String,
+    #[serde(default = "default_transport_status")]
+    pub transport: String,
+    #[serde(default = "default_review_status")]
+    pub review: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub updated_at: i64,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AreaProfileState {
+    #[serde(default)]
+    pub submitted_parent: String,
+    #[serde(default)]
+    pub submitted_child: String,
+    #[serde(default)]
+    pub submitted_area_id: Option<u64>,
+    #[serde(default)]
+    pub effective_parent: String,
+    #[serde(default)]
+    pub effective_child: String,
+    #[serde(default)]
+    pub effective_area_id: Option<u64>,
+    #[serde(default = "default_transport_status")]
+    pub transport: String,
+    #[serde(default = "default_review_status")]
+    pub review: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub updated_at: i64,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TagsProfileState {
+    #[serde(default)]
+    pub submitted: Vec<String>,
+    #[serde(default)]
+    pub effective: Vec<String>,
+    #[serde(default = "default_transport_status")]
+    pub transport: String,
+    #[serde(default = "default_review_status")]
+    pub review: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub updated_at: i64,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LiveProfileState {
+    #[serde(default)]
+    pub title: TitleProfileState,
+    #[serde(default)]
+    pub area: AreaProfileState,
+    #[serde(default)]
+    pub tags: TagsProfileState,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -62,11 +136,87 @@ pub struct UserRecord {
     #[serde(default)]
     pub last_tags: Vec<String>,
     #[serde(default)]
+    pub live_profile_state: LiveProfileState,
+    #[serde(default)]
     pub login_invalid: bool,
     #[serde(default)]
     pub auth_fail_count: u32,
     #[serde(default)]
     pub last_auth_fail_at: i64,
+}
+
+pub fn sync_live_profile_state_defaults(user: &mut UserRecord) {
+    if user.live_profile_state.title.submitted.is_empty() {
+        user.live_profile_state.title.submitted = user.last_title.clone();
+    }
+    if user.live_profile_state.title.effective.is_empty() {
+        user.live_profile_state.title.effective = user.last_title.clone();
+    }
+    if user.live_profile_state.title.transport.trim().is_empty() {
+        user.live_profile_state.title.transport = default_transport_status();
+    }
+    if user.live_profile_state.title.review.trim().is_empty() {
+        user.live_profile_state.title.review = default_review_status();
+    }
+    if user.live_profile_state.title.review == "none"
+        && user.live_profile_state.title.transport == "synced"
+        && user.live_profile_state.title.submitted == user.live_profile_state.title.effective
+    {
+        user.live_profile_state.title.message.clear();
+    }
+
+    if user.live_profile_state.area.submitted_parent.is_empty() {
+        user.live_profile_state.area.submitted_parent = user
+            .last_area_name
+            .first()
+            .cloned()
+            .unwrap_or_default();
+    }
+    if user.live_profile_state.area.submitted_child.is_empty() {
+        user.live_profile_state.area.submitted_child = user
+            .last_area_name
+            .get(1)
+            .cloned()
+            .unwrap_or_default();
+    }
+    if user.live_profile_state.area.submitted_area_id.is_none() {
+        user.live_profile_state.area.submitted_area_id = user
+            .last_area_id
+            .parse::<u64>()
+            .ok()
+            .filter(|value| *value > 0);
+    }
+    if user.live_profile_state.area.effective_parent.is_empty() {
+        user.live_profile_state.area.effective_parent =
+            user.live_profile_state.area.submitted_parent.clone();
+    }
+    if user.live_profile_state.area.effective_child.is_empty() {
+        user.live_profile_state.area.effective_child =
+            user.live_profile_state.area.submitted_child.clone();
+    }
+    if user.live_profile_state.area.effective_area_id.is_none() {
+        user.live_profile_state.area.effective_area_id =
+            user.live_profile_state.area.submitted_area_id;
+    }
+    if user.live_profile_state.area.transport.trim().is_empty() {
+        user.live_profile_state.area.transport = default_transport_status();
+    }
+    if user.live_profile_state.area.review.trim().is_empty() {
+        user.live_profile_state.area.review = default_review_status();
+    }
+
+    if user.live_profile_state.tags.submitted.is_empty() && !user.last_tags.is_empty() {
+        user.live_profile_state.tags.submitted = user.last_tags.clone();
+    }
+    if user.live_profile_state.tags.effective.is_empty() && !user.last_tags.is_empty() {
+        user.live_profile_state.tags.effective = user.last_tags.clone();
+    }
+    if user.live_profile_state.tags.transport.trim().is_empty() {
+        user.live_profile_state.tags.transport = default_transport_status();
+    }
+    if user.live_profile_state.tags.review.trim().is_empty() {
+        user.live_profile_state.tags.review = default_review_status();
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
