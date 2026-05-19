@@ -8,9 +8,12 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import type { ActiveTab, User } from "../../types/studio";
+import type { LocaleSetting } from "../../utils/i18n";
+import { t } from "../../utils/i18n";
 
 type SidebarProps = {
   activeTab: ActiveTab;
+  locale: LocaleSetting;
   danmuListening: boolean;
   roomId?: string;
   sessionLive: boolean;
@@ -23,17 +26,18 @@ type SidebarProps = {
 
 const tabs: Array<{
   key: ActiveTab;
-  label: string;
+  labelKey: string;
   icon: typeof UserIcon;
 }> = [
-  { key: "account", label: "账户管理", icon: UserIcon },
-  { key: "stream", label: "直播控制", icon: Compass },
-  { key: "danmu", label: "直播互动", icon: MessageSquare },
-  { key: "settings", label: "系统设置", icon: Settings },
+  { key: "account", labelKey: "ui.sidebar.tab.account", icon: UserIcon },
+  { key: "stream", labelKey: "ui.sidebar.tab.stream", icon: Compass },
+  { key: "danmu", labelKey: "ui.sidebar.tab.danmu", icon: MessageSquare },
+  { key: "settings", labelKey: "ui.sidebar.tab.settings", icon: Settings },
 ];
 
 export function Sidebar({
   activeTab,
+  locale,
   danmuListening,
   roomId,
   sessionLive,
@@ -66,7 +70,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1.5 px-4 py-6">
-        {tabs.map(({ icon: Icon, key, label }) => (
+        {tabs.map(({ icon: Icon, key, labelKey }) => (
           <button
             key={key}
             onClick={() => onSelectTab(key)}
@@ -83,7 +87,7 @@ export function Sidebar({
                   : "text-gray-500 group-hover:text-gray-300"
               }`}
             />
-            <span className="text-xs">{label}</span>
+            <span className="text-xs">{t(locale, labelKey)}</span>
             {key === "danmu" && danmuListening && (
               <span className="ml-auto flex h-2 w-2">
                 <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -131,7 +135,7 @@ export function Sidebar({
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
-                {sessionLive ? "直播中" : "未开播"}
+                {sessionLive ? t(locale, "ui.sidebar.live.on") : t(locale, "ui.sidebar.live.off")}
               </span>
               {roomId && (
                 <a
@@ -146,7 +150,7 @@ export function Sidebar({
               )}
             </div>
             <p className="mt-0.5 truncate text-[10px] text-gray-500 font-mono">
-              {roomId ? `Room: ${roomId}` : "未连接直播间"}
+              {roomId ? `Room: ${roomId}` : t(locale, "ui.sidebar.room.disconnected")}
             </p>
           </div>
         </div>
@@ -156,7 +160,7 @@ export function Sidebar({
           className="no-drag mt-3 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs text-gray-300 transition-all duration-200 hover:border-white/20 hover:bg-white/10"
         >
           <Terminal className="mr-2 h-3.5 w-3.5 text-gray-400" />
-          运行日志 {showLogs ? "折叠" : "展开"}
+          {showLogs ? t(locale, "ui.sidebar.logs.toggle.hide") : t(locale, "ui.sidebar.logs.toggle.show")}
         </button>
       </div>
     </aside>

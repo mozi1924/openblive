@@ -11,7 +11,7 @@ import type {
   User,
 } from "../types/studio";
 import { createSelfDanmuMessage, parseDanmuEvent } from "../utils/danmu";
-import { resolveBackendMessage } from "../utils/i18n";
+import { resolveBackendMessage, t, type LocaleSetting } from "../utils/i18n";
 import { resolveQrPayload } from "../utils/qrcode";
 import { useWindowDrag } from "./useWindowDrag";
 import {
@@ -61,6 +61,7 @@ export function useStudioController() {
   const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
   const [recentAreas, setRecentAreas] = useState<RecentArea[]>([]);
   const [profileState, setProfileState] = useState<LiveProfileState>(defaultProfileState);
+  const localeSetting = (appConfig?.locale || "auto") as LocaleSetting;
 
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
@@ -235,12 +236,17 @@ export function useStudioController() {
       for (const key of writableKeys) {
         await studioApi.setAppConfig(key, appConfig[key]);
       }
-      append("设置已保存");
+      append(t(localeSetting, "ui.settings.save.done"));
       await loadAppConfig();
       await loadLinkageStatus();
       await syncTrayMenu();
     } catch (error) {
-      append(`保存设置失败: ${resolveBackendMessage(String(error))}`);
+      append(
+        `${t(localeSetting, "ui.settings.save.failed")}: ${resolveBackendMessage(
+          String(error),
+          localeSetting,
+        )}`,
+      );
     } finally {
       setSavingConfig(false);
     }
@@ -909,7 +915,9 @@ export function useStudioController() {
           handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
             append(
-              `启动时 Cookie 刷新部分失败：${res.data.failed.map(resolveBackendMessage).join(" | ")}`,
+              `启动时 Cookie 刷新部分失败：${res.data.failed
+                .map((msg) => resolveBackendMessage(msg, localeSetting))
+                .join(" | ")}`,
             );
           }
           if (res.data.updated > 0) {
@@ -933,7 +941,9 @@ export function useStudioController() {
           handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
             append(
-              `Cookie 自动刷新部分失败：${res.data.failed.map(resolveBackendMessage).join(" | ")}`,
+              `Cookie 自动刷新部分失败：${res.data.failed
+                .map((msg) => resolveBackendMessage(msg, localeSetting))
+                .join(" | ")}`,
             );
           }
           if (res.data.updated > 0) {

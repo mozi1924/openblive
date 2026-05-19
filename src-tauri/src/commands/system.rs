@@ -1,5 +1,5 @@
 use crate::constants::CmdResult;
-use crate::i18n::normalize_locale;
+use crate::i18n::normalize_locale_setting;
 use crate::models::AppConfigReq;
 use crate::response::wrap_ok;
 use crate::{config::save_config, state::AppState};
@@ -154,7 +154,8 @@ pub async fn set_app_config(app: AppHandle, req: AppConfigReq, state: State<'_, 
             runtime.config.on_live_stop_command = req.value.as_str().unwrap_or("").to_string();
         }
         "locale" => {
-            runtime.config.locale = normalize_locale(req.value.as_str().unwrap_or("zh-CN")).to_string();
+            runtime.config.locale =
+                normalize_locale_setting(req.value.as_str().unwrap_or("auto")).to_string();
         }
         _ => return Err("i18n.system.error.unknown_config_key".into()),
     }

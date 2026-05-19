@@ -1,16 +1,40 @@
 use crate::models::PersistConfig;
 
-pub fn normalize_locale(input: &str) -> &'static str {
+pub fn normalize_locale_setting(input: &str) -> &'static str {
     let value = input.trim().to_ascii_lowercase();
-    if value.starts_with("en") {
+    if value.is_empty() || value == "auto" {
+        "auto"
+    } else if value.starts_with("en") {
         "en-US"
     } else {
         "zh-CN"
     }
 }
 
-pub fn tr(locale: &str, key: &str) -> String {
-    let lc = normalize_locale(locale);
+fn detect_system_locale() -> &'static str {
+    let env_locale = std::env::var("LC_ALL")
+        .ok()
+        .or_else(|| std::env::var("LANG").ok())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if env_locale.starts_with("en") || env_locale.contains("en_") {
+        "en-US"
+    } else {
+        "zh-CN"
+    }
+}
+
+pub fn resolve_locale(locale_setting: &str) -> &'static str {
+    let normalized = normalize_locale_setting(locale_setting);
+    if normalized == "auto" {
+        detect_system_locale()
+    } else {
+        normalized
+    }
+}
+
+pub fn tr(locale_setting: &str, key: &str) -> String {
+    let lc = resolve_locale(locale_setting);
     match (lc, key) {
         ("en-US", "tray.account.loading") => "Account: Loading".to_string(),
         ("en-US", "tray.account.logged_out") => "Account: Not logged in".to_string(),
@@ -41,4 +65,9 @@ pub fn tr(locale: &str, key: &str) -> String {
 
 pub fn tr_config(config: &PersistConfig, key: &str) -> String {
     tr(&config.locale, key)
+}
+
+#[allow(dead_code)]
+pub fn effective_locale(config: &PersistConfig) -> &'static str {
+    resolve_locale(&config.locale)
 }

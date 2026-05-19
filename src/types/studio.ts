@@ -21,7 +21,7 @@ export type AppConfig = {
   obs_ws_auto_stop_on_live_end: boolean;
   on_live_start_command: string;
   on_live_stop_command: string;
-  locale: "zh-CN" | "en-US";
+  locale: "auto" | "zh-CN" | "en-US";
   is_win32: boolean;
   has_tray: boolean;
 };

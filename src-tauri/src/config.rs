@@ -117,7 +117,7 @@ fn default_live_control_mode() -> String {
 }
 
 fn default_locale() -> String {
-    "zh-CN".to_string()
+    "auto".to_string()
 }
 
 fn default_live_client_version() -> String {
@@ -250,7 +250,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
         cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
         cfg.on_live_start_command = app_file.on_live_start_command;
         cfg.on_live_stop_command = app_file.on_live_stop_command;
-        cfg.locale = crate::i18n::normalize_locale(&app_file.locale).to_string();
+        cfg.locale = crate::i18n::normalize_locale_setting(&app_file.locale).to_string();
 
         if cfg.live_control_mode.trim().is_empty() || cfg.live_control_mode == "none" {
             if cfg.obs_ws_enabled {

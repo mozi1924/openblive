@@ -281,7 +281,7 @@ fn default_obs_ws_url() -> String {
 }
 
 fn default_locale() -> String {
-    "zh-CN".to_string()
+    "auto".to_string()
 }
 
 #[derive(Deserialize)]

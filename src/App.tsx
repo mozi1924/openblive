@@ -8,15 +8,18 @@ import { DanmuTab } from "./features/danmu/DanmuTab";
 import { SettingsTab } from "./features/settings/SettingsTab";
 import { StreamTab } from "./features/stream/StreamTab";
 import { useStudioController } from "./hooks/useStudioController";
+import type { LocaleSetting } from "./utils/i18n";
 
 function App() {
   const controller = useStudioController();
   const { actions, refs, state } = controller;
+  const locale = (state.appConfig?.locale || "auto") as LocaleSetting;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#080b10] text-[#eaeef6] select-none">
       <Sidebar
         activeTab={state.activeTab}
+        locale={locale}
         danmuListening={state.danmuListening}
         roomId={state.session?.room_id}
         sessionLive={state.session?.is_live ?? false}
@@ -30,6 +33,7 @@ function App() {
       <main className="relative flex flex-1 flex-col overflow-hidden">
         <HeaderBar
           activeTab={state.activeTab}
+          locale={locale}
           headerDragRef={refs.headerDragRef}
           onRefreshAccounts={actions.loadAccounts}
           onRefreshPartitions={actions.loadPartitions}
@@ -104,6 +108,7 @@ function App() {
           {state.activeTab === "settings" && (
             <SettingsTab
               appConfig={state.appConfig}
+              locale={locale}
               savingConfig={state.savingConfig}
               onChangeConfig={actions.updateAppConfig}
               onSaveConfig={actions.saveAppConfig}

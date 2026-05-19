@@ -1,8 +1,11 @@
 import { Cpu, Terminal, Minimize2, LogOut, Save, Sliders, Server, EyeOff } from "lucide-react";
 import type { AppConfig } from "../../types/studio";
+import type { LocaleSetting } from "../../utils/i18n";
+import { t } from "../../utils/i18n";
 
 type SettingsTabProps = {
   appConfig: AppConfig | null;
+  locale: LocaleSetting;
   savingConfig: boolean;
   onChangeConfig: <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => void;
   onSaveConfig: () => Promise<void>;
@@ -10,6 +13,7 @@ type SettingsTabProps = {
 
 export function SettingsTab({
   appConfig,
+  locale,
   savingConfig,
   onChangeConfig,
   onSaveConfig,
@@ -17,7 +21,7 @@ export function SettingsTab({
   if (!appConfig) {
     return (
       <div className="flex items-center justify-center py-20 text-xs text-gray-500">
-        正在拉取全局配置信息...
+        {t(locale, "ui.settings.loading")}
       </div>
     );
   }
@@ -33,19 +37,20 @@ export function SettingsTab({
       
       {/* Window Behavior */}
       <section className="glass-panel space-y-4 rounded-3xl p-6">
-        <div className="text-xs text-gray-500">界面语言 / UI Language</div>
+        <div className="text-xs text-gray-500">{t(locale, "ui.settings.locale.label")}</div>
         <select
           className={inputClass}
           value={appConfig.locale}
           onChange={(event) =>
             onChangeConfig(
               "locale",
-              (event.target.value as AppConfig["locale"]) || "zh-CN",
+              (event.target.value as AppConfig["locale"]) || "auto",
             )
           }
         >
-          <option value="zh-CN">简体中文</option>
-          <option value="en-US">English</option>
+          <option value="auto">{t(locale, "ui.settings.locale.auto")}</option>
+          <option value="zh-CN">{t(locale, "ui.settings.locale.zh")}</option>
+          <option value="en-US">{t(locale, "ui.settings.locale.en")}</option>
         </select>
       </section>
 

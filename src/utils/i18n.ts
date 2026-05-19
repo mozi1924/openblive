@@ -1,4 +1,7 @@
-const zhCN: Record<string, string> = {
+export type LocaleSetting = "auto" | "zh-CN" | "en-US";
+export type EffectiveLocale = "zh-CN" | "en-US";
+
+const backendZhCN: Record<string, string> = {
   "i18n.common.not_logged_in": "未登录",
   "i18n.common.login_expired_relogin": "登录已失效，请重新扫码登录",
   "i18n.live.face_auth_required": "需要人脸验证",
@@ -38,7 +41,8 @@ const zhCN: Record<string, string> = {
   "i18n.system.error.unknown_config_key": "未知设置项",
   "i18n.account.error.load_refresh_pubkey_failed": "加载刷新公钥失败",
   "i18n.account.error.build_correspond_path_failed": "生成 correspondPath 失败",
-  "i18n.account.error.cookie_refresh_token_missing": "Cookie 需要刷新，但缺少 refresh_token，请重新扫码登录",
+  "i18n.account.error.cookie_refresh_token_missing":
+    "Cookie 需要刷新，但缺少 refresh_token，请重新扫码登录",
   "i18n.account.error.cookie_csrf_missing": "Cookie 需要刷新，但缺少 csrf",
   "i18n.account.error.fetch_refresh_csrf_http_failed": "获取 refresh_csrf 失败",
   "i18n.account.error.refresh_csrf_token_missing": "获取 refresh_csrf 失败: 页面缺少 token",
@@ -57,9 +61,93 @@ const zhCN: Record<string, string> = {
   "i18n.account.user.unknown_name": "未知用户",
 };
 
+const backendEnUS: Record<string, string> = {
+  "i18n.common.not_logged_in": "Not logged in",
+  "i18n.common.login_expired_relogin": "Session expired, please log in again",
+  "i18n.live.face_auth_required": "Face verification required",
+  "i18n.live.danmu_send_success": "Sent",
+  "i18n.live.danmu_monitor_already_running": "Danmu monitor is already running",
+  "i18n.live.danmu_monitor_started": "Danmu monitor started",
+  "i18n.live.danmu_monitor_stopped": "Danmu monitor stopped",
+  "i18n.live.error.start_live_failed": "Failed to start live",
+  "i18n.live.error.stop_live_failed": "Failed to stop live",
+  "i18n.live.error.send_danmu_failed": "Failed to send",
+  "i18n.system.obs_ws_not_enabled": "OBS linkage is not enabled",
+  "i18n.system.error.unknown_config_key": "Unknown config key",
+  "i18n.account.error.account_not_found": "Account not found",
+  "i18n.account.error.account_login_invalid": "Account session is invalid, please log in again",
+  "i18n.account.user.unknown_name": "Unknown user",
+};
+
+const uiZhCN: Record<string, string> = {
+  "ui.sidebar.tab.account": "账户管理",
+  "ui.sidebar.tab.stream": "直播控制",
+  "ui.sidebar.tab.danmu": "直播互动",
+  "ui.sidebar.tab.settings": "系统设置",
+  "ui.sidebar.live.on": "直播中",
+  "ui.sidebar.live.off": "未开播",
+  "ui.sidebar.room.disconnected": "未连接直播间",
+  "ui.sidebar.logs.toggle.show": "运行日志 展开",
+  "ui.sidebar.logs.toggle.hide": "运行日志 折叠",
+  "ui.header.btn.sync_partitions": "同步分区",
+  "ui.header.btn.refresh_accounts": "刷新列表",
+  "ui.settings.loading": "正在拉取全局配置信息...",
+  "ui.settings.locale.label": "界面语言 / UI Language",
+  "ui.settings.locale.auto": "跟随系统 (Auto)",
+  "ui.settings.locale.zh": "简体中文",
+  "ui.settings.locale.en": "English",
+  "ui.settings.save.done": "设置已保存",
+  "ui.settings.save.failed": "保存设置失败",
+};
+
+const uiEnUS: Record<string, string> = {
+  "ui.sidebar.tab.account": "Accounts",
+  "ui.sidebar.tab.stream": "Stream Control",
+  "ui.sidebar.tab.danmu": "Danmu",
+  "ui.sidebar.tab.settings": "Settings",
+  "ui.sidebar.live.on": "Live",
+  "ui.sidebar.live.off": "Offline",
+  "ui.sidebar.room.disconnected": "Room not connected",
+  "ui.sidebar.logs.toggle.show": "Logs Expand",
+  "ui.sidebar.logs.toggle.hide": "Logs Collapse",
+  "ui.header.btn.sync_partitions": "Sync Areas",
+  "ui.header.btn.refresh_accounts": "Refresh List",
+  "ui.settings.loading": "Loading app config...",
+  "ui.settings.locale.label": "Language",
+  "ui.settings.locale.auto": "Auto",
+  "ui.settings.locale.zh": "Chinese",
+  "ui.settings.locale.en": "English",
+  "ui.settings.save.done": "Settings saved",
+  "ui.settings.save.failed": "Failed to save settings",
+};
+
 const I18N_KEY_RE = /(i18n\.[a-z0-9_.-]+)/i;
 
-export const resolveBackendMessage = (raw: string): string => {
+export function resolveLocale(locale: LocaleSetting): EffectiveLocale {
+  if (locale === "zh-CN" || locale === "en-US") {
+    return locale;
+  }
+  const nav = (globalThis.navigator?.language || "").toLowerCase();
+  return nav.startsWith("en") ? "en-US" : "zh-CN";
+}
+
+function uiDict(locale: EffectiveLocale): Record<string, string> {
+  return locale === "en-US" ? uiEnUS : uiZhCN;
+}
+
+function backendDict(locale: EffectiveLocale): Record<string, string> {
+  return locale === "en-US" ? { ...backendZhCN, ...backendEnUS } : backendZhCN;
+}
+
+export function t(localeSetting: LocaleSetting, key: string): string {
+  const locale = resolveLocale(localeSetting);
+  return uiDict(locale)[key] || key;
+}
+
+export const resolveBackendMessage = (
+  raw: string,
+  localeSetting: LocaleSetting = "auto",
+): string => {
   const text = String(raw || "");
   const match = text.match(I18N_KEY_RE);
   if (!match) {
@@ -67,7 +155,7 @@ export const resolveBackendMessage = (raw: string): string => {
   }
 
   const key = match[1];
-  const translated = zhCN[key] || key;
+  const translated = backendDict(resolveLocale(localeSetting))[key] || key;
   const suffix = text.slice(match.index! + key.length);
   return `${translated}${suffix}`;
 };

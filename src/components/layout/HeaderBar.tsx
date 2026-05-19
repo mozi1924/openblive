@@ -1,8 +1,11 @@
 import { RefreshCw, Users } from "lucide-react";
 import type { ActiveTab } from "../../types/studio";
+import type { LocaleSetting } from "../../utils/i18n";
+import { resolveLocale, t } from "../../utils/i18n";
 
 type HeaderBarProps = {
   activeTab: ActiveTab;
+  locale: LocaleSetting;
   headerDragRef: React.RefObject<HTMLElement | null>;
   onRefreshAccounts: () => Promise<void>;
   onRefreshPartitions: () => Promise<void>;
@@ -29,11 +32,31 @@ const headerMeta: Record<ActiveTab, { title: string; description: string }> = {
 
 export function HeaderBar({
   activeTab,
+  locale,
   headerDragRef,
   onRefreshAccounts,
   onRefreshPartitions,
 }: HeaderBarProps) {
   const meta = headerMeta[activeTab];
+  const effectiveLocale = resolveLocale(locale);
+  const description =
+    effectiveLocale === "en-US"
+      ? {
+          account: "QR login, quickly switch and manage Bilibili accounts.",
+          stream: "Edit room title/area, start-stop live, and fetch stream endpoint.",
+          danmu: "Real-time danmu, gifts, and guard interactions with quick send.",
+          settings: "Unified config for tray behavior, OBS linkage, and commands.",
+        }[activeTab]
+      : meta.description;
+  const title =
+    effectiveLocale === "en-US"
+      ? {
+          account: "Account Center",
+          stream: "Stream Control",
+          danmu: "Danmu Console",
+          settings: "System Settings",
+        }[activeTab]
+      : meta.title;
 
   return (
     <header
@@ -42,8 +65,8 @@ export function HeaderBar({
       className="drag-region flex h-14 shrink-0 items-center justify-between border-b border-[#131b2b] bg-[#0a0e17] px-8"
     >
       <div data-tauri-drag-region="deep">
-        <h2 className="text-sm font-bold leading-none text-white">{meta.title}</h2>
-        <p className="mt-1 text-[11px] text-gray-500">{meta.description}</p>
+        <h2 className="text-sm font-bold leading-none text-white">{title}</h2>
+        <p className="mt-1 text-[11px] text-gray-500">{description}</p>
       </div>
 
       <div
@@ -55,14 +78,14 @@ export function HeaderBar({
           className="flex items-center rounded-lg border border-white/5 bg-white/5 px-3 py-1.5 text-xs text-gray-300 transition-all duration-200 active:scale-95 hover:border-white/10 hover:bg-white/10"
         >
           <RefreshCw className="mr-1.5 h-3 w-3" />
-          同步分区
+          {t(locale, "ui.header.btn.sync_partitions")}
         </button>
         <button
           onClick={() => void onRefreshAccounts()}
           className="flex items-center rounded-lg border border-white/5 bg-white/5 px-3 py-1.5 text-xs text-gray-300 transition-all duration-200 active:scale-95 hover:border-white/10 hover:bg-white/10"
         >
           <Users className="mr-1.5 h-3 w-3" />
-          刷新列表
+          {t(locale, "ui.header.btn.refresh_accounts")}
         </button>
       </div>
     </header>
