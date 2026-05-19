@@ -9,7 +9,7 @@ type AccountTabProps = {
   currentUser: User | null;
   qrcode: string;
   onLoadQrcode: () => Promise<void>;
-  onLogout: (uid: string) => Promise<void>;
+  onRequestLogout: (user: User, current: boolean) => Promise<void>;
   onPollLogin: () => Promise<void>;
   onRefreshCurrentUser: () => Promise<void>;
   onSwitchAccount: (uid: string) => Promise<void>;
@@ -21,7 +21,7 @@ export function AccountTab({
   currentUser,
   qrcode,
   onLoadQrcode,
-  onLogout,
+  onRequestLogout,
   onPollLogin,
   onRefreshCurrentUser,
   onSwitchAccount,
@@ -113,7 +113,7 @@ export function AccountTab({
 
               <div className="flex justify-end pt-2">
                 <button
-                  onClick={() => void onLogout(currentUser.uid)}
+                  onClick={() => void onRequestLogout(currentUser, true)}
                   className="flex items-center rounded-xl border border-rose-500/20 bg-rose-500/10 px-4.5 py-2.5 text-xs font-semibold text-rose-400 transition-all duration-150 active:scale-95 hover:bg-rose-500/20 hover:text-rose-300"
                 >
                   <LogOut className="mr-1.5 h-3.5 w-3.5" />
@@ -198,7 +198,7 @@ export function AccountTab({
                         {user.login_invalid ? t(locale, "ui.account.switch.invalid") : t(locale, "ui.account.switch")}
                       </button>
                       <button
-                        onClick={() => void onLogout(user.uid)}
+                        onClick={() => void onRequestLogout(user, false)}
                         className="rounded-xl border border-transparent p-2 text-gray-500 transition-all duration-150 hover:border-rose-500/15 hover:bg-rose-500/10 hover:text-rose-400"
                         title={t(locale, "ui.account.delete")}
                       >

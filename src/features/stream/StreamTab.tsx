@@ -214,6 +214,13 @@ export function StreamTab({
   const titleAuditDetail = profileState.title.message && sectionStatus.title.tone !== "green"
     ? tf(locale, "ui.stream.last_submit", { value: profileState.title.submitted || t(locale, "ui.stream.last_submit.none") })
     : "";
+  const handleLiveToggle = async () => {
+    if (isLive) {
+      await onStopLive();
+      return;
+    }
+    await onStartLive();
+  };
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
@@ -683,32 +690,22 @@ export function StreamTab({
             </div>
           </div>
 
-          {/* Action buttons */}
+          {/* Action button */}
           <div className="space-y-3">
             <button
-              onClick={() => void onStartLive()}
-              disabled={isLive}
-              className={`flex h-13 w-full items-center justify-center rounded-2xl text-xs font-bold transition-all duration-200 ${
+              onClick={() => void handleLiveToggle()}
+              className={`flex h-13 w-full items-center justify-center rounded-2xl border text-xs font-bold transition-all duration-200 active:scale-98 ${
                 isLive
-                  ? "cursor-not-allowed border border-white/5 bg-white/3 text-gray-600"
-                  : "bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/20 active:scale-98 hover:opacity-95 hover:shadow-emerald-500/30"
+                  ? "border-rose-500/20 bg-rose-500/8 text-rose-400 hover:bg-rose-500/15"
+                  : "border-emerald-500/20 bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/20 hover:opacity-95 hover:shadow-emerald-500/30"
               }`}
             >
-              <Radio className="mr-2 h-4 w-4 shrink-0" />
-              {t(locale, "ui.stream.start")}
-            </button>
-            
-            <button
-              onClick={() => void onStopLive()}
-              disabled={!isLive}
-              className={`flex h-13 w-full items-center justify-center rounded-2xl border text-xs font-bold transition-all duration-200 ${
-                !isLive
-                  ? "cursor-not-allowed border-white/5 bg-transparent text-gray-600"
-                  : "border-rose-500/20 bg-rose-500/8 text-rose-400 active:scale-98 hover:bg-rose-500/15"
-              }`}
-            >
-              <Trash2 className="mr-2 h-4 w-4 shrink-0" />
-              {t(locale, "ui.stream.stop")}
+              {isLive ? (
+                <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+              ) : (
+                <Radio className="mr-2 h-4 w-4 shrink-0" />
+              )}
+              {isLive ? t(locale, "ui.stream.stop") : t(locale, "ui.stream.start")}
             </button>
           </div>
         </div>

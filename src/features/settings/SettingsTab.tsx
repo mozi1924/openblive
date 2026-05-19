@@ -292,7 +292,7 @@ export function SettingsTab({
       )}
 
       {/* Sticky footer for saving configuration */}
-      <div className="sticky bottom-[-2rem] z-20 mt-8 flex items-center justify-between gap-4 rounded-3xl border border-white/8 bg-[#070a0f]/88 px-6 py-4 shadow-[0_-10px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+      <div className="sticky bottom-[max(-1rem)] z-20 mt-8 flex items-center justify-between gap-4 rounded-3xl border border-white/8 bg-[#070a0f]/88 px-6 py-4 shadow-[0_-10px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl">
         <div>
           <p className="text-[11px] font-semibold text-gray-300">{t(locale, "ui.settings.save.instant")}</p>
           <p className="mt-1 text-[10px] text-gray-500">

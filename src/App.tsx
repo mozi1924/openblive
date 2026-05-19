@@ -2,6 +2,7 @@ import "./App.css";
 import { HeaderBar } from "./components/layout/HeaderBar";
 import { LogDrawer } from "./components/layout/LogDrawer";
 import { Sidebar } from "./components/layout/Sidebar";
+import { ConfirmActionModal } from "./components/shared/ConfirmActionModal";
 import { FaceAuthModal } from "./components/shared/FaceAuthModal";
 import { AccountTab } from "./features/account/AccountTab";
 import { DanmuTab } from "./features/danmu/DanmuTab";
@@ -47,7 +48,7 @@ function App() {
               currentUser={state.currentUser}
               qrcode={state.qrcode}
               onLoadQrcode={actions.loadQrcode}
-              onLogout={actions.logout}
+              onRequestLogout={actions.requestLogout}
               onPollLogin={actions.pollLogin}
               onRefreshCurrentUser={actions.refreshCurrentUser}
               onSwitchAccount={actions.switchAccount}
@@ -139,6 +140,18 @@ function App() {
           faceQrContent={state.faceQrContent}
           onClose={actions.closeFaceModal}
           onRetry={actions.retryStartLive}
+        />
+      )}
+      {state.showConfirmModal && (
+        <ConfirmActionModal
+          locale={locale}
+          title={state.confirmModalTitle}
+          description={state.confirmModalDescription}
+          confirmText={state.confirmModalConfirmText}
+          showCancel={state.confirmModalShowCancel}
+          tone={state.confirmModalTone}
+          onCancel={actions.cancelConfirmAction}
+          onConfirm={actions.confirmAction}
         />
       )}
     </div>

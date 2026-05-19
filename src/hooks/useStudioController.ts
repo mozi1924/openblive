@@ -29,6 +29,17 @@ import {
   type RecentArea,
 } from "./studio/controllerHelpers";
 
+type ConfirmModalTone = "primary" | "danger";
+
+type ConfirmModalState = {
+  show: boolean;
+  title: string;
+  description: string;
+  confirmText: string;
+  showCancel: boolean;
+  tone: ConfirmModalTone;
+};
+
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
@@ -55,6 +66,14 @@ export function useStudioController() {
   const [faceQr, setFaceQr] = useState("");
   const [faceQrContent, setFaceQrContent] = useState("");
   const [showFaceModal, setShowFaceModal] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
+    show: false,
+    title: "",
+    description: "",
+    confirmText: "",
+    showCancel: true,
+    tone: "primary",
+  });
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -72,6 +91,7 @@ export function useStudioController() {
   const loginStatusCodeRef = useRef<number | null>(null);
   const qrcodeRefreshBusyRef = useRef(false);
   const startupCookieRefreshDoneRef = useRef(false);
+  const confirmResolverRef = useRef<((accepted: boolean) => void) | null>(null);
   const titleDirtyRef = useRef(false);
   const areaDirtyRef = useRef(false);
   const tagsDirtyRef = useRef(false);
@@ -88,6 +108,55 @@ export function useStudioController() {
     const ts = new Date().toLocaleTimeString();
     setLogs((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 300));
   }, []);
+
+  const resolveConfirm = useCallback((accepted: boolean) => {
+    setConfirmModal((prev) => ({ ...prev, show: false }));
+    const resolve = confirmResolverRef.current;
+    confirmResolverRef.current = null;
+    resolve?.(accepted);
+  }, []);
+
+  const requestConfirm = useCallback(
+    (payload: Omit<ConfirmModalState, "show" | "showCancel">) =>
+      new Promise<boolean>((resolve) => {
+        if (confirmResolverRef.current) {
+          confirmResolverRef.current(false);
+        }
+        confirmResolverRef.current = resolve;
+        setConfirmModal({
+          ...payload,
+          showCancel: true,
+          show: true,
+        });
+      }),
+    [],
+  );
+
+  const requestAlert = useCallback(
+    (payload: Omit<ConfirmModalState, "show" | "showCancel">) =>
+      new Promise<void>((resolve) => {
+        if (confirmResolverRef.current) {
+          confirmResolverRef.current(false);
+        }
+        confirmResolverRef.current = () => resolve();
+        setConfirmModal({
+          ...payload,
+          showCancel: false,
+          show: true,
+        });
+      }),
+    [],
+  );
+
+  const revealMainWindowForAction = useCallback(async () => {
+    await studioApi.revealMainWindow().catch((error) => {
+      append(
+        tf(localeSetting, "ui.ctrl.reveal_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    });
+  }, [append, localeSetting]);
 
   const dirtyStatus = useMemo(
     () => ({
@@ -301,9 +370,14 @@ export function useStudioController() {
         uids: firstNotified.join(", "),
       });
       append(text);
-      window.alert(text);
+      void requestAlert({
+        title: t(localeSetting, "ui.account.login_invalid"),
+        description: text,
+        confirmText: t(localeSetting, "ui.confirm.ok"),
+        tone: "danger",
+      });
     },
-    [append, localeSetting],
+    [append, localeSetting, requestAlert],
   );
 
   const refreshSession = useCallback(async () => {
@@ -606,6 +680,28 @@ export function useStudioController() {
     [append, loadAccounts, loadSavedUser, refreshSession, localeSetting],
   );
 
+  const requestLogout = useCallback(
+    async (user: User, current: boolean) => {
+      const confirmed = await requestConfirm({
+        title: current
+          ? t(localeSetting, "ui.account.logout_current")
+          : t(localeSetting, "ui.account.delete"),
+        description: current
+          ? t(localeSetting, "ui.account.confirm.logout_current")
+          : tf(localeSetting, "ui.account.confirm.delete_account", { name: user.uname }),
+        confirmText: current
+          ? t(localeSetting, "ui.account.logout_current")
+          : t(localeSetting, "ui.account.delete"),
+        tone: "danger",
+      });
+      if (!confirmed) {
+        return;
+      }
+      await logout(user.uid);
+    },
+    [localeSetting, logout, requestConfirm],
+  );
+
   const loadPartitions = useCallback(async () => {
     const res = await studioApi.getPartitions();
     if (res.code !== 0 || !res.data) {
@@ -791,14 +887,34 @@ export function useStudioController() {
 
   const startLive = useCallback(async (source: StartLiveSource = "manual") => {
     const requestUid = activeUidRef.current;
+    if (source === "tray") {
+      setActiveTab("stream");
+      await revealMainWindowForAction();
+    }
+    if (source !== "face_retry") {
+      const confirmed = await requestConfirm({
+        title: t(localeSetting, "ui.stream.start"),
+        description: t(localeSetting, "ui.stream.confirm.start"),
+        confirmText: t(localeSetting, "ui.stream.start"),
+        tone: "primary",
+      });
+      if (!confirmed) {
+        return;
+      }
+    }
     if (hasUnsavedChanges) {
       const warning = tf(localeSetting, "ui.ctrl.unsaved_warning", { items: unsavedItems.join("、") });
       append(warning);
       setActiveTab("stream");
       if (source === "tray") {
-        await studioApi.revealMainWindow().catch(() => undefined);
+        await revealMainWindowForAction();
       }
-      window.alert(warning);
+      await requestAlert({
+        title: t(localeSetting, "ui.profile.unsaved"),
+        description: warning,
+        confirmText: t(localeSetting, "ui.confirm.ok"),
+        tone: "danger",
+      });
       return;
     }
 
@@ -825,9 +941,7 @@ export function useStudioController() {
     if (res.code === 60024 || res.code === 60043) {
       setActiveTab("stream");
       if (source === "tray") {
-        await studioApi.revealMainWindow().catch((error) => {
-          append(tf(localeSetting, "ui.ctrl.reveal_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
-        });
+        await revealMainWindowForAction();
       }
       const qrPayload = await resolveFaceQrImage(res.qr || "");
       setFaceQrContent(qrPayload.content);
@@ -846,7 +960,7 @@ export function useStudioController() {
 
     append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     await loadLinkageStatus();
-  }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, parent, pushRecentArea, refreshSession, resolveFaceQrImage, unsavedItems, localeSetting]);
+  }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, localeSetting, parent, pushRecentArea, refreshSession, requestAlert, requestConfirm, resolveFaceQrImage, revealMainWindowForAction, unsavedItems]);
 
   const applyRecentArea = useCallback((nextParent: string, nextChild: string) => {
     if (!nextParent || !nextChild) {
@@ -863,8 +977,21 @@ export function useStudioController() {
     append(tf(localeSetting, "ui.ctrl.quick_area_applied", { parent: nextParent, child: nextChild }));
   }, [append, partitions, localeSetting]);
 
-  const stopLive = useCallback(async () => {
+  const stopLive = useCallback(async (source: "manual" | "tray" = "manual") => {
     const requestUid = activeUidRef.current;
+    if (source === "tray") {
+      setActiveTab("stream");
+      await revealMainWindowForAction();
+    }
+    const confirmed = await requestConfirm({
+      title: t(localeSetting, "ui.stream.stop"),
+      description: t(localeSetting, "ui.stream.confirm.stop"),
+      confirmText: t(localeSetting, "ui.stream.stop"),
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
     const res = await studioApi.stopLive();
     if (requestUid !== activeUidRef.current) {
       return;
@@ -877,7 +1004,7 @@ export function useStudioController() {
     setRtmp(null);
     await refreshSession();
     await loadLinkageStatus();
-  }, [append, loadLinkageStatus, refreshSession, localeSetting]);
+  }, [append, loadLinkageStatus, localeSetting, refreshSession, requestConfirm, revealMainWindowForAction]);
 
   const startDanmu = useCallback(async () => {
     const res = await studioApi.startDanmuMonitor();
@@ -959,6 +1086,16 @@ export function useStudioController() {
     tagsDirtyRef.current =
       tagsToKey(tags) !== tagsToKey(profileState.tags.submitted);
   }, [child, parent, profileState, tags, title]);
+
+  useEffect(
+    () => () => {
+      if (confirmResolverRef.current) {
+        confirmResolverRef.current(false);
+        confirmResolverRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     danmuEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1091,7 +1228,7 @@ export function useStudioController() {
       }
       if (payload.action === "stop_live") {
         append(t(localeSetting, "ui.ctrl.tray_stop"));
-        void stopLive();
+        void stopLive("tray");
       }
     });
 
@@ -1109,6 +1246,11 @@ export function useStudioController() {
       child,
       children,
       copiedKey,
+      confirmModalConfirmText: confirmModal.confirmText,
+      confirmModalDescription: confirmModal.description,
+      confirmModalShowCancel: confirmModal.showCancel,
+      confirmModalTitle: confirmModal.title,
+      confirmModalTone: confirmModal.tone,
       currentUser,
       danmuListening,
       danmuText,
@@ -1129,6 +1271,7 @@ export function useStudioController() {
       qrcode,
       rtmp,
       session,
+      showConfirmModal: confirmModal.show,
       showFaceModal,
       showLogs,
       savingConfig,
@@ -1141,13 +1284,16 @@ export function useStudioController() {
       changeParent,
       clearDanmus: () => setDanmus([]),
       clearLogs: () => setLogs([]),
+      cancelConfirmAction: () => resolveConfirm(false),
       closeFaceModal: () => setShowFaceModal(false),
       closeLogs: () => setShowLogs(false),
+      confirmAction: () => resolveConfirm(true),
       copyToClipboard,
       loadAccounts,
       loadPartitions,
       loadQrcode,
       logout,
+      requestLogout,
       pollLogin,
       refreshCurrentUser,
       retryStartLive: async () => {

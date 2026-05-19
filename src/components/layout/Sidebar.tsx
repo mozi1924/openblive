@@ -74,7 +74,7 @@ export function Sidebar({
             onClick={() => onSelectTab(key)}
             className={`group flex w-full items-center rounded-xl border-l-4 border-y-0 border-r-0 px-4 py-3.5 text-left transition-all duration-200 no-drag ${
               activeTab === key
-                ? "border-l-bili-blue bg-gradient-to-r from-bili-blue/8 to-transparent font-semibold text-white"
+                ? "border-l-bili-blue bg-bili-blue/10 font-semibold text-white shadow-[inset_0_0_0_1px_rgba(0,174,236,0.14)]"
                 : "border-l-transparent text-gray-400 hover:bg-white/4 hover:text-white"
             }`}
           >
