@@ -272,6 +272,9 @@ async fn mark_user_login_invalid(uid: &str, state: &AppState, invalid: bool) {
         }
     }
     if invalid && runtime.config.current_uid.as_deref() == Some(uid) {
+        if let Some(task) = runtime.danmu_task.take() {
+            task.abort();
+        }
         runtime.session = Default::default();
     }
     if !invalid && runtime.config.current_uid.as_deref() == Some(uid) {
@@ -565,6 +568,18 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         }));
     }
 
+    if let Some(auth_url) = value["data"]["url"].as_str().map(str::trim) {
+        if !auth_url.is_empty() {
+            let _ = state
+                .client
+                .http
+                .get(auth_url)
+                .send()
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
     let cookie_header = state.client.cookie_header_for("https://api.bilibili.com/");
     let full = fetch_full_user_data(&state.client)
         .await
@@ -573,7 +588,15 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         .and_then(|raw| raw.parse().ok())
         .unwrap_or(0);
     let nav_uid = full["mid"].as_u64().unwrap_or(0);
-    let uid = if cookie_uid > 0 { cookie_uid } else { nav_uid };
+    let uid = if nav_uid > 0 { nav_uid } else { cookie_uid };
+    if cookie_uid > 0 && nav_uid > 0 && cookie_uid != nav_uid {
+        eprintln!(
+            "[auth][qrcode] uid mismatch, cookie_uid={}, nav_uid={}, {}",
+            cookie_uid,
+            nav_uid,
+            cookie_diagnostics(&cookie_header)
+        );
+    }
     if uid == 0 {
         eprintln!(
             "[auth][qrcode] login success but uid missing, cookie_uid={}, nav_uid={}, {}",
@@ -602,6 +625,9 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     );
 
     let mut runtime = state.runtime.lock().await;
+    if let Some(task) = runtime.danmu_task.take() {
+        task.abort();
+    }
     let old = runtime
         .config
         .users
@@ -760,6 +786,9 @@ pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResul
         return Err("i18n.account.error.account_login_invalid".into());
     }
 
+    if let Some(task) = runtime.danmu_task.take() {
+        task.abort();
+    }
     runtime.config.current_uid = Some(req.uid.clone());
     restore_session_from_current(&mut runtime, &state.client);
     let user = runtime
@@ -788,6 +817,9 @@ pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
     runtime.config.users.remove(&req.uid);
     delete_avatar_cache(&state.config_path, &req.uid);
     if runtime.config.current_uid.as_deref() == Some(&req.uid) {
+        if let Some(task) = runtime.danmu_task.take() {
+            task.abort();
+        }
         runtime.config.current_uid = None;
         runtime.session = Default::default();
     }
@@ -836,7 +868,21 @@ pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResul
         failed.len()
     );
 
-    let runtime = state.runtime.lock().await;
+    let mut runtime = state.runtime.lock().await;
+    let current_uid = runtime.config.current_uid.clone();
+    let current_is_valid = current_uid
+        .as_ref()
+        .and_then(|uid| runtime.config.users.get(uid))
+        .map(|user| !user.login_invalid)
+        .unwrap_or(false);
+    if current_is_valid {
+        restore_session_from_current(&mut runtime, &state.client);
+    } else if current_uid.is_some() {
+        if let Some(task) = runtime.danmu_task.take() {
+            task.abort();
+        }
+        runtime.session = Default::default();
+    }
     save_config(&state.config_path, &runtime.config, &state.master_key);
     Ok(wrap_ok(json!({
         "updated": updated,

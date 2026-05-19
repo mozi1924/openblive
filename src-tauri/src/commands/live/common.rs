@@ -73,6 +73,9 @@ pub(crate) async fn mark_current_user_login_invalid(state: &AppState, reason: &s
         "[auth][live] mark login invalid uid={}, fail_count={}, room_id={}, csrf_len={}, reason={}, {}",
         uid, fail_count, room_id, csrf_len, reason, cookie_diag
     );
+    if let Some(task) = runtime.danmu_task.take() {
+        task.abort();
+    }
     runtime.session = Default::default();
     save_config(&state.config_path, &runtime.config, &state.master_key);
 }

@@ -325,6 +325,7 @@ export function useStudioController() {
       setCurrentUser(null);
       applyProfileState(defaultProfileState());
       activeUidRef.current = null;
+      setDanmuListening(false);
       titleDirtyRef.current = false;
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
@@ -360,6 +361,10 @@ export function useStudioController() {
     const res = await studioApi.getAccountList();
     if (res.code === 0 && res.data) {
       setAccounts(res.data.list || []);
+      const backendCurrentUid = res.data.current_uid || null;
+      if (backendCurrentUid !== activeUidRef.current) {
+        await loadSavedUser();
+      }
       const validUids = new Set(
         (res.data.list || [])
           .filter((user) => !user.login_invalid)
@@ -371,12 +376,17 @@ export function useStudioController() {
         }
       }
     }
-  }, []);
+  }, [loadSavedUser]);
 
   const refreshCurrentUser = useCallback(async () => {
+    const requestUid = activeUidRef.current;
     try {
       const res = await studioApi.refreshCurrentUser();
       if (res.code === 0 && res.data) {
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        activeUidRef.current = res.data.uid;
         setCurrentUser(res.data);
         applyProfileState(res.data.live_profile_state);
         applyUserDraftValues(res.data);
@@ -395,9 +405,13 @@ export function useStudioController() {
   }, [append, applyProfileState, applyUserDraftValues, loadAccounts, localeSetting]);
 
   const syncLiveRoomProfile = useCallback(async (forceAllDrafts = false) => {
+    const requestUid = activeUidRef.current;
     try {
       const res = await studioApi.syncLiveRoomProfile();
       if (res.code !== 0 || !res.data) {
+        return;
+      }
+      if (requestUid !== activeUidRef.current) {
         return;
       }
 
@@ -500,8 +514,11 @@ export function useStudioController() {
       const res = await studioApi.pollLoginStatus(qrcodeKey);
       if (res.code === 0 && res.data) {
         loginStatusCodeRef.current = 0;
+        activeUidRef.current = res.data.uid;
         setCurrentUser(res.data);
         applyProfileState(res.data.live_profile_state);
+        setDanmuListening(false);
+        setDanmus([]);
         titleDirtyRef.current = false;
         areaDirtyRef.current = false;
         tagsDirtyRef.current = false;
@@ -510,6 +527,7 @@ export function useStudioController() {
           forceArea: true,
           forceTags: true,
         });
+        loadRecentAreasForUid(res.data.uid);
         append(tf(localeSetting, "ui.ctrl.login_success", { name: res.data.uname || t(localeSetting, "ui.ctrl.user_fallback") }));
         await refreshSession();
         await loadAccounts();
@@ -537,15 +555,18 @@ export function useStudioController() {
     } finally {
       loginPollBusyRef.current = false;
     }
-  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile, localeSetting]);
+  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, loadRecentAreasForUid, qrcodeKey, refreshSession, syncLiveRoomProfile, localeSetting]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
       try {
         const res = await studioApi.switchAccount(uid);
         if (res.code === 0 && res.data) {
+          activeUidRef.current = res.data.uid;
           setCurrentUser(res.data);
           applyProfileState(res.data.live_profile_state);
+          setDanmuListening(false);
+          setDanmus([]);
           setShowFaceModal(false);
           titleDirtyRef.current = false;
           areaDirtyRef.current = false;
@@ -555,6 +576,7 @@ export function useStudioController() {
             forceArea: true,
             forceTags: true,
           });
+          loadRecentAreasForUid(res.data.uid);
           append(tf(localeSetting, "ui.ctrl.switched_account", { name: res.data.uname }));
           await refreshSession();
           await loadAccounts();
@@ -564,11 +586,15 @@ export function useStudioController() {
         append(tf(localeSetting, "ui.ctrl.switch_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
       }
     },
-    [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile, localeSetting],
+    [append, applyProfileState, applyUserDraftValues, loadAccounts, loadRecentAreasForUid, refreshSession, syncLiveRoomProfile, localeSetting],
   );
 
   const logout = useCallback(
     async (uid: string) => {
+      if (activeUidRef.current === uid) {
+        setDanmuListening(false);
+        setDanmus([]);
+      }
       const res = await studioApi.logout(uid);
       if (res.code === 0) {
         append(t(localeSetting, "ui.ctrl.logged_out"));
@@ -611,6 +637,9 @@ export function useStudioController() {
   const submitArea = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
+      const requestUid = activeUidRef.current;
+      const submittedParent = parent;
+      const submittedChild = child;
       setProfileState((prev) => ({
         ...prev,
         area: {
@@ -619,14 +648,23 @@ export function useStudioController() {
           message: "",
         },
       }));
-      const res = await studioApi.updateArea(parent, child);
+      const res = await studioApi.updateArea(submittedParent, submittedChild);
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
       if (res.code === 0 && res.data?.profile_state) {
         applyProfileState(res.data.profile_state);
         setCurrentUser((prev) =>
-          prev ? { ...prev, last_area_name: [parent, child], live_profile_state: res.data?.profile_state } : prev,
+          prev
+            ? {
+                ...prev,
+                last_area_name: [submittedParent, submittedChild],
+                live_profile_state: res.data?.profile_state,
+              }
+            : prev,
         );
         areaDirtyRef.current = false;
-        append(tf(localeSetting, "ui.ctrl.area_set_ok", { parent, child }));
+        append(tf(localeSetting, "ui.ctrl.area_set_ok", { parent: submittedParent, child: submittedChild }));
         return;
       }
       setProfileState((prev) => ({
@@ -645,6 +683,8 @@ export function useStudioController() {
   const submitTitle = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
+      const requestUid = activeUidRef.current;
+      const submittedTitle = title;
       setProfileState((prev) => ({
         ...prev,
         title: {
@@ -653,11 +693,14 @@ export function useStudioController() {
           message: "",
         },
       }));
-      const res = await studioApi.updateTitle(title);
+      const res = await studioApi.updateTitle(submittedTitle);
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
       if (res.code === 0 && res.data?.profile_state) {
         applyProfileState(res.data.profile_state);
         setCurrentUser((prev) =>
-          prev ? { ...prev, last_title: title, live_profile_state: res.data?.profile_state } : prev,
+          prev ? { ...prev, last_title: submittedTitle, live_profile_state: res.data?.profile_state } : prev,
         );
         append(t(localeSetting, "ui.ctrl.title_set_ok"));
         return;
@@ -678,6 +721,7 @@ export function useStudioController() {
   const submitTags = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
+      const requestUid = activeUidRef.current;
       const normalized = normalizeTags(tags);
       setProfileState((prev) => ({
         ...prev,
@@ -688,6 +732,9 @@ export function useStudioController() {
         },
       }));
       const res = await studioApi.updateLiveTags(normalized.join(","));
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
       if (res.code === 0 && res.data) {
         const nextTags = normalizeTags(res.data.tags || []);
         setTags([...nextTags]);
@@ -743,6 +790,7 @@ export function useStudioController() {
   }, []);
 
   const startLive = useCallback(async (source: StartLiveSource = "manual") => {
+    const requestUid = activeUidRef.current;
     if (hasUnsavedChanges) {
       const warning = tf(localeSetting, "ui.ctrl.unsaved_warning", { items: unsavedItems.join("、") });
       append(warning);
@@ -755,6 +803,9 @@ export function useStudioController() {
     }
 
     const res = await studioApi.startLive();
+    if (requestUid !== activeUidRef.current) {
+      return;
+    }
     if (res.code === 0) {
       setRtmp(res.data || null);
       pushRecentArea(currentUser?.uid || null, { parent, child });
@@ -813,7 +864,11 @@ export function useStudioController() {
   }, [append, partitions, localeSetting]);
 
   const stopLive = useCallback(async () => {
+    const requestUid = activeUidRef.current;
     const res = await studioApi.stopLive();
+    if (requestUid !== activeUidRef.current) {
+      return;
+    }
     append(
       res.code === 0
         ? t(localeSetting, "ui.ctrl.stop_live_ok")
@@ -965,10 +1020,8 @@ export function useStudioController() {
               }),
             );
           }
-          if (res.data.updated > 0) {
-            await loadSavedUser();
-            await loadAccounts();
-          }
+          await loadSavedUser();
+          await loadAccounts();
         })
         .catch(() => {
           append(t(localeSetting, "ui.ctrl.cookie_refresh_start_failed"));
@@ -993,10 +1046,8 @@ export function useStudioController() {
               }),
             );
           }
-          if (res.data.updated > 0) {
-            await loadSavedUser();
-            await loadAccounts();
-          }
+          await loadSavedUser();
+          await loadAccounts();
         })
         .catch(() => {
           append(t(localeSetting, "ui.ctrl.cookie_refresh_failed"));

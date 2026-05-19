@@ -7,7 +7,7 @@ use crate::models::{
     UserRecord,
 };
 use crate::response::wrap_ok;
-use crate::state::AppState;
+use crate::state::{AppState, RuntimeState};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
@@ -190,22 +190,46 @@ fn apply_room_area_to_session(
     }
 }
 
+fn resolve_current_auth_context(
+    runtime: &RuntimeState,
+) -> Result<(String, String, String, String), String> {
+    let uid = runtime
+        .config
+        .current_uid
+        .clone()
+        .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
+    let user = runtime
+        .config
+        .users
+        .get(&uid)
+        .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
+
+    let room_id = if user.room_id.trim().is_empty() {
+        runtime.session.room_id.clone()
+    } else {
+        user.room_id.clone()
+    };
+    let csrf = if user.csrf.trim().is_empty() {
+        runtime.session.csrf.clone()
+    } else {
+        user.csrf.clone()
+    };
+    Ok((uid, room_id, csrf, user.cookie.clone()))
+}
+
 async fn fetch_room_info_by_room_id(
     state: &AppState,
     room_id: &str,
     cookie_header: Option<&str>,
 ) -> Result<serde_json::Value, String> {
-    if let Some(cookie) = cookie_header {
-        if !cookie.trim().is_empty() {
-            state.client.apply_cookie_header(cookie);
-        }
-    }
+    let cookie = cookie_header.unwrap_or("");
 
     let value = state
         .client
-        .get_json(
+        .get_json_with_cookie(
             "https://api.live.bilibili.com/room/v1/Room/get_info",
             &[("room_id", room_id.to_string())],
+            cookie,
         )
         .await
         .map_err(|error| error.to_string())?;
@@ -509,29 +533,14 @@ pub async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
 pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdResult {
     let (uid, room_id, csrf, cookie, area_id) = {
         let runtime = state.runtime.lock().await;
-        let uid = runtime
-            .config
-            .current_uid
-            .clone()
-            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
-        let user = runtime
-            .config
-            .users
-            .get(&uid)
-            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
+        let (uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
         let area_id = runtime
             .partition_map
             .get(&req.parent)
             .and_then(|map| map.get(&req.child))
             .copied()
             .ok_or_else(|| "invalid partition".to_string())?;
-        (
-            uid,
-            user.room_id.clone(),
-            user.csrf.clone(),
-            user.cookie.clone(),
-            area_id,
-        )
+        (uid, room_id, csrf, cookie, area_id)
     };
 
     if room_id.is_empty() {
@@ -540,13 +549,18 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
     if csrf.is_empty() {
         return Err("i18n.live.error.csrf_missing".into());
     }
-
-    state.client.apply_cookie_header(&cookie);
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
     let mut form = build_room_update_form(&room_id, &csrf);
     form.insert("area_id".into(), area_id.to_string());
     let value = state
         .client
-        .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+        .post_form_with_cookie(
+            "https://api.live.bilibili.com/room/v1/Room/update",
+            &form,
+            &cookie,
+        )
         .await
         .map_err(|error| error.to_string())?;
 
@@ -595,22 +609,33 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
 
 #[tauri::command]
 pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> CmdResult {
-    let runtime = state.runtime.lock().await;
-    if runtime.session.room_id.is_empty() {
-        return Err("i18n.common.not_logged_in".into());
+    let (_uid, room_id, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
     }
-
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
     let mut form = BTreeMap::new();
-    form.insert("room_id".into(), runtime.session.room_id.clone());
+    form.insert("room_id".into(), room_id);
     form.insert("platform".into(), live_platform_pc_link().into());
     form.insert("title".into(), req.title.clone());
-    form.insert("csrf".into(), runtime.session.csrf.clone());
-    form.insert("csrf_token".into(), runtime.session.csrf.clone());
-    drop(runtime);
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
 
     let value = state
         .client
-        .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+        .post_form_with_cookie(
+            "https://api.live.bilibili.com/room/v1/Room/update",
+            &form,
+            &cookie,
+        )
         .await
         .map_err(|error| error.to_string())?;
 
@@ -669,11 +694,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
     let desired_tags = split_tags(&req.tags);
     let (uid, room_id, csrf, current_tags, cookie) = {
         let runtime = state.runtime.lock().await;
-        let uid = runtime
-            .config
-            .current_uid
-            .clone()
-            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
+        let (uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
         let user = runtime
             .config
             .users
@@ -681,10 +702,10 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
             .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
         (
             uid,
-            user.room_id.clone(),
-            user.csrf.clone(),
+            room_id,
+            csrf,
             user.last_tags.clone(),
-            user.cookie.clone(),
+            cookie,
         )
     };
 
@@ -694,8 +715,9 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
     if csrf.is_empty() {
         return Err("i18n.live.error.csrf_missing".into());
     }
-
-    state.client.apply_cookie_header(&cookie);
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
 
     let to_add: Vec<String> = desired_tags
         .iter()
@@ -713,7 +735,11 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
         form.insert("add_tag".into(), tag.clone());
         let value = state
             .client
-            .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+            .post_form_with_cookie(
+                "https://api.live.bilibili.com/room/v1/Room/update",
+                &form,
+                &cookie,
+            )
             .await
             .map_err(|error| error.to_string())?;
         let code = value["code"].as_i64().unwrap_or(-1);
@@ -741,7 +767,11 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
         form.insert("del_tag".into(), tag.clone());
         let value = state
             .client
-            .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+            .post_form_with_cookie(
+                "https://api.live.bilibili.com/room/v1/Room/update",
+                &form,
+                &cookie,
+            )
             .await
             .map_err(|error| error.to_string())?;
         let code = value["code"].as_i64().unwrap_or(-1);
@@ -793,17 +823,23 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
 
 #[tauri::command]
 pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
-    let runtime = state.runtime.lock().await;
-    if runtime.session.room_id.is_empty() {
-        return Err("i18n.common.not_logged_in".into());
+    let (room_id, csrf, cookie, area) = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        let area = runtime.session.current_area_id.unwrap_or(235);
+        (room_id, csrf, cookie, area)
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
     }
-
-    let area = runtime.session.current_area_id.unwrap_or(235);
-    let room_id = runtime.session.room_id.clone();
-    let csrf = runtime.session.csrf.clone();
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
     let room_id_for_rollback = room_id.clone();
     let csrf_for_rollback = csrf.clone();
-    drop(runtime);
     let now = chrono::Utc::now().timestamp().to_string();
 
     let mut form = BTreeMap::new();
@@ -819,9 +855,10 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
 
     let response = state
         .client
-        .post_form(
+        .post_form_with_cookie(
             "https://api.live.bilibili.com/room/v1/Room/startLive",
             &form,
+            &cookie,
         )
         .await
         .map_err(|error| error.to_string())?;
@@ -896,7 +933,11 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
         rollback_form.insert("csrf_token".into(), csrf_for_rollback);
         let _ = state
             .client
-            .post_form("https://api.live.bilibili.com/room/v1/Room/stopLive", &rollback_form)
+            .post_form_with_cookie(
+                "https://api.live.bilibili.com/room/v1/Room/stopLive",
+                &rollback_form,
+                &cookie,
+            )
             .await;
         return Err(format!("i18n.live.error.start_linkage_failed_with_rollback:{link_error}"));
     }
@@ -934,17 +975,32 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
 
 #[tauri::command]
 pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
-    let runtime = state.runtime.lock().await;
+    let (_uid, room_id, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
     let mut form = BTreeMap::new();
-    form.insert("room_id".into(), runtime.session.room_id.clone());
+    form.insert("room_id".into(), room_id);
     form.insert("platform".into(), live_platform_pc_link().into());
-    form.insert("csrf".into(), runtime.session.csrf.clone());
-    form.insert("csrf_token".into(), runtime.session.csrf.clone());
-    drop(runtime);
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
 
     let value = state
         .client
-        .post_form("https://api.live.bilibili.com/room/v1/Room/stopLive", &form)
+        .post_form_with_cookie(
+            "https://api.live.bilibili.com/room/v1/Room/stopLive",
+            &form,
+            &cookie,
+        )
         .await
         .map_err(|error| error.to_string())?;
     let code = value["code"].as_i64().unwrap_or(-1);
@@ -995,14 +1051,19 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
 
 #[tauri::command]
 pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult {
-    let runtime = state.runtime.lock().await;
-    if runtime.session.room_id.is_empty() {
-        return Err("i18n.common.not_logged_in".into());
+    let (_uid, room_id, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
     }
-
-    let room_id = runtime.session.room_id.clone();
-    let csrf = runtime.session.csrf.clone();
-    drop(runtime);
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
 
     let mut params = BTreeMap::new();
     params.insert("web_location".into(), "444.8".into());
@@ -1024,9 +1085,10 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
 
     let value = state
         .client
-        .post_form(
+        .post_form_with_cookie(
             &format!("https://api.live.bilibili.com/msg/send?{query}"),
             &form,
+            &cookie,
         )
         .await
         .map_err(|error| error.to_string())?;
