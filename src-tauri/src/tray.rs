@@ -13,6 +13,31 @@ const MENU_STOP_LIVE: &str = "tray.stop_live";
 const MENU_QUIT: &str = "tray.quit";
 const EVENT_TRAY_ACTION: &str = "tray-action";
 
+#[cfg(not(target_os = "macos"))]
+const TRAY_BLACK: &[u8] = include_bytes!("../icons/tray_black.png");
+#[cfg(not(target_os = "macos"))]
+const TRAY_WHITE: &[u8] = include_bytes!("../icons/tray_white.png");
+#[cfg(target_os = "macos")]
+const TRAY_TEMPLATE: &[u8] = include_bytes!("../icons/trayTemplate.png");
+
+fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
+    #[cfg(target_os = "macos")]
+    {
+        tauri::image::Image::from_bytes(TRAY_TEMPLATE)
+            .expect("failed to load macOS tray template icon")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(tauri::Theme::Dark) = _app.theme() {
+            tauri::image::Image::from_bytes(TRAY_WHITE)
+                .expect("failed to load white tray icon")
+        } else {
+            tauri::image::Image::from_bytes(TRAY_BLACK)
+                .expect("failed to load black tray icon")
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 struct TrayActionPayload<'a> {
     action: &'a str,
@@ -166,7 +191,8 @@ pub fn reveal_main_window(app: &AppHandle) {
 }
 
 pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
-    let menu = build_tray_menu(&app.handle().clone())?;
+    let handle = app.handle().clone();
+    let menu = build_tray_menu(&handle)?;
     let locale = {
         let state = app.state::<AppState>();
         state
@@ -175,13 +201,19 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
             .map(|runtime| runtime.config.locale.clone())
             .unwrap_or_else(|_| "zh-CN".to_string())
     };
+    
+    let icon = get_tray_icon(&handle);
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip(crate::i18n::tr(&locale, "tray.tooltip"));
-    if let Some(icon) = app.default_window_icon().cloned() {
-        builder = builder.icon(icon);
+        .tooltip(crate::i18n::tr(&locale, "tray.tooltip"))
+        .icon(icon);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.icon_as_template(true);
     }
+
     let _tray = builder.build(app)?;
     Ok(())
 }
@@ -210,17 +242,35 @@ pub fn on_tray_icon_event(app: &AppHandle, event: &TrayIconEvent) {
 }
 
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
-    if let WindowEvent::CloseRequested { api, .. } = event {
-        let state = window.state::<AppState>();
-        let should_min_to_tray = state
-            .runtime
-            .try_lock()
-            .map(|runtime| runtime.config.min_to_tray)
-            .unwrap_or(false)
-            && has_tray(&window.app_handle());
-        if should_min_to_tray {
-            api.prevent_close();
-            let _ = window.hide();
+    match event {
+        WindowEvent::CloseRequested { api, .. } => {
+            let state = window.state::<AppState>();
+            let should_min_to_tray = state
+                .runtime
+                .try_lock()
+                .map(|runtime| runtime.config.min_to_tray)
+                .unwrap_or(false)
+                && has_tray(&window.app_handle());
+            if should_min_to_tray {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         }
+        #[cfg(not(target_os = "macos"))]
+        WindowEvent::ThemeChanged(theme) => {
+            let app = window.app_handle();
+            if let Some(tray) = app.tray_by_id(TRAY_ID) {
+                let icon_bytes = match theme {
+                    tauri::Theme::Dark => TRAY_WHITE,
+                    tauri::Theme::Light => TRAY_BLACK,
+                    _ => TRAY_BLACK,
+                };
+                if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
+                    let _ = tray.set_icon(Some(icon));
+                }
+            }
+        }
+        _ => {}
     }
 }
+
