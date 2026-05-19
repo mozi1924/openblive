@@ -64,7 +64,10 @@ export function SettingsTab({
             </span>
           </div>
           <p className="mt-1 text-xs text-gray-500">
-            自定义窗口关闭按钮的行为。当前托盘菜单：{appConfig.has_tray ? "已支持" : "不支持"}
+            {t(locale, "ui.settings.window_behavior.desc_prefix")}
+            {appConfig.has_tray
+              ? t(locale, "ui.settings.window_behavior.tray_supported")
+              : t(locale, "ui.settings.window_behavior.tray_unsupported")}
           </p>
         </div>
 
@@ -80,9 +83,9 @@ export function SettingsTab({
           >
             <Minimize2 className={`mr-3 h-5 w-5 shrink-0 mt-0.5 ${appConfig.min_to_tray ? "text-bili-blue" : "text-gray-500"}`} />
             <div>
-              <span className="block text-xs font-bold text-gray-200">最小化到系统托盘</span>
+              <span className="block text-xs font-bold text-gray-200">{t(locale, "ui.settings.window_behavior.minimize.title")}</span>
               <span className="mt-1 block text-[10px] text-gray-500 leading-normal">
-                关闭窗口时程序在后台托盘静默运行，不会意外断开当前的直播与设备联动。
+                {t(locale, "ui.settings.window_behavior.minimize.desc")}
               </span>
             </div>
           </button>
@@ -98,9 +101,9 @@ export function SettingsTab({
           >
             <LogOut className={`mr-3 h-5 w-5 shrink-0 mt-0.5 ${!appConfig.min_to_tray ? "text-bili-pink" : "text-gray-500"}`} />
             <div>
-              <span className="block text-xs font-bold text-gray-200">直接退出程序</span>
+              <span className="block text-xs font-bold text-gray-200">{t(locale, "ui.settings.window_behavior.exit.title")}</span>
               <span className="mt-1 block text-[10px] text-gray-500 leading-normal">
-                点击关闭按钮时立即注销所有联结并清理环境退出。
+                {t(locale, "ui.settings.window_behavior.exit.desc")}
               </span>
             </div>
           </button>
@@ -117,7 +120,7 @@ export function SettingsTab({
             </span>
           </div>
           <p className="mt-1 text-xs text-gray-500">
-            选择在哔哩哔哩直播间开启或停止时，本地需要触发的同步联动方式。
+            {t(locale, "ui.settings.linkage.desc")}
           </p>
         </div>
 
@@ -136,7 +139,7 @@ export function SettingsTab({
               <span className="text-xs font-bold text-gray-200 font-mono">OBS WebSocket</span>
             </div>
             <span className="mt-2 text-[10px] text-gray-500 leading-relaxed">
-              基于 OBS Websocket v5 官方协议。开播时自动写入流密钥并启动串流，下播时自动停止。
+              {t(locale, "ui.settings.linkage.obs.desc")}
             </span>
           </button>
 
@@ -151,10 +154,10 @@ export function SettingsTab({
           >
             <div className="flex items-center space-x-2">
               <Terminal className={`h-4.5 w-4.5 ${appConfig.live_control_mode === "command" ? "text-bili-pink" : "text-gray-500"}`} />
-              <span className="text-xs font-bold text-gray-200">命令行联动</span>
+              <span className="text-xs font-bold text-gray-200">{t(locale, "ui.settings.linkage.command.title")}</span>
             </div>
             <span className="mt-2 text-[10px] text-gray-500 leading-relaxed">
-              执行自定义本地 Shell 脚本命令（如 FFmpeg、Gstreamer 等），支持注入服务器与密钥参数。
+              {t(locale, "ui.settings.linkage.command.desc")}
             </span>
           </button>
 
@@ -169,10 +172,10 @@ export function SettingsTab({
           >
             <div className="flex items-center space-x-2">
               <Sliders className={`h-4.5 w-4.5 ${appConfig.live_control_mode === "none" ? "text-amber-400" : "text-gray-500"}`} />
-              <span className="text-xs font-bold text-gray-200">不进行联动</span>
+              <span className="text-xs font-bold text-gray-200">{t(locale, "ui.settings.linkage.none.title")}</span>
             </div>
             <span className="mt-2 text-[10px] text-gray-500 leading-relaxed">
-              仅使用此面板控制 Bilibili 官方直播间标题、分区等信息，不进行任何本地采集器串流联动。
+              {t(locale, "ui.settings.linkage.none.desc")}
             </span>
           </button>
         </div>
@@ -189,13 +192,13 @@ export function SettingsTab({
               </span>
             </div>
             <p className="mt-1 text-xs text-gray-500">
-              请确保 OBS Studio -“工具”-“WebSocket 服务器设置”中已启用服务器。
+              {t(locale, "ui.settings.obs.desc")}
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">服务器地址</span>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.obs.server")}</span>
               <input
                 className={inputClass}
                 value={appConfig.obs_ws_url}
@@ -207,7 +210,7 @@ export function SettingsTab({
             </div>
             
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">访问密码</span>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.obs.password")}</span>
               <div className="relative">
                 <input
                   className={`${inputClass} pr-10`}
@@ -216,7 +219,7 @@ export function SettingsTab({
                   onChange={(event) =>
                     onChangeConfig("obs_ws_password", event.target.value)
                   }
-                  placeholder="OBS WebSocket 访问密码 (无则置空)"
+                  placeholder={t(locale, "ui.settings.obs.password.placeholder")}
                 />
                 <EyeOff className="absolute right-3.5 top-3 h-4 w-4 text-gray-600" />
               </div>
@@ -236,7 +239,7 @@ export function SettingsTab({
               </span>
             </div>
             <p className="mt-1 text-xs text-gray-500">
-              设置命令模板。执行命令时，以下变量将被推流信息动态替换：
+              {t(locale, "ui.settings.command.desc")}
             </p>
             
             <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -253,26 +256,26 @@ export function SettingsTab({
 
           <div className="space-y-4">
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">开播触发命令</span>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.command.start")}</span>
               <input
                 className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-4 py-3 text-xs font-mono text-gray-300 outline-none transition-all hover:border-white/12 focus:border-bili-pink/40"
                 value={appConfig.on_live_start_command}
                 onChange={(event) =>
                   onChangeConfig("on_live_start_command", event.target.value)
                 }
-                placeholder="例如: ffmpeg -re -i my_feed.mp4 -c copy -f flv {stream_url}"
+                placeholder={t(locale, "ui.settings.command.start.placeholder")}
               />
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">下播触发命令</span>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.command.stop")}</span>
               <input
                 className="w-full rounded-xl border border-white/8 bg-[#090b0f] px-4 py-3 text-xs font-mono text-gray-300 outline-none transition-all hover:border-white/12 focus:border-bili-pink/40"
                 value={appConfig.on_live_stop_command}
                 onChange={(event) =>
                   onChangeConfig("on_live_stop_command", event.target.value)
                 }
-                placeholder="例如: killall ffmpeg"
+                placeholder={t(locale, "ui.settings.command.stop.placeholder")}
               />
             </div>
           </div>
@@ -282,9 +285,9 @@ export function SettingsTab({
       {/* Sticky footer for saving configuration */}
       <div className="sticky bottom-[-2rem] z-20 mt-8 flex items-center justify-between gap-4 rounded-3xl border border-white/8 bg-[#070a0f]/88 px-6 py-4 shadow-[0_-10px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl">
         <div>
-          <p className="text-[11px] font-semibold text-gray-300">保存后立即生效</p>
+          <p className="text-[11px] font-semibold text-gray-300">{t(locale, "ui.settings.save.instant")}</p>
           <p className="mt-1 text-[10px] text-gray-500">
-            配置会写入本地 `config.json`，下次启动仍会保留。
+            {t(locale, "ui.settings.save.tip")}
           </p>
         </div>
         
@@ -294,7 +297,7 @@ export function SettingsTab({
           className="btn-primary flex h-11 min-w-[148px] items-center justify-center rounded-2xl px-6 text-xs font-bold text-white shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save className="mr-2 h-4 w-4" />
-          {savingConfig ? "保存中..." : "保存全部设置"}
+          {savingConfig ? t(locale, "ui.settings.save.saving") : t(locale, "ui.settings.save.all")}
         </button>
       </div>
 

@@ -1,7 +1,10 @@
 import { LogOut, QrCode, RefreshCw, ShieldAlert, Users, Heart, Coins, Sparkles, UserPlus, Trash2 } from "lucide-react";
 import type { User } from "../../types/studio";
+import type { LocaleSetting } from "../../utils/i18n";
+import { t, tf } from "../../utils/i18n";
 
 type AccountTabProps = {
+  locale: LocaleSetting;
   accounts: User[];
   currentUser: User | null;
   qrcode: string;
@@ -13,6 +16,7 @@ type AccountTabProps = {
 };
 
 export function AccountTab({
+  locale,
   accounts,
   currentUser,
   qrcode,
@@ -34,7 +38,7 @@ export function AccountTab({
               CURRENT SESSION
             </span>
             <span className="rounded-full bg-bili-blue/10 px-2.5 py-0.5 text-[10px] font-bold text-bili-blue border border-bili-blue/20">
-              当前开播账号
+              {t(locale, "ui.account.current_badge")}
             </span>
           </div>
 
@@ -59,11 +63,11 @@ export function AccountTab({
                     </h4>
                     {currentUser.login_invalid ? (
                       <span className="rounded-lg bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 text-[9px] font-bold text-rose-300 animate-pulse">
-                        登录失效
+                        {t(locale, "ui.account.login_invalid")}
                       </span>
                     ) : (
                       <span className="rounded-lg bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-bold text-emerald-300">
-                        在线
+                        {t(locale, "ui.account.online")}
                       </span>
                     )}
                   </div>
@@ -75,7 +79,7 @@ export function AccountTab({
                 <button
                   onClick={() => void onRefreshCurrentUser()}
                   className="rounded-xl border border-white/5 bg-white/5 p-2.5 text-gray-400 transition-all duration-150 active:scale-95 hover:bg-white/10 hover:text-white"
-                  title="刷新当前账号信息"
+                  title={t(locale, "ui.account.refresh_user")}
                 >
                   <RefreshCw className="h-4.5 w-4.5" />
                 </button>
@@ -85,23 +89,23 @@ export function AccountTab({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatCard
                   icon={<Users className="h-4 w-4 text-bili-blue" />}
-                  label="粉丝数"
+                  label={t(locale, "ui.account.stat.follower")}
                   value={currentUser.follower}
                 />
                 <StatCard
                   icon={<Heart className="h-4 w-4 text-rose-400" />}
-                  label="关注数"
+                  label={t(locale, "ui.account.stat.following")}
                   value={currentUser.following ?? "-"}
                 />
                 <StatCard
                   icon={<Coins className="h-4 w-4 text-amber-500" />}
-                  label="金瓜子"
+                  label={t(locale, "ui.account.stat.money")}
                   value={currentUser.money ? currentUser.money.toLocaleString() : "-"}
                   className="text-amber-500"
                 />
                 <StatCard
                   icon={<Sparkles className="h-4 w-4 text-bili-pink" />}
-                  label="B币余额"
+                  label={t(locale, "ui.account.stat.bcoin")}
                   value={currentUser.bcoin ? currentUser.bcoin.toLocaleString() : "-"}
                   className="text-bili-pink"
                 />
@@ -113,7 +117,7 @@ export function AccountTab({
                   className="flex items-center rounded-xl border border-rose-500/20 bg-rose-500/10 px-4.5 py-2.5 text-xs font-semibold text-rose-400 transition-all duration-150 active:scale-95 hover:bg-rose-500/20 hover:text-rose-300"
                 >
                   <LogOut className="mr-1.5 h-3.5 w-3.5" />
-                  退出当前账号
+                  {t(locale, "ui.account.logout_current")}
                 </button>
               </div>
             </div>
@@ -122,9 +126,9 @@ export function AccountTab({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-yellow-500/10 bg-yellow-500/5 text-yellow-500">
                 <ShieldAlert className="h-7 w-7 animate-pulse" />
               </div>
-              <h4 className="text-sm font-bold text-white">当前未登录账号</h4>
+              <h4 className="text-sm font-bold text-white">{t(locale, "ui.account.empty_current.title")}</h4>
               <p className="mt-2 max-w-xs text-xs text-gray-500 leading-relaxed">
-                请在右侧生成登录二维码并进行扫码，即可启用开播、弹幕等完整功能。
+                {t(locale, "ui.account.empty_current.desc")}
               </p>
             </div>
           )}
@@ -137,14 +141,14 @@ export function AccountTab({
               SAVED ACCOUNTS
             </span>
             <span className="text-[10px] font-bold text-gray-500">
-              已保存 {accounts.length} 个账号
+              {tf(locale, "ui.account.saved_count", { count: accounts.length })}
             </span>
           </div>
 
           {accounts.length <= 1 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-white/5 rounded-2xl bg-white/2">
               <p className="text-xs text-gray-500">
-                暂无其他已保存的账号，您可以扫码添加更多账号
+                {t(locale, "ui.account.saved_empty")}
               </p>
             </div>
           ) : (
@@ -176,7 +180,7 @@ export function AccountTab({
                         </p>
                         {user.login_invalid ? (
                           <p className="mt-1 text-[9px] font-semibold text-rose-400 animate-pulse">
-                            登录失效，请删除后重新扫码
+                            {t(locale, "ui.account.invalid_hint")}
                           </p>
                         ) : null}
                       </div>
@@ -191,12 +195,12 @@ export function AccountTab({
                             : "bg-bili-blue/10 text-bili-blue border border-bili-blue/20 hover:bg-bili-blue hover:text-white"
                         }`}
                       >
-                        {user.login_invalid ? "失效" : "切换"}
+                        {user.login_invalid ? t(locale, "ui.account.switch.invalid") : t(locale, "ui.account.switch")}
                       </button>
                       <button
                         onClick={() => void onLogout(user.uid)}
                         className="rounded-xl border border-transparent p-2 text-gray-500 transition-all duration-150 hover:border-rose-500/15 hover:bg-rose-500/10 hover:text-rose-400"
-                        title="删除此账号"
+                        title={t(locale, "ui.account.delete")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -216,7 +220,7 @@ export function AccountTab({
               ADD ACCOUNT
             </span>
             <span className="rounded-full bg-bili-pink/10 px-2 py-0.5 text-[10px] font-bold text-bili-pink border border-bili-pink/20">
-              扫码新增账号
+              {t(locale, "ui.account.add.badge")}
             </span>
           </div>
 
@@ -241,12 +245,12 @@ export function AccountTab({
                   <button
                     onClick={() => void onLoadQrcode()}
                     className="rounded-full bg-white/20 p-3 text-white backdrop-blur-md transition-all duration-150 active:scale-95 hover:bg-white/30"
-                    title="刷新二维码"
+                    title={t(locale, "ui.account.qr.refresh")}
                   >
                     <RefreshCw className="h-6 w-6" />
                   </button>
                   <span className="mt-2 text-[10px] font-bold text-gray-300">
-                    点击刷新
+                    {t(locale, "ui.account.qr.click_refresh")}
                   </span>
                 </div>
               </div>
@@ -261,10 +265,10 @@ export function AccountTab({
 
               <div className="space-y-1.5 text-center">
                 <p className="text-sm font-bold text-white">
-                  请使用哔哩哔哩手机APP扫码
+                  {t(locale, "ui.account.qr.scan_title")}
                 </p>
                 <p className="text-[11px] leading-relaxed text-gray-500 max-w-xs mx-auto">
-                  二维码状态会自动检测，扫码并确认后将自动登录此账号
+                  {t(locale, "ui.account.qr.scan_desc")}
                 </p>
               </div>
 
@@ -274,14 +278,14 @@ export function AccountTab({
                   className="flex flex-1 items-center justify-center rounded-2xl border border-white/8 bg-white/5 py-3 text-xs font-semibold text-gray-300 transition-all duration-150 active:scale-95 hover:border-white/15 hover:bg-white/10 hover:text-white"
                 >
                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                  刷新
+                  {t(locale, "ui.account.qr.refresh_btn")}
                 </button>
                 <button
                   onClick={() => void onPollLogin()}
                   className="btn-secondary flex flex-1 items-center justify-center rounded-2xl py-3 text-xs font-bold text-white active:scale-95"
                 >
                   <QrCode className="mr-2 h-3.5 w-3.5" />
-                  手动刷新状态
+                  {t(locale, "ui.account.qr.poll_btn")}
                 </button>
               </div>
             </div>
@@ -295,10 +299,10 @@ export function AccountTab({
               </div>
               
               <h4 className="mb-2.5 text-base font-bold text-white">
-                获取授权登录二维码
+                {t(locale, "ui.account.qr.get_title")}
               </h4>
               <p className="mb-8 max-w-xs text-xs leading-relaxed text-gray-500">
-                通过哔哩哔哩官方扫码接口安全登录。您的登录凭证（Cookie）将安全存储于本地系统Keychain中，拒绝任何第三方服务器上传。
+                {t(locale, "ui.account.qr.get_desc")}
               </p>
               
               <button
@@ -306,7 +310,7 @@ export function AccountTab({
                 className="btn-primary flex items-center justify-center rounded-2xl px-8 py-3.5 text-xs font-bold text-white active:scale-95"
               >
                 <QrCode className="mr-2 h-4 w-4" />
-                获取扫码登录二维码
+                {t(locale, "ui.account.qr.get_btn")}
               </button>
             </div>
           )}
@@ -334,4 +338,3 @@ function StatCard({ icon, label, value, className }: StatCardProps) {
     </div>
   );
 }
-

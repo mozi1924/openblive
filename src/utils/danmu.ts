@@ -1,4 +1,5 @@
 import type { DanmuEventPayload, DanmuMsg } from "../types/studio";
+import { t, tf, type LocaleSetting } from "./i18n";
 
 const createMessageId = () => Math.random().toString(36).slice(2, 9);
 
@@ -17,6 +18,7 @@ export const createSelfDanmuMessage = (
 
 export const parseDanmuEvent = (
   payload: DanmuEventPayload,
+  locale: LocaleSetting = "auto",
 ): DanmuMsg | null => {
   const cmd = payload.cmd ?? "UNKNOWN";
   const time = getNow();
@@ -33,7 +35,10 @@ export const parseDanmuEvent = (
       id,
       type: "danmu",
       time,
-      sender: typeof senderMeta[1] === "string" ? senderMeta[1] : "匿名",
+      sender:
+        typeof senderMeta[1] === "string"
+          ? senderMeta[1]
+          : t(locale, "ui.danmu.sender.anonymous"),
       content: typeof info[1] === "string" ? info[1] : "",
     };
   }
@@ -44,10 +49,17 @@ export const parseDanmuEvent = (
       id,
       type: "gift",
       time,
-      sender: typeof data.uname === "string" ? data.uname : "送礼用户",
-      content: `赠送了 ${
-        typeof data.giftName === "string" ? data.giftName : "礼物"
-      } x ${typeof data.num === "number" ? data.num : 1}`,
+      sender:
+        typeof data.uname === "string"
+          ? data.uname
+          : t(locale, "ui.danmu.sender.gift_user"),
+      content: tf(locale, "ui.danmu.content.gift", {
+        gift:
+          typeof data.giftName === "string"
+            ? data.giftName
+            : t(locale, "ui.danmu.content.gift_default"),
+        num: typeof data.num === "number" ? data.num : 1,
+      }),
     };
   }
 
@@ -57,10 +69,16 @@ export const parseDanmuEvent = (
       id,
       type: "guard",
       time,
-      sender: typeof data.username === "string" ? data.username : "购航海用户",
-      content: `开通了 ${
-        typeof data.gift_name === "string" ? data.gift_name : "大航海"
-      }`,
+      sender:
+        typeof data.username === "string"
+          ? data.username
+          : t(locale, "ui.danmu.sender.guard_user"),
+      content: tf(locale, "ui.danmu.content.guard", {
+        guard:
+          typeof data.gift_name === "string"
+            ? data.gift_name
+            : t(locale, "ui.danmu.content.guard_default"),
+      }),
     };
   }
 

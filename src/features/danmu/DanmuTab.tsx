@@ -1,7 +1,10 @@
 import { MessageSquare, Send, Trash2, Radio, Gift, Shield, Terminal } from "lucide-react";
 import type { DanmuMsg } from "../../types/studio";
+import type { LocaleSetting } from "../../utils/i18n";
+import { t, tf } from "../../utils/i18n";
 
 type DanmuTabProps = {
+  locale: LocaleSetting;
   danmuEndRef: React.RefObject<HTMLDivElement | null>;
   danmuListening: boolean;
   danmuText: string;
@@ -14,6 +17,7 @@ type DanmuTabProps = {
 };
 
 export function DanmuTab({
+  locale,
   danmuEndRef,
   danmuListening,
   danmuText,
@@ -51,7 +55,7 @@ export function DanmuTab({
                   }`}
                 />
                 <span className="text-xs font-bold text-gray-200">
-                  {danmuListening ? "弹幕监听运行中" : "监听已停止"}
+                  {danmuListening ? t(locale, "ui.danmu.status.on") : t(locale, "ui.danmu.status.off")}
                 </span>
               </div>
             </div>
@@ -66,7 +70,7 @@ export function DanmuTab({
                     : "btn-primary text-white"
                 }`}
               >
-                启动监听
+                {t(locale, "ui.danmu.start")}
               </button>
               <button
                 onClick={() => void onStopDanmu()}
@@ -77,7 +81,7 @@ export function DanmuTab({
                     : "border-rose-500/20 bg-rose-500/8 text-rose-400 hover:bg-rose-500/15"
                 }`}
               >
-                停止监听
+                {t(locale, "ui.danmu.stop")}
               </button>
             </div>
           </div>
@@ -93,7 +97,7 @@ export function DanmuTab({
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-gray-500">
-              在此直接输入弹幕内容并回车，将以当前主播账号身份实时发送到直播间弹幕姬。
+              {t(locale, "ui.danmu.fast_desc")}
             </p>
           </div>
 
@@ -104,7 +108,7 @@ export function DanmuTab({
             <textarea
               value={danmuText}
               onChange={(event) => onChangeDanmuText(event.target.value)}
-              placeholder="发送一条弹幕互动一下..."
+              placeholder={t(locale, "ui.danmu.placeholder")}
               rows={4}
               className="selectable-text w-full resize-none rounded-2xl border border-white/8 bg-[#090c14] p-4 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-[#0c0f1a] focus:outline-none hover:border-white/12"
               onKeyDown={(event) => {
@@ -125,7 +129,7 @@ export function DanmuTab({
               }`}
             >
               <Send className="mr-2 h-3.5 w-3.5" />
-              发射弹幕
+              {t(locale, "ui.danmu.send")}
             </button>
           </form>
         </div>
@@ -137,17 +141,17 @@ export function DanmuTab({
           <div className="flex items-center space-x-2">
             <MessageSquare className="h-4.5 w-4.5 text-bili-blue" />
             <span className="text-xs font-extrabold tracking-widest text-white uppercase">
-              实时互动流
+              {t(locale, "ui.danmu.feed_title")}
             </span>
             <span className="rounded-full bg-bili-blue/10 px-2.5 py-0.5 text-[9px] font-bold text-bili-blue font-mono border border-bili-blue/20">
-              已收: {danmus.length}
+              {tf(locale, "ui.danmu.feed_count", { count: danmus.length })}
             </span>
           </div>
           
           <button
             onClick={onClearDanmus}
             className="rounded-xl border border-transparent p-2 text-gray-500 transition-all hover:border-white/8 hover:bg-white/5 hover:text-white"
-            title="清空互动墙"
+            title={t(locale, "ui.danmu.clear_wall")}
           >
             <Trash2 className="h-4.5 w-4.5" />
           </button>
@@ -162,13 +166,13 @@ export function DanmuTab({
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/5 bg-white/2 text-gray-700 animate-pulse">
                 <Terminal className="h-6 w-6" />
               </div>
-              <p className="text-xs text-gray-500 font-bold">等待弹幕流信号接入...</p>
+              <p className="text-xs text-gray-500 font-bold">{t(locale, "ui.danmu.empty.title")}</p>
               <p className="mt-1.5 text-[10px] text-gray-600 max-w-xs leading-relaxed">
-                请确保左侧监听已开启，并且在直播间中有观众发送弹幕、送礼或投喂。
+                {t(locale, "ui.danmu.empty.desc")}
               </p>
             </div>
           ) : (
-            danmus.map((msg) => <DanmuCard key={msg.id} message={msg} />)
+            danmus.map((msg) => <DanmuCard key={msg.id} message={msg} locale={locale} />)
           )}
         </div>
       </div>
@@ -176,7 +180,7 @@ export function DanmuTab({
   );
 }
 
-function DanmuCard({ message }: { message: DanmuMsg }) {
+function DanmuCard({ message, locale }: { message: DanmuMsg; locale: LocaleSetting }) {
   const typeStyles = {
     danmu: {
       card: "bg-white/3 border border-white/5 text-gray-100 hover:bg-white/5 hover:border-white/8",
@@ -189,7 +193,7 @@ function DanmuCard({ message }: { message: DanmuMsg }) {
       badge: (
         <span className="flex items-center rounded bg-bili-pink/15 border border-bili-pink/25 px-1.5 py-0.5 text-[8px] font-black uppercase text-bili-pink tracking-wider">
           <Gift className="mr-0.5 h-2.5 w-2.5" />
-          礼物
+          {t(locale, "ui.danmu.badge.gift")}
         </span>
       )
     },
@@ -199,7 +203,7 @@ function DanmuCard({ message }: { message: DanmuMsg }) {
       badge: (
         <span className="flex items-center rounded bg-[#8b5cf6]/15 border border-[#8b5cf6]/25 px-1.5 py-0.5 text-[8px] font-black uppercase text-violet-400 tracking-wider">
           <Shield className="mr-0.5 h-2.5 w-2.5" />
-          航海
+          {t(locale, "ui.danmu.badge.guard")}
         </span>
       )
     },

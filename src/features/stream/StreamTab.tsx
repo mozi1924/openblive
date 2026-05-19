@@ -21,8 +21,11 @@ import type {
   StreamEndpoint,
   StreamInfo,
 } from "../../types/studio";
+import type { LocaleSetting } from "../../utils/i18n";
+import { t, tf } from "../../utils/i18n";
 
 type StreamTabProps = {
+  locale: LocaleSetting;
   child: string;
   children: string[];
   copiedKey: string | null;
@@ -95,6 +98,7 @@ function SectionBadge({
 }
 
 export function StreamTab({
+  locale,
   child,
   children,
   copiedKey,
@@ -136,13 +140,17 @@ export function StreamTab({
   const liveStatus = session?.live_status ?? (session?.is_live ? 1 : 0);
   const isLive = liveStatus === 1;
   const isRoundPlay = liveStatus === 2;
-  const statusLabel = isLive ? "直播中" : isRoundPlay ? "轮播中" : "未开播";
+  const statusLabel = isLive
+    ? t(locale, "ui.stream.status.live")
+    : isRoundPlay
+      ? t(locale, "ui.stream.status.round")
+      : t(locale, "ui.stream.status.off");
   
   const statusHint = isLive
-    ? "推流已建立，标题、分区和标签调整会直接同步到当前直播间。"
+    ? t(locale, "ui.stream.status.hint.live")
     : isRoundPlay
-      ? "当前仍在轮播，正式开播后会接管轮播状态并切换到直播中。"
-      : "开始直播后会拉取推流参数，并按当前设置执行本地联动。";
+      ? t(locale, "ui.stream.status.hint.round")
+      : t(locale, "ui.stream.status.hint.off");
 
   const statusColorPill = isLive
     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
@@ -174,20 +182,20 @@ export function StreamTab({
   const linkageTitle = activeLinkageMode === "obs_ws"
     ? "OBS WebSocket"
     : activeLinkageMode === "command"
-      ? "命令联动"
-      : "未配置联动";
+      ? t(locale, "ui.stream.linkage.command")
+      : t(locale, "ui.stream.linkage.none");
 
   const linkageStateText = activeLinkageMode === "obs_ws"
     ? obsStatus?.connected
-      ? "已连接"
-      : "连接断开"
+      ? t(locale, "ui.stream.linkage.state.connected")
+      : t(locale, "ui.stream.linkage.state.disconnected")
     : activeLinkageMode === "command"
       ? commandStatus?.start_configured
-        ? "已部署"
+        ? t(locale, "ui.stream.linkage.state.deployed")
         : commandStatus?.stop_configured
-          ? "仅配置停播命令"
-          : "未配置命令"
-      : "待配置";
+          ? t(locale, "ui.stream.linkage.state.stop_only")
+          : t(locale, "ui.stream.linkage.state.not_configured")
+      : t(locale, "ui.stream.linkage.state.pending");
 
   const linkageStateClass = activeLinkageMode === "obs_ws"
     ? obsStatus?.connected
@@ -199,12 +207,12 @@ export function StreamTab({
         : "text-amber-400 border-amber-500/20 bg-amber-500/10"
       : "text-gray-400 border-white/8 bg-white/4";
   const linkageHint = activeLinkageMode === "obs_ws"
-    ? "通过 WebSocket 与 OBS Studio 保持联动。"
+    ? t(locale, "ui.stream.linkage.hint.obs")
     : activeLinkageMode === "command"
-      ? "按配置的本地命令执行开播和停播动作。"
-      : "当前仅控制 B 站直播间信息，不触发本地设备。";
+      ? t(locale, "ui.stream.linkage.hint.command")
+      : t(locale, "ui.stream.linkage.hint.none");
   const titleAuditDetail = profileState.title.message && sectionStatus.title.tone !== "green"
-    ? `上次提交：${profileState.title.submitted || "未记录"}`
+    ? tf(locale, "ui.stream.last_submit", { value: profileState.title.submitted || t(locale, "ui.stream.last_submit.none") })
     : "";
 
   return (
@@ -225,7 +233,7 @@ export function StreamTab({
               className={`${actionButtonClass} shrink-0 border border-white/8 bg-white/4 px-4 text-gray-300 active:scale-95 hover:border-bili-blue/30 hover:bg-white/8 hover:text-white`}
             >
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              同步B站设置
+              {t(locale, "ui.stream.sync_profile")}
             </button>
           </div>
 
@@ -234,7 +242,7 @@ export function StreamTab({
             <form onSubmit={(event) => void onSubmitTitle(event)} className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
-                  直播间标题
+                  {t(locale, "ui.stream.title.label")}
                 </label>
                 <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
                   <span className={`h-2 w-2 rounded-full ${
@@ -252,14 +260,14 @@ export function StreamTab({
                   type="text"
                   value={title}
                   onChange={(event) => onChangeTitle(event.target.value)}
-                  placeholder="给您的直播间起一个炫酷的标题吧"
+                  placeholder={t(locale, "ui.stream.title.placeholder")}
                   className="flex-1 rounded-xl border border-white/8 bg-white/3 px-4 py-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/5 focus:outline-none hover:border-white/15"
                 />
                 <button
                   type="submit"
                   className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-5 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
                 >
-                  更新
+                  {t(locale, "ui.stream.title.update")}
                 </button>
               </div>
               {titleAuditDetail && (
@@ -275,7 +283,7 @@ export function StreamTab({
             <form onSubmit={(event) => void onSubmitArea(event)} className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
-                  开播分区设置
+                  {t(locale, "ui.stream.area.title")}
                 </label>
                 <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
                   <span className={`h-2 w-2 rounded-full ${
@@ -290,7 +298,7 @@ export function StreamTab({
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-[9px] font-bold text-gray-500">主分区</span>
+                  <span className="text-[9px] font-bold text-gray-500">{t(locale, "ui.stream.area.parent")}</span>
                   <div className="relative">
                     <select
                       value={parent}
@@ -307,7 +315,7 @@ export function StreamTab({
                   </div>
                 </div>
                 <div className="flex flex-col space-y-1">
-                  <span className="text-[9px] font-bold text-gray-500">子分区</span>
+                  <span className="text-[9px] font-bold text-gray-500">{t(locale, "ui.stream.area.child")}</span>
                   <div className="relative">
                     <select
                       value={child}
@@ -345,7 +353,7 @@ export function StreamTab({
                   type="submit"
                   className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-6 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
                 >
-                  保存分区
+                  {t(locale, "ui.stream.area.save")}
                 </button>
               </div>
             </form>
@@ -356,7 +364,7 @@ export function StreamTab({
             <form onSubmit={(event) => void onSubmitTags(event)} className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
-                  直播间标签
+                  {t(locale, "ui.stream.tags.title")}
                 </label>
                 <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
                   <span className={`h-2 w-2 rounded-full ${
@@ -374,7 +382,7 @@ export function StreamTab({
               <div className="min-h-12 rounded-xl border border-white/5 bg-white/2.5 p-2.5">
                 {tags.length === 0 ? (
                   <p className="px-1.5 py-1 text-xs text-gray-500">
-                    暂无标签，可在下方输入添加
+                    {t(locale, "ui.stream.tags.empty")}
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -388,7 +396,7 @@ export function StreamTab({
                           type="button"
                           onClick={() => onRemoveTag(tag)}
                           className="ml-1.5 rounded p-0.5 text-bili-blue/60 transition-colors hover:bg-bili-blue/25 hover:text-bili-blue"
-                          title="删除"
+                          title={t(locale, "ui.stream.tags.delete")}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -410,7 +418,7 @@ export function StreamTab({
                       onAddTag();
                     }
                   }}
-                  placeholder="标签名，支持逗号批量输入"
+                  placeholder={t(locale, "ui.stream.tags.placeholder")}
                   className="flex-1 rounded-xl border border-white/8 bg-white/3 px-4 py-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/5 focus:outline-none"
                 />
                 <button
@@ -424,7 +432,7 @@ export function StreamTab({
                   type="submit"
                   className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-5 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
                 >
-                  保存标签
+                  {t(locale, "ui.stream.tags.save")}
                 </button>
               </div>
             </form>
@@ -442,7 +450,7 @@ export function StreamTab({
                 </span>
               </div>
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
-                推流密钥已就绪
+                {t(locale, "ui.stream.ready")}
               </span>
             </div>
 
@@ -453,8 +461,8 @@ export function StreamTab({
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/2 px-3.5 py-2.5">
                   <div className="flex items-center space-x-2 truncate">
                     <Server className="h-3.5 w-3.5 text-gray-500 shrink-0" />
-                    <span className="text-gray-400 shrink-0">推流地址:</span>
-                    <span className="truncate text-gray-300 select-text">{primaryEndpoint?.addr || "未获取"}</span>
+                    <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.addr")}</span>
+                    <span className="truncate text-gray-300 select-text">{primaryEndpoint?.addr || t(locale, "ui.stream.unavailable")}</span>
                   </div>
                   <button
                     onClick={() => void onCopyToClipboard(primaryEndpoint?.addr || "", "server")}
@@ -466,7 +474,7 @@ export function StreamTab({
                     ) : (
                       <Copy className="mr-1 h-3 w-3" />
                     )}
-                    复制
+                    {t(locale, "ui.stream.copy")}
                   </button>
                 </div>
 
@@ -474,9 +482,9 @@ export function StreamTab({
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/2 px-3.5 py-2.5">
                   <div className="flex items-center space-x-2 truncate">
                     <Key className="h-3.5 w-3.5 text-gray-500 shrink-0" />
-                    <span className="text-gray-400 shrink-0">串流密钥:</span>
+                    <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.key")}</span>
                     <span className="truncate text-gray-300 select-text">
-                      {primaryEndpoint?.stream_key || primaryEndpoint?.code ? "••••••••••••••••••••••••" : "未获取"}
+                      {primaryEndpoint?.stream_key || primaryEndpoint?.code ? "••••••••••••••••••••••••" : t(locale, "ui.stream.unavailable")}
                     </span>
                   </div>
                   <button
@@ -494,7 +502,7 @@ export function StreamTab({
                     ) : (
                       <Copy className="mr-1 h-3 w-3" />
                     )}
-                    复制
+                    {t(locale, "ui.stream.copy")}
                   </button>
                 </div>
 
@@ -503,16 +511,16 @@ export function StreamTab({
               {primaryEndpoint && (
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 px-1 text-[10px] text-gray-500 font-mono">
                   <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>协议:</span>
+                    <span>{t(locale, "ui.stream.protocol")}</span>
                     <span className="text-gray-300 uppercase">{(primaryEndpoint.protocol || "rtmp")}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>线路商:</span>
+                    <span>{t(locale, "ui.stream.provider")}</span>
                     <span className="text-gray-300">{primaryEndpoint.provider || "Bilibili"}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>分流规则:</span>
-                    <span className="text-gray-300">{primaryEndpoint.schedule || "默认"}</span>
+                    <span>{t(locale, "ui.stream.schedule")}</span>
+                    <span className="text-gray-300">{primaryEndpoint.schedule || t(locale, "ui.stream.schedule.default")}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/5 pb-1">
                     <span>Live Key:</span>
@@ -550,7 +558,7 @@ export function StreamTab({
                 </div>
               </div>
               <h4 className="mt-5 text-sm font-bold text-white tracking-wide">
-                B站开播状态: {statusLabel}
+                {tf(locale, "ui.stream.live_status", { status: statusLabel })}
               </h4>
               <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-500">
                 {statusHint}
@@ -559,20 +567,24 @@ export function StreamTab({
                 <div className="mt-3 w-full max-w-sm rounded-2xl border border-white/8 bg-white/3 p-3 text-left">
                   {hasUnsavedChanges ? (
                     <div className="mb-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300">
-                      <p>检测到未保存信息：{unsavedItems.join("、")}。请先保存后再开播。</p>
+                      <p>{tf(locale, "ui.stream.unsaved.detected", { items: unsavedItems.join("、") })}</p>
                       <p className="mt-1 text-amber-200/90">
-                        标题：{dirtyStatus.title ? "已修改" : "未修改"} · 分区：{dirtyStatus.area ? "已修改" : "未修改"} · 标签：{dirtyStatus.tags ? "已修改" : "未修改"}
+                        {tf(locale, "ui.stream.unsaved.detail", {
+                          title: dirtyStatus.title ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
+                          area: dirtyStatus.area ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
+                          tags: dirtyStatus.tags ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
+                        })}
                       </p>
                     </div>
                   ) : (
                     <p className="mb-3 text-[10px] leading-relaxed text-gray-400">
-                      当前没有未保存内容，但部分项目仍在等待审核、确认或需要处理。
+                      {t(locale, "ui.stream.pending_desc")}
                     </p>
                   )}
                   <div className="space-y-2">
-                    <SectionBadge label="标题" state={sectionStatus.title} />
-                    <SectionBadge label="分区" state={sectionStatus.area} />
-                    <SectionBadge label="标签" state={sectionStatus.tags} />
+                    <SectionBadge label={t(locale, "ui.stream.section.title")} state={sectionStatus.title} />
+                    <SectionBadge label={t(locale, "ui.stream.section.area")} state={sectionStatus.area} />
+                    <SectionBadge label={t(locale, "ui.stream.section.tags")} state={sectionStatus.tags} />
                   </div>
                 </div>
               )}
@@ -593,15 +605,15 @@ export function StreamTab({
 
               {!hasActiveLinkage ? (
                 <div className="rounded-xl border border-dashed border-white/10 bg-white/2 p-4">
-                  <p className="text-sm font-bold text-gray-200">未配置联动</p>
+                  <p className="text-sm font-bold text-gray-200">{t(locale, "ui.stream.no_linkage")}</p>
                   <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
-                    当前不会触发任何本地串流或设备动作。
+                    {t(locale, "ui.stream.no_linkage.desc")}
                   </p>
                   <button
                     onClick={() => onSelectTab("settings")}
                     className="mt-3 inline-flex items-center text-[11px] font-bold text-bili-blue hover:underline"
                   >
-                    前往设置配置联动
+                    {t(locale, "ui.stream.no_linkage.goto")}
                     <ExternalLink className="ml-1 h-3 w-3" />
                   </button>
                 </div>
@@ -611,7 +623,7 @@ export function StreamTab({
                     <div>
                       <span className="text-[11px] font-bold text-gray-300">{linkageTitle}</span>
                       <p className="mt-1 text-[10px] font-sans text-gray-500">
-                        {activeLinkageMode === "obs_ws" ? "当前开停播将同步到 OBS。" : "当前开停播将执行本地命令。"}
+                        {activeLinkageMode === "obs_ws" ? t(locale, "ui.stream.linkage.current.obs") : t(locale, "ui.stream.linkage.current.command")}
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[9px] font-extrabold ${linkageStateClass}`}>
@@ -622,7 +634,7 @@ export function StreamTab({
                   {activeLinkageMode === "obs_ws" && (
                     <div className="space-y-1">
                       <p className="truncate text-[10px] text-gray-500">
-                        地址: {obsStatus?.url || "ws://127.0.0.1:4455"}
+                        {tf(locale, "ui.stream.linkage.address", { value: obsStatus?.url || "ws://127.0.0.1:4455" })}
                       </p>
                       {obsStatus?.last_error && (
                         <p className="truncate text-[9px] text-rose-400 leading-tight">
@@ -640,14 +652,22 @@ export function StreamTab({
                             ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                             : "border-white/8 bg-white/4 text-gray-500"
                         }`}>
-                          开播命令{commandStatus?.start_configured ? "已配置" : "未配置"}
+                          {tf(locale, "ui.stream.command.start", {
+                            status: commandStatus?.start_configured
+                              ? t(locale, "ui.stream.command.configured")
+                              : t(locale, "ui.stream.command.unconfigured"),
+                          })}
                         </span>
                         <span className={`rounded-md border px-2 py-1 text-[9px] font-bold ${
                           commandStatus?.stop_configured
                             ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                             : "border-white/8 bg-white/4 text-gray-500"
                         }`}>
-                          停播命令{commandStatus?.stop_configured ? "已配置" : "未配置"}
+                          {tf(locale, "ui.stream.command.stop", {
+                            status: commandStatus?.stop_configured
+                              ? t(locale, "ui.stream.command.configured")
+                              : t(locale, "ui.stream.command.unconfigured"),
+                          })}
                         </span>
                       </div>
 
@@ -675,7 +695,7 @@ export function StreamTab({
               }`}
             >
               <Radio className="mr-2 h-4 w-4 shrink-0" />
-              开启直播并同步联动
+              {t(locale, "ui.stream.start")}
             </button>
             
             <button
@@ -688,7 +708,7 @@ export function StreamTab({
               }`}
             >
               <Trash2 className="mr-2 h-4 w-4 shrink-0" />
-              停止直播 / 联动设备
+              {t(locale, "ui.stream.stop")}
             </button>
           </div>
         </div>

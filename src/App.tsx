@@ -42,6 +42,7 @@ function App() {
         <div className="flex-1 overflow-y-auto p-8">
           {state.activeTab === "account" && (
             <AccountTab
+              locale={locale}
               accounts={state.accounts}
               currentUser={state.currentUser}
               qrcode={state.qrcode}
@@ -55,6 +56,7 @@ function App() {
 
           {state.activeTab === "stream" && (
             <StreamTab
+              locale={locale}
               child={state.child}
               children={state.children}
               copiedKey={state.copiedKey}
@@ -93,6 +95,7 @@ function App() {
 
           {state.activeTab === "danmu" && (
             <DanmuTab
+              locale={locale}
               danmuEndRef={refs.danmuEndRef}
               danmuListening={state.danmuListening}
               danmuText={state.danmuText}
@@ -118,6 +121,7 @@ function App() {
 
         {state.showLogs && (
           <LogDrawer
+            locale={locale}
             logs={state.logs}
             onClearLogs={actions.clearLogs}
             onClose={actions.closeLogs}
@@ -127,6 +131,7 @@ function App() {
 
       {state.showFaceModal && (
         <FaceAuthModal
+          locale={locale}
           faceQr={state.faceQr}
           faceQrContent={state.faceQrContent}
           onClose={actions.closeFaceModal}

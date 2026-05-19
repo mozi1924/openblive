@@ -143,7 +143,7 @@ export function Sidebar({
                   target="_blank"
                   rel="noreferrer"
                   className="no-drag text-gray-500 transition-colors hover:text-bili-blue"
-                  title="前往网页直播间"
+                  title="Open room in browser"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>

@@ -11,7 +11,7 @@ import type {
   User,
 } from "../types/studio";
 import { createSelfDanmuMessage, parseDanmuEvent } from "../utils/danmu";
-import { resolveBackendMessage, t, type LocaleSetting } from "../utils/i18n";
+import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { resolveQrPayload } from "../utils/qrcode";
 import { useWindowDrag } from "./useWindowDrag";
 import {
@@ -39,7 +39,7 @@ export function useStudioController() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<User[]>([]);
 
-  const [title, setTitle] = useState("测试开播");
+  const [title, setTitle] = useState(t("auto", "ui.ctrl.default_title"));
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [partitions, setPartitions] = useState<Record<string, string[]>>({});
@@ -114,16 +114,16 @@ export function useStudioController() {
     if (dirtyStatus.tags) {
       items.push(unsavedLabelMap.tags);
     }
-    return items;
-  }, [dirtyStatus]);
+    return items.map((key) => t(localeSetting, key));
+  }, [dirtyStatus, localeSetting]);
 
   const sectionStatus = useMemo(
     () => ({
-      title: buildSectionStatus("title", dirtyStatus.title, profileState),
-      area: buildSectionStatus("area", dirtyStatus.area, profileState),
-      tags: buildSectionStatus("tags", dirtyStatus.tags, profileState),
+      title: buildSectionStatus(localeSetting, "title", dirtyStatus.title, profileState),
+      area: buildSectionStatus(localeSetting, "area", dirtyStatus.area, profileState),
+      tags: buildSectionStatus(localeSetting, "tags", dirtyStatus.tags, profileState),
     }),
-    [dirtyStatus, profileState],
+    [dirtyStatus, localeSetting, profileState],
   );
 
   const hasAttentionStatus = useMemo(
@@ -269,11 +269,13 @@ export function useStudioController() {
         return;
       }
 
-      const text = `以下账号登录已失效，请重新扫码登录：${firstNotified.join(", ")}`;
+      const text = tf(localeSetting, "ui.ctrl.alert.expired_accounts", {
+        uids: firstNotified.join(", "),
+      });
       append(text);
       window.alert(text);
     },
-    [append],
+    [append, localeSetting],
   );
 
   const refreshSession = useCallback(async () => {
@@ -298,7 +300,7 @@ export function useStudioController() {
       titleDirtyRef.current = false;
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
-      setTitle("测试开播");
+      setTitle(t(localeSetting, "ui.ctrl.default_title"));
       setParent("");
       setChild("");
       setTags([]);
@@ -324,7 +326,7 @@ export function useStudioController() {
     }
     loadRecentAreasForUid(user.uid);
     await syncTrayMenu();
-  }, [applyProfileState, applyUserDraftValues, loadRecentAreasForUid, syncTrayMenu]);
+  }, [applyProfileState, applyUserDraftValues, loadRecentAreasForUid, localeSetting, syncTrayMenu]);
 
   const loadAccounts = useCallback(async () => {
     const res = await studioApi.getAccountList();
@@ -350,15 +352,19 @@ export function useStudioController() {
         setCurrentUser(res.data);
         applyProfileState(res.data.live_profile_state);
         applyUserDraftValues(res.data);
-        append("用户信息已刷新");
+        append(t(localeSetting, "ui.ctrl.user_refreshed"));
         await loadAccounts();
         await studioApi.syncLiveRoomProfile().catch(() => undefined);
       }
     } catch (error) {
-      append(`刷新用户信息失败: ${resolveBackendMessage(String(error))}`);
+      append(
+        tf(localeSetting, "ui.ctrl.user_refresh_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
       await loadAccounts();
     }
-  }, [append, applyProfileState, applyUserDraftValues, loadAccounts]);
+  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, localeSetting]);
 
   const syncLiveRoomProfile = useCallback(async (forceAllDrafts = false) => {
     try {
@@ -411,13 +417,13 @@ export function useStudioController() {
 
       append(
         res.data.from_cache
-          ? "直播间配置同步失败，已回退本地缓存"
-          : "已同步直播间标题 / 分区 / 标签",
+          ? t(localeSetting, "ui.ctrl.sync_profile_failed_rollback")
+          : t(localeSetting, "ui.ctrl.sync_profile_ok"),
       );
     } catch {
-      append("直播间配置同步失败，已保留本地缓存");
+      append(t(localeSetting, "ui.ctrl.sync_profile_failed_keep"));
     }
-  }, [append, applyProfileState, applyUserDraftValues]);
+  }, [append, applyProfileState, applyUserDraftValues, localeSetting]);
 
   const loadQrcode = useCallback(async () => {
     if (qrcodeRefreshBusyRef.current) {
@@ -436,22 +442,22 @@ export function useStudioController() {
           margin: 2,
         });
         if (!qrPayload.imageSrc) {
-          append("登录二维码渲染失败，请重试");
+          append(t(localeSetting, "ui.ctrl.qr_render_failed"));
           return;
         }
         setQrcode(qrPayload.imageSrc);
         setQrcodeKey(res.data.qrcode_key || "");
-        append("二维码已生成，请使用 Bilibili App 扫码");
+        append(t(localeSetting, "ui.ctrl.qr_ready"));
         return;
       }
 
-      append(`获取二维码失败: ${resolveBackendMessage(res.msg || "接口返回异常")}`);
+      append(tf(localeSetting, "ui.ctrl.qr_fetch_failed", { msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.api_error"), localeSetting) }));
     } catch (error) {
-      append(`获取二维码失败: ${resolveBackendMessage(String(error))}`);
+      append(tf(localeSetting, "ui.ctrl.qr_fetch_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
     } finally {
       qrcodeRefreshBusyRef.current = false;
     }
-  }, [append]);
+  }, [append, localeSetting]);
 
   const pollLogin = useCallback(async (silent = false) => {
     if (!qrcodeKey) {
@@ -476,7 +482,7 @@ export function useStudioController() {
           forceArea: true,
           forceTags: true,
         });
-        append(`登录成功：${res.data.uname || "用户"}`);
+        append(tf(localeSetting, "ui.ctrl.login_success", { name: res.data.uname || t(localeSetting, "ui.ctrl.user_fallback") }));
         await refreshSession();
         await loadAccounts();
         await syncLiveRoomProfile(true);
@@ -491,19 +497,19 @@ export function useStudioController() {
 
       if (code === 86038) {
         if (!silent || statusChanged) {
-          append("二维码已失效，正在自动刷新");
+          append(t(localeSetting, "ui.ctrl.qr_expired_refreshing"));
         }
         await loadQrcode();
         return;
       }
 
       if (!silent || statusChanged) {
-        append(`登录状态: ${resolveBackendMessage(res.msg || "等待确认")} (${code})`);
+        append(tf(localeSetting, "ui.ctrl.login_status", { msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.login_pending"), localeSetting), code }));
       }
     } finally {
       loginPollBusyRef.current = false;
     }
-  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile]);
+  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile, localeSetting]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
@@ -521,29 +527,29 @@ export function useStudioController() {
             forceArea: true,
             forceTags: true,
           });
-          append(`已切换账号：${res.data.uname}`);
+          append(tf(localeSetting, "ui.ctrl.switched_account", { name: res.data.uname }));
           await refreshSession();
           await loadAccounts();
           await syncLiveRoomProfile(true);
         }
       } catch (error) {
-        append(`切换账号失败: ${resolveBackendMessage(String(error))}`);
+        append(tf(localeSetting, "ui.ctrl.switch_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
       }
     },
-    [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile],
+    [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile, localeSetting],
   );
 
   const logout = useCallback(
     async (uid: string) => {
       const res = await studioApi.logout(uid);
       if (res.code === 0) {
-        append("账号已退出");
+        append(t(localeSetting, "ui.ctrl.logged_out"));
         await loadAccounts();
         await loadSavedUser();
         await refreshSession();
       }
     },
-    [append, loadAccounts, loadSavedUser, refreshSession],
+    [append, loadAccounts, loadSavedUser, refreshSession, localeSetting],
   );
 
   const loadPartitions = useCallback(async () => {
@@ -571,8 +577,8 @@ export function useStudioController() {
         }
       }
     }
-    append("分区已同步");
-  }, [append]);
+    append(t(localeSetting, "ui.ctrl.partitions_synced"));
+  }, [append, localeSetting]);
 
   const submitArea = useCallback(
     async (event: FormEvent) => {
@@ -592,7 +598,7 @@ export function useStudioController() {
           prev ? { ...prev, last_area_name: [parent, child], live_profile_state: res.data?.profile_state } : prev,
         );
         areaDirtyRef.current = false;
-        append(`分区设置成功: ${parent} / ${child}`);
+        append(tf(localeSetting, "ui.ctrl.area_set_ok", { parent, child }));
         return;
       }
       setProfileState((prev) => ({
@@ -600,12 +606,12 @@ export function useStudioController() {
         area: {
           ...prev.area,
           transport: "failed",
-          message: resolveBackendMessage(res.msg || "分区设置失败"),
+          message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.area_set_failed_default"), localeSetting),
         },
       }));
-      append(`分区设置失败: ${resolveBackendMessage(res.msg)}`);
+      append(tf(localeSetting, "ui.ctrl.area_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     },
-    [append, applyProfileState, child, parent],
+    [append, applyProfileState, child, parent, localeSetting],
   );
 
   const submitTitle = useCallback(
@@ -625,7 +631,7 @@ export function useStudioController() {
         setCurrentUser((prev) =>
           prev ? { ...prev, last_title: title, live_profile_state: res.data?.profile_state } : prev,
         );
-        append("标题更新成功");
+        append(t(localeSetting, "ui.ctrl.title_set_ok"));
         return;
       }
       setProfileState((prev) => ({
@@ -633,12 +639,12 @@ export function useStudioController() {
         title: {
           ...prev.title,
           transport: "failed",
-          message: resolveBackendMessage(res.msg || "标题更新失败"),
+          message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.title_set_failed_default"), localeSetting),
         },
       }));
-      append(`标题更新失败: ${resolveBackendMessage(res.msg)}`);
+      append(tf(localeSetting, "ui.ctrl.title_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     },
-    [append, applyProfileState, title],
+    [append, applyProfileState, title, localeSetting],
   );
 
   const submitTags = useCallback(
@@ -664,9 +670,7 @@ export function useStudioController() {
         setCurrentUser((prev) =>
           prev ? { ...prev, last_tags: nextTags, live_profile_state: res.data?.profile_state } : prev,
         );
-        append(
-          `标签更新成功 (+${res.data.added.length} / -${res.data.removed.length})`,
-        );
+        append(tf(localeSetting, "ui.ctrl.tags_set_ok", { added: res.data.added.length, removed: res.data.removed.length }));
         return;
       }
       setProfileState((prev) => ({
@@ -674,12 +678,12 @@ export function useStudioController() {
         tags: {
           ...prev.tags,
           transport: "failed",
-          message: resolveBackendMessage(res.msg || "标签更新失败"),
+          message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.tags_set_failed_default"), localeSetting),
         },
       }));
-      append(`标签更新失败: ${resolveBackendMessage(res.msg)}`);
+      append(tf(localeSetting, "ui.ctrl.tags_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     },
-    [append, applyProfileState, tags],
+    [append, applyProfileState, tags, localeSetting],
   );
 
   const addTag = useCallback(() => {
@@ -712,7 +716,7 @@ export function useStudioController() {
 
   const startLive = useCallback(async (source: StartLiveSource = "manual") => {
     if (hasUnsavedChanges) {
-      const warning = `检测到未保存信息：${unsavedItems.join("、")}。请先保存后再开播。`;
+      const warning = tf(localeSetting, "ui.ctrl.unsaved_warning", { items: unsavedItems.join("、") });
       append(warning);
       setActiveTab("stream");
       if (source === "tray") {
@@ -726,7 +730,7 @@ export function useStudioController() {
     if (res.code === 0) {
       setRtmp(res.data || null);
       pushRecentArea(currentUser?.uid || null, { parent, child });
-      append("开播成功，已返回推流信息");
+      append(t(localeSetting, "ui.ctrl.start_live_ok"));
       await refreshSession();
       await loadLinkageStatus();
       return;
@@ -736,7 +740,7 @@ export function useStudioController() {
       setActiveTab("stream");
       if (source === "tray") {
         await studioApi.revealMainWindow().catch((error) => {
-          append(`托盘唤起主界面失败: ${resolveBackendMessage(String(error))}`);
+          append(tf(localeSetting, "ui.ctrl.reveal_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
         });
       }
       const qrPayload = await resolveFaceQrImage(res.qr || "");
@@ -744,19 +748,19 @@ export function useStudioController() {
       setFaceQr(qrPayload.imageSrc);
       setShowFaceModal(true);
       if (!qrPayload.content) {
-        append("需要人脸验证，但接口未返回二维码内容，请稍后重试");
+        append(t(localeSetting, "ui.ctrl.face_qr_missing"));
         return;
       }
       if (!qrPayload.imageSrc) {
-        append("已收到人脸验证二维码内容，但渲染失败，请手动打开链接完成验证");
+        append(t(localeSetting, "ui.ctrl.face_qr_render_failed"));
       }
-      append("需要人脸验证，请扫码后重试开播");
+      append(t(localeSetting, "ui.ctrl.face_required"));
       return;
     }
 
-    append(`开播失败: ${resolveBackendMessage(res.msg)}`);
+    append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     await loadLinkageStatus();
-  }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, parent, pushRecentArea, refreshSession, resolveFaceQrImage, unsavedItems]);
+  }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, parent, pushRecentArea, refreshSession, resolveFaceQrImage, unsavedItems, localeSetting]);
 
   const applyRecentArea = useCallback((nextParent: string, nextChild: string) => {
     if (!nextParent || !nextChild) {
@@ -764,38 +768,42 @@ export function useStudioController() {
     }
     const availableChildren = partitions[nextParent] || [];
     if (!availableChildren.includes(nextChild)) {
-      append(`快速分区已失效: ${nextParent} / ${nextChild}`);
+      append(tf(localeSetting, "ui.ctrl.quick_area_invalid", { parent: nextParent, child: nextChild }));
       return;
     }
     areaDirtyRef.current = true;
     setParent(nextParent);
     setChild(nextChild);
-    append(`已应用快速分区: ${nextParent} / ${nextChild}`);
-  }, [append, partitions]);
+    append(tf(localeSetting, "ui.ctrl.quick_area_applied", { parent: nextParent, child: nextChild }));
+  }, [append, partitions, localeSetting]);
 
   const stopLive = useCallback(async () => {
     const res = await studioApi.stopLive();
-    append(res.code === 0 ? "已停播" : `停播失败: ${resolveBackendMessage(res.msg)}`);
+    append(
+      res.code === 0
+        ? t(localeSetting, "ui.ctrl.stop_live_ok")
+        : tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }),
+    );
     setRtmp(null);
     await refreshSession();
     await loadLinkageStatus();
-  }, [append, loadLinkageStatus, refreshSession]);
+  }, [append, loadLinkageStatus, refreshSession, localeSetting]);
 
   const startDanmu = useCallback(async () => {
     const res = await studioApi.startDanmuMonitor();
     if (res.code === 0) {
       setDanmuListening(true);
-      append("弹幕监听已启动");
+      append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
     } else {
-      append(`弹幕监听失败: ${resolveBackendMessage(res.msg)}`);
+      append(tf(localeSetting, "ui.ctrl.danmu_monitor_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     }
-  }, [append]);
+  }, [append, localeSetting]);
 
   const stopDanmu = useCallback(async () => {
     await studioApi.stopDanmuMonitor();
     setDanmuListening(false);
-    append("弹幕监听已停止");
-  }, [append]);
+    append(t(localeSetting, "ui.ctrl.danmu_monitor_stopped"));
+  }, [append, localeSetting]);
 
   const sendDanmu = useCallback(async () => {
     const text = danmuText.trim();
@@ -805,17 +813,17 @@ export function useStudioController() {
 
     const res = await studioApi.sendDanmu(text);
     if (res.code === 0) {
-      append(`发送弹幕: ${text}`);
+      append(tf(localeSetting, "ui.ctrl.danmu_send", { text }));
       setDanmus((prev) => [
-        createSelfDanmuMessage(text, currentUser?.uname || "我"),
+        createSelfDanmuMessage(text, currentUser?.uname || t(localeSetting, "ui.ctrl.me")),
         ...prev,
       ]);
     } else {
-      append(`发送失败: ${resolveBackendMessage(res.msg)}`);
+      append(tf(localeSetting, "ui.ctrl.send_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     }
 
     setDanmuText("");
-  }, [append, currentUser?.uname, danmuText]);
+  }, [append, currentUser?.uname, danmuText, localeSetting]);
 
   const submitDanmu = useCallback(
     async (event: FormEvent) => {
@@ -832,10 +840,10 @@ export function useStudioController() {
         setCopiedKey(type);
         window.setTimeout(() => setCopiedKey(null), 2000);
       } catch {
-        append("复制失败，您的系统可能不支持剪贴板访问");
+        append(t(localeSetting, "ui.ctrl.copy_failed"));
       }
     },
-    [append],
+    [append, localeSetting],
   );
 
   const changeParent = useCallback(
@@ -915,9 +923,11 @@ export function useStudioController() {
           handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
             append(
-              `启动时 Cookie 刷新部分失败：${res.data.failed
-                .map((msg) => resolveBackendMessage(msg, localeSetting))
-                .join(" | ")}`,
+              tf(localeSetting, "ui.ctrl.cookie_refresh_partial_failed_start", {
+                list: res.data.failed
+                  .map((msg) => resolveBackendMessage(msg, localeSetting))
+                  .join(" | "),
+              }),
             );
           }
           if (res.data.updated > 0) {
@@ -926,7 +936,7 @@ export function useStudioController() {
           }
         })
         .catch(() => {
-          append("启动时 Cookie 自动刷新失败");
+          append(t(localeSetting, "ui.ctrl.cookie_refresh_start_failed"));
         });
     }
 
@@ -941,9 +951,11 @@ export function useStudioController() {
           handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
             append(
-              `Cookie 自动刷新部分失败：${res.data.failed
-                .map((msg) => resolveBackendMessage(msg, localeSetting))
-                .join(" | ")}`,
+              tf(localeSetting, "ui.ctrl.cookie_refresh_partial_failed", {
+                list: res.data.failed
+                  .map((msg) => resolveBackendMessage(msg, localeSetting))
+                  .join(" | "),
+              }),
             );
           }
           if (res.data.updated > 0) {
@@ -952,12 +964,12 @@ export function useStudioController() {
           }
         })
         .catch(() => {
-          append("Cookie 自动刷新失败，将在下个周期重试");
+          append(t(localeSetting, "ui.ctrl.cookie_refresh_failed"));
         });
     }, 15 * 60 * 1000);
 
     return () => window.clearInterval(timer);
-  }, [append, handleExpiredAccounts, loadAccounts, loadSavedUser]);
+  }, [append, handleExpiredAccounts, loadAccounts, loadSavedUser, localeSetting]);
 
   useEffect(() => {
     let active = true;
@@ -967,18 +979,18 @@ export function useStudioController() {
         return;
       }
 
-      const parsed = parseDanmuEvent(payload);
+      const parsed = parseDanmuEvent(payload, localeSetting);
       if (parsed) {
         setDanmus((prev) => [parsed, ...prev]);
       }
-      append(`弹幕事件: ${payload.cmd || "UNKNOWN"}`);
+      append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: payload.cmd || "UNKNOWN" }));
     });
 
     return () => {
       active = false;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [append]);
+  }, [append, localeSetting]);
 
   useEffect(() => {
     let active = true;
@@ -988,11 +1000,11 @@ export function useStudioController() {
         return;
       }
       if (payload.action === "start_live") {
-        append("托盘菜单触发开播");
+        append(t(localeSetting, "ui.ctrl.tray_start"));
         void startLive("tray");
       }
       if (payload.action === "stop_live") {
-        append("托盘菜单触发下播");
+        append(t(localeSetting, "ui.ctrl.tray_stop"));
         void stopLive();
       }
     });
@@ -1001,7 +1013,7 @@ export function useStudioController() {
       active = false;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [append, startLive, stopLive]);
+  }, [append, startLive, stopLive, localeSetting]);
 
   return {
     state: {

@@ -1,5 +1,5 @@
 import type { LiveProfileState, User } from "../../types/studio";
-import { resolveBackendMessage } from "../../utils/i18n";
+import { resolveBackendMessage, t, type LocaleSetting } from "../../utils/i18n";
 
 export const isValidUser = (value: User | null | undefined): value is User =>
   Boolean(value?.uid);
@@ -25,9 +25,9 @@ export const tagsToKey = (values: string[]) => normalizeTags(values).join(",");
 const recentAreasStorageKey = (uid: string) => `openblive.recent_areas.${uid}`;
 
 export const unsavedLabelMap = {
-  title: "标题",
-  area: "分区",
-  tags: "标签",
+  title: "ui.stream.section.title",
+  area: "ui.stream.section.area",
+  tags: "ui.stream.section.tags",
 } as const;
 
 export const defaultProfileState = (): LiveProfileState => ({
@@ -87,54 +87,55 @@ export const normalizeProfileState = (
 };
 
 export const buildSectionStatus = (
+  locale: LocaleSetting,
   section: "title" | "area" | "tags",
   isDirty: boolean,
   profileState: LiveProfileState,
 ): SectionStatus => {
   const state = profileState[section];
   if (isDirty) {
-    return { tone: "yellow", label: "未保存", detail: "当前修改尚未提交" };
+    return { tone: "yellow", label: t(locale, "ui.profile.unsaved"), detail: t(locale, "ui.profile.unsaved.desc") };
   }
   if (state.transport === "failed") {
     return {
       tone: "red",
-      label: "提交失败",
-      detail: resolveBackendMessage(state.message) || "请稍后重试保存",
+      label: t(locale, "ui.profile.failed"),
+      detail: resolveBackendMessage(state.message, locale) || t(locale, "ui.profile.failed.desc"),
     };
   }
   if (state.review === "rejected") {
     return {
       tone: "red",
-      label: "审核未通过",
-      detail: resolveBackendMessage(state.message) || "请修改后重新提交",
+      label: t(locale, "ui.profile.rejected"),
+      detail: resolveBackendMessage(state.message, locale) || t(locale, "ui.profile.rejected.desc"),
     };
   }
   if (state.transport === "conflict") {
     return {
       tone: "red",
-      label: "远端已回退",
+      label: t(locale, "ui.profile.conflict"),
       detail:
-        resolveBackendMessage(state.message) || "远端当前值已不同于最近一次提交",
+        resolveBackendMessage(state.message, locale) || t(locale, "ui.profile.conflict.desc"),
     };
   }
   if (state.transport === "saving") {
-    return { tone: "yellow", label: "保存中", detail: "正在提交到 B 站" };
+    return { tone: "yellow", label: t(locale, "ui.profile.saving"), detail: t(locale, "ui.profile.saving.desc") };
   }
   if (state.review === "pending") {
     return {
       tone: "yellow",
-      label: "审核中",
-      detail: resolveBackendMessage(state.message) || "已提交，等待平台审核",
+      label: t(locale, "ui.profile.pending"),
+      detail: resolveBackendMessage(state.message, locale) || t(locale, "ui.profile.pending.desc"),
     };
   }
   if (state.review === "unknown") {
     return {
       tone: "yellow",
-      label: "待确认",
-      detail: resolveBackendMessage(state.message) || "已提交，等待远端状态确认",
+      label: t(locale, "ui.profile.unknown"),
+      detail: resolveBackendMessage(state.message, locale) || t(locale, "ui.profile.unknown.desc"),
     };
   }
-  return { tone: "green", label: "已同步", detail: "最近一次提交已生效" };
+  return { tone: "green", label: t(locale, "ui.profile.synced"), detail: t(locale, "ui.profile.synced.desc") };
 };
 
 export const loadRecentAreasFromStorage = (uid: string | null): RecentArea[] => {
