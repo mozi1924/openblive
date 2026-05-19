@@ -115,9 +115,16 @@ pub fn toggle_main_window(app: &AppHandle) {
     if window.is_visible().unwrap_or(true) {
         let _ = window.hide();
     } else {
-        let _ = window.show();
-        let _ = window.set_focus();
+        reveal_main_window(app);
     }
+}
+
+pub fn reveal_main_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.show();
+    let _ = window.set_focus();
 }
 
 pub fn setup_tray(app: &mut App) -> tauri::Result<()> {

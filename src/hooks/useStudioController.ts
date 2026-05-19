@@ -1,5 +1,4 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
 import { studioApi } from "../services/studioApi";
 import type {
   ActiveTab,
@@ -11,6 +10,7 @@ import type {
   User,
 } from "../types/studio";
 import { createSelfDanmuMessage, parseDanmuEvent } from "../utils/danmu";
+import { resolveQrPayload } from "../utils/qrcode";
 import { useWindowDrag } from "./useWindowDrag";
 
 const isValidUser = (value: User | null | undefined): value is User =>
@@ -21,6 +21,8 @@ const splitTagInput = (raw: string) =>
     .split(/[,，]/)
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
+
+type StartLiveSource = "manual" | "tray" | "face_retry";
 
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
@@ -46,6 +48,7 @@ export function useStudioController() {
   const [logs, setLogs] = useState<string[]>([]);
 
   const [faceQr, setFaceQr] = useState("");
+  const [faceQrContent, setFaceQrContent] = useState("");
   const [showFaceModal, setShowFaceModal] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
@@ -257,11 +260,15 @@ export function useStudioController() {
     try {
       const res = await studioApi.getLoginQrcode();
       if (res.code === 0 && res.data?.url) {
-        const qrDataUrl = await QRCode.toDataURL(res.data.url, {
+        const qrPayload = await resolveQrPayload(res.data.url, {
           width: 220,
           margin: 2,
         });
-        setQrcode(qrDataUrl);
+        if (!qrPayload.imageSrc) {
+          append("登录二维码渲染失败，请重试");
+          return;
+        }
+        setQrcode(qrPayload.imageSrc);
         setQrcodeKey(res.data.qrcode_key || "");
         append("二维码已生成，请使用 Bilibili App 扫码");
         return;
@@ -427,7 +434,14 @@ export function useStudioController() {
     setTags((prev) => prev.filter((value) => value !== tag));
   }, []);
 
-  const startLive = useCallback(async () => {
+  const resolveFaceQrImage = useCallback(async (qr: string) => {
+    return resolveQrPayload(qr, {
+      width: 220,
+      margin: 2,
+    });
+  }, []);
+
+  const startLive = useCallback(async (source: StartLiveSource = "manual") => {
     const res = await studioApi.startLive();
     if (res.code === 0) {
       setRtmp(res.data || null);
@@ -438,15 +452,30 @@ export function useStudioController() {
     }
 
     if (res.code === 60024 || res.code === 60043) {
-      setFaceQr(res.qr || "");
+      setActiveTab("stream");
+      if (source === "tray") {
+        await studioApi.revealMainWindow().catch((error) => {
+          append(`托盘唤起主界面失败: ${String(error)}`);
+        });
+      }
+      const qrPayload = await resolveFaceQrImage(res.qr || "");
+      setFaceQrContent(qrPayload.content);
+      setFaceQr(qrPayload.imageSrc);
       setShowFaceModal(true);
+      if (!qrPayload.content) {
+        append("需要人脸验证，但接口未返回二维码内容，请稍后重试");
+        return;
+      }
+      if (!qrPayload.imageSrc) {
+        append("已收到人脸验证二维码内容，但渲染失败，请手动打开链接完成验证");
+      }
       append("需要人脸验证，请扫码后重试开播");
       return;
     }
 
     append(`开播失败: ${res.msg}`);
     await loadLinkageStatus();
-  }, [append, loadLinkageStatus, refreshSession]);
+  }, [append, loadLinkageStatus, refreshSession, resolveFaceQrImage]);
 
   const stopLive = useCallback(async () => {
     const res = await studioApi.stopLive();
@@ -641,7 +670,7 @@ export function useStudioController() {
       }
       if (payload.action === "start_live") {
         append("托盘菜单触发开播");
-        void startLive();
+        void startLive("tray");
       }
       if (payload.action === "stop_live") {
         append("托盘菜单触发下播");
@@ -668,6 +697,7 @@ export function useStudioController() {
       danmuText,
       danmus,
       faceQr,
+      faceQrContent,
       logs,
       linkageStatus,
       parent,
@@ -697,7 +727,7 @@ export function useStudioController() {
       refreshCurrentUser,
       retryStartLive: async () => {
         setShowFaceModal(false);
-        await startLive();
+        await startLive("face_retry");
       },
       setActiveTab,
       setChild,

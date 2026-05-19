@@ -193,6 +193,12 @@ pub async fn refresh_tray_menu(app: AppHandle) -> CmdResult {
 }
 
 #[tauri::command]
+pub async fn reveal_main_window(app: AppHandle) -> CmdResult {
+    crate::tray::reveal_main_window(&app);
+    Ok(wrap_ok(json!({})))
+}
+
+#[tauri::command]
 pub async fn get_version() -> CmdResult {
     Ok(wrap_ok(json!({ "version": env!("CARGO_PKG_VERSION") })))
 }

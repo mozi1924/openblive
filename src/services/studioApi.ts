@@ -25,6 +25,7 @@ export const studioApi = {
   setAppConfig: (key: string, value: unknown) =>
     invokeCommand("set_app_config", { req: { key, value } }),
   refreshTrayMenu: () => invokeCommand("refresh_tray_menu"),
+  revealMainWindow: () => invokeCommand("reveal_main_window"),
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
   getAccountList: () => invokeCommand<AccountList>("get_account_list"),
   refreshAllAccountCookies: () =>

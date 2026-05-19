@@ -2,12 +2,14 @@ import { RefreshCw, ShieldAlert } from "lucide-react";
 
 type FaceAuthModalProps = {
   faceQr: string;
+  faceQrContent: string;
   onClose: () => void;
   onRetry: () => Promise<void>;
 };
 
 export function FaceAuthModal({
   faceQr,
+  faceQrContent,
   onClose,
   onRetry,
 }: FaceAuthModalProps) {
@@ -31,9 +33,19 @@ export function FaceAuthModal({
               src={faceQr}
               alt="face verify qr"
             />
+          ) : faceQrContent ? (
+            <div className="w-full space-y-2">
+              <p className="text-xs leading-relaxed text-gray-500">
+                二维码渲染失败，可复制下方内容到浏览器中打开，再使用 Bilibili App 扫码：
+              </p>
+              <div className="max-h-32 overflow-auto break-all rounded-lg border border-gray-200 bg-gray-100 p-2 text-[10px] text-gray-700">
+                {faceQrContent}
+              </div>
+            </div>
           ) : (
-            <div className="flex h-44 w-44 items-center justify-center text-xs text-gray-400">
-              <RefreshCw className="h-6 w-6 animate-spin text-bili-pink" />
+            <div className="flex h-44 w-44 flex-col items-center justify-center text-center text-xs text-gray-500">
+              <RefreshCw className="mb-2 h-6 w-6 animate-spin text-bili-pink" />
+              未获取到人脸验证二维码
             </div>
           )}
         </div>

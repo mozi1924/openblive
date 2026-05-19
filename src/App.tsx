@@ -113,6 +113,7 @@ function App() {
       {state.showFaceModal && (
         <FaceAuthModal
           faceQr={state.faceQr}
+          faceQrContent={state.faceQrContent}
           onClose={actions.closeFaceModal}
           onRetry={actions.retryStartLive}
         />
