@@ -1,50 +1,107 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { HeaderBar } from "./components/layout/HeaderBar";
+import { LogDrawer } from "./components/layout/LogDrawer";
+import { Sidebar } from "./components/layout/Sidebar";
+import { FaceAuthModal } from "./components/shared/FaceAuthModal";
+import { AccountTab } from "./features/account/AccountTab";
+import { DanmuTab } from "./features/danmu/DanmuTab";
+import { StreamTab } from "./features/stream/StreamTab";
+import { useStudioController } from "./hooks/useStudioController";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const controller = useStudioController();
+  const { actions, refs, state } = controller;
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="flex h-screen w-screen overflow-hidden bg-[#080b10] text-[#eaeef6] select-none">
+      <Sidebar
+        activeTab={state.activeTab}
+        danmuListening={state.danmuListening}
+        roomId={state.session?.room_id}
+        sessionLive={state.session?.is_live ?? false}
+        showLogs={state.showLogs}
+        sidebarDragRef={refs.sidebarDragRef}
+        onSelectTab={actions.setActiveTab}
+        onToggleLogs={actions.toggleLogs}
+      />
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        <HeaderBar
+          activeTab={state.activeTab}
+          headerDragRef={refs.headerDragRef}
+          onRefreshAccounts={actions.loadAccounts}
+          onRefreshPartitions={actions.loadPartitions}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+
+        <div className="flex-1 overflow-y-auto p-8">
+          {state.activeTab === "account" && (
+            <AccountTab
+              accounts={state.accounts}
+              currentUser={state.currentUser}
+              qrcode={state.qrcode}
+              onLoadQrcode={actions.loadQrcode}
+              onLogout={actions.logout}
+              onPollLogin={actions.pollLogin}
+              onRefreshCurrentUser={actions.refreshCurrentUser}
+              onSwitchAccount={actions.switchAccount}
+            />
+          )}
+
+          {state.activeTab === "stream" && (
+            <StreamTab
+              child={state.child}
+              children={state.children}
+              copiedKey={state.copiedKey}
+              parent={state.parent}
+              partitions={state.partitions}
+              rtmp={state.rtmp}
+              session={state.session}
+              showStreamKey={state.showStreamKey}
+              title={state.title}
+              onChangeChild={actions.setChild}
+              onChangeParent={actions.changeParent}
+              onChangeShowStreamKey={actions.setShowStreamKey}
+              onChangeTitle={actions.setTitle}
+              onCopyToClipboard={actions.copyToClipboard}
+              onStartLive={actions.startLive}
+              onStopLive={actions.stopLive}
+              onSubmitArea={actions.submitArea}
+              onSubmitTitle={actions.submitTitle}
+            />
+          )}
+
+          {state.activeTab === "danmu" && (
+            <DanmuTab
+              danmuEndRef={refs.danmuEndRef}
+              danmuListening={state.danmuListening}
+              danmuText={state.danmuText}
+              danmus={state.danmus}
+              onChangeDanmuText={actions.setDanmuText}
+              onClearDanmus={actions.clearDanmus}
+              onSendDanmu={actions.submitDanmu}
+              onStartDanmu={actions.startDanmu}
+              onStopDanmu={actions.stopDanmu}
+            />
+          )}
+        </div>
+
+        {state.showLogs && (
+          <LogDrawer
+            logs={state.logs}
+            onClearLogs={actions.clearLogs}
+            onClose={actions.closeLogs}
+          />
+        )}
+      </main>
+
+      {state.showFaceModal && (
+        <FaceAuthModal
+          faceQr={state.faceQr}
+          onClose={actions.closeFaceModal}
+          onRetry={actions.retryStartLive}
+        />
+      )}
+    </div>
   );
 }
 

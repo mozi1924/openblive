@@ -1,0 +1,394 @@
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { studioApi } from "../services/studioApi";
+import type {
+  ActiveTab,
+  DanmuMsg,
+  Session,
+  StreamInfo,
+  User,
+} from "../types/studio";
+import { createSelfDanmuMessage, parseDanmuEvent } from "../utils/danmu";
+import { useWindowDrag } from "./useWindowDrag";
+
+const isValidUser = (value: User | null | undefined): value is User =>
+  Boolean(value?.uid);
+
+export function useStudioController() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("account");
+  const [showLogs, setShowLogs] = useState(false);
+
+  const [qrcode, setQrcode] = useState("");
+  const [qrcodeKey, setQrcodeKey] = useState("");
+  const [session, setSession] = useState<Session | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [accounts, setAccounts] = useState<User[]>([]);
+
+  const [title, setTitle] = useState("测试开播");
+  const [partitions, setPartitions] = useState<Record<string, string[]>>({});
+  const [parent, setParent] = useState("");
+  const [child, setChild] = useState("");
+  const [rtmp, setRtmp] = useState<StreamInfo | null>(null);
+
+  const [danmuText, setDanmuText] = useState("");
+  const [danmuListening, setDanmuListening] = useState(false);
+  const [danmus, setDanmus] = useState<DanmuMsg[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const [faceQr, setFaceQr] = useState("");
+  const [showFaceModal, setShowFaceModal] = useState(false);
+  const [showStreamKey, setShowStreamKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<"server" | "key" | null>(null);
+
+  const danmuEndRef = useRef<HTMLDivElement>(null);
+  const sidebarDragRef = useRef<HTMLDivElement>(null);
+  const headerDragRef = useRef<HTMLElement>(null);
+
+  const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
+
+  useWindowDrag(sidebarDragRef, headerDragRef);
+
+  const append = useCallback((line: string) => {
+    const ts = new Date().toLocaleTimeString();
+    setLogs((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 300));
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    const res = await studioApi.getSession();
+    setSession(res.data || null);
+    if (!res.data?.is_live) {
+      setRtmp(null);
+    }
+  }, []);
+
+  const loadSavedUser = useCallback(async () => {
+    const res = await studioApi.loadSavedConfig();
+    const user = isValidUser(res.data) ? res.data : null;
+
+    if (!user) {
+      setCurrentUser(null);
+      return;
+    }
+
+    setCurrentUser(user);
+    if (user.last_title) {
+      setTitle(user.last_title);
+    }
+    if (user.last_area_name.length >= 2) {
+      setParent(user.last_area_name[0]);
+      setChild(user.last_area_name[1]);
+    }
+  }, []);
+
+  const loadAccounts = useCallback(async () => {
+    const res = await studioApi.getAccountList();
+    if (res.code === 0 && res.data) {
+      setAccounts(res.data.list || []);
+    }
+  }, []);
+
+  const refreshCurrentUser = useCallback(async () => {
+    try {
+      const res = await studioApi.refreshCurrentUser();
+      if (res.code === 0 && res.data) {
+        setCurrentUser(res.data);
+        append("用户信息已刷新");
+        await loadAccounts();
+      }
+    } catch {
+      append("当前未登录，无法刷新用户信息");
+    }
+  }, [append, loadAccounts]);
+
+  const loadQrcode = useCallback(async () => {
+    setQrcode("");
+    setQrcodeKey("");
+
+    try {
+      const res = await studioApi.getLoginQrcode();
+      if (res.code === 0 && res.data?.url) {
+        const qrDataUrl = await QRCode.toDataURL(res.data.url, {
+          width: 220,
+          margin: 2,
+        });
+        setQrcode(qrDataUrl);
+        setQrcodeKey(res.data.qrcode_key || "");
+        append("二维码已生成，请使用 Bilibili App 扫码");
+        return;
+      }
+
+      append(`获取二维码失败: ${res.msg || "接口返回异常"}`);
+    } catch (error) {
+      append(`获取二维码失败: ${String(error)}`);
+    }
+  }, [append]);
+
+  const pollLogin = useCallback(async () => {
+    if (!qrcodeKey) {
+      return;
+    }
+
+    const res = await studioApi.pollLoginStatus(qrcodeKey);
+    if (res.code === 0 && res.data) {
+      setCurrentUser(res.data);
+      append(`登录成功：${res.data.uname || "用户"}`);
+      await refreshSession();
+      await loadAccounts();
+      setQrcode("");
+      setQrcodeKey("");
+      return;
+    }
+
+    append(`登录状态: ${res.msg || "等待确认"} (${res.code})`);
+  }, [append, loadAccounts, qrcodeKey, refreshSession]);
+
+  const switchAccount = useCallback(
+    async (uid: string) => {
+      const res = await studioApi.switchAccount(uid);
+      if (res.code === 0 && res.data) {
+        setCurrentUser(res.data);
+        setShowFaceModal(false);
+        append(`已切换账号：${res.data.uname}`);
+        await refreshSession();
+      }
+    },
+    [append, refreshSession],
+  );
+
+  const logout = useCallback(
+    async (uid: string) => {
+      const res = await studioApi.logout(uid);
+      if (res.code === 0) {
+        append("账号已退出");
+        await loadAccounts();
+        await loadSavedUser();
+        await refreshSession();
+      }
+    },
+    [append, loadAccounts, loadSavedUser, refreshSession],
+  );
+
+  const loadPartitions = useCallback(async () => {
+    const res = await studioApi.getPartitions();
+    if (res.code !== 0 || !res.data) {
+      return;
+    }
+
+    setPartitions(res.data);
+    const keys = Object.keys(res.data);
+    if (!parent && keys.length > 0) {
+      setParent(keys[0]);
+      setChild((res.data[keys[0]] || [])[0] || "");
+    }
+    append("分区已同步");
+  }, [append, parent]);
+
+  const submitArea = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault();
+      const res = await studioApi.updateArea(parent, child);
+      append(
+        res.code === 0
+          ? `分区设置成功: ${parent} / ${child}`
+          : `分区设置失败: ${res.msg}`,
+      );
+      await refreshSession();
+    },
+    [append, child, parent, refreshSession],
+  );
+
+  const submitTitle = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault();
+      const res = await studioApi.updateTitle(title);
+      append(res.code === 0 ? "标题更新成功" : `标题更新失败: ${res.msg}`);
+    },
+    [append, title],
+  );
+
+  const startLive = useCallback(async () => {
+    const res = await studioApi.startLive();
+    if (res.code === 0) {
+      setRtmp(res.data || null);
+      append("开播成功，已返回推流信息");
+      await refreshSession();
+      return;
+    }
+
+    if (res.code === 60024 || res.code === 60043) {
+      setFaceQr(res.qr || "");
+      setShowFaceModal(true);
+      append("需要人脸验证，请扫码后重试开播");
+      return;
+    }
+
+    append(`开播失败: ${res.msg}`);
+  }, [append, refreshSession]);
+
+  const stopLive = useCallback(async () => {
+    const res = await studioApi.stopLive();
+    append(res.code === 0 ? "已停播" : `停播失败: ${res.msg}`);
+    setRtmp(null);
+    await refreshSession();
+  }, [append, refreshSession]);
+
+  const startDanmu = useCallback(async () => {
+    const res = await studioApi.startDanmuMonitor();
+    if (res.code === 0) {
+      setDanmuListening(true);
+      append("弹幕监听已启动");
+    } else {
+      append(`弹幕监听失败: ${res.msg}`);
+    }
+  }, [append]);
+
+  const stopDanmu = useCallback(async () => {
+    await studioApi.stopDanmuMonitor();
+    setDanmuListening(false);
+    append("弹幕监听已停止");
+  }, [append]);
+
+  const sendDanmu = useCallback(async () => {
+    const text = danmuText.trim();
+    if (!text) {
+      return;
+    }
+
+    const res = await studioApi.sendDanmu(text);
+    if (res.code === 0) {
+      append(`发送弹幕: ${text}`);
+      setDanmus((prev) => [
+        createSelfDanmuMessage(text, currentUser?.uname || "我"),
+        ...prev,
+      ]);
+    } else {
+      append(`发送失败: ${res.msg}`);
+    }
+
+    setDanmuText("");
+  }, [append, currentUser?.uname, danmuText]);
+
+  const submitDanmu = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault();
+      await sendDanmu();
+    },
+    [sendDanmu],
+  );
+
+  const copyToClipboard = useCallback(
+    async (text: string, type: "server" | "key") => {
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopiedKey(type);
+        window.setTimeout(() => setCopiedKey(null), 2000);
+      } catch {
+        append("复制失败，您的系统可能不支持剪贴板访问");
+      }
+    },
+    [append],
+  );
+
+  const changeParent = useCallback(
+    (newParent: string) => {
+      setParent(newParent);
+      const subList = partitions[newParent] || [];
+      setChild(subList[0] || "");
+    },
+    [partitions],
+  );
+
+  useEffect(() => {
+    danmuEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [danmus]);
+
+  useEffect(() => {
+    void refreshSession();
+    void loadSavedUser();
+    void loadAccounts();
+    void loadPartitions();
+  }, [loadAccounts, loadPartitions, loadSavedUser, refreshSession]);
+
+  useEffect(() => {
+    let active = true;
+
+    const unlistenPromise = studioApi.listenDanmuEvent((payload) => {
+      if (!active) {
+        return;
+      }
+
+      const parsed = parseDanmuEvent(payload);
+      if (parsed) {
+        setDanmus((prev) => [parsed, ...prev]);
+      }
+      append(`弹幕事件: ${payload.cmd || "UNKNOWN"}`);
+    });
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [append]);
+
+  return {
+    state: {
+      accounts,
+      activeTab,
+      child,
+      children,
+      copiedKey,
+      currentUser,
+      danmuListening,
+      danmuText,
+      danmus,
+      faceQr,
+      logs,
+      parent,
+      partitions,
+      qrcode,
+      rtmp,
+      session,
+      showFaceModal,
+      showLogs,
+      showStreamKey,
+      title,
+    },
+    actions: {
+      changeParent,
+      clearDanmus: () => setDanmus([]),
+      clearLogs: () => setLogs([]),
+      closeFaceModal: () => setShowFaceModal(false),
+      closeLogs: () => setShowLogs(false),
+      copyToClipboard,
+      loadAccounts,
+      loadPartitions,
+      loadQrcode,
+      logout,
+      pollLogin,
+      refreshCurrentUser,
+      retryStartLive: async () => {
+        setShowFaceModal(false);
+        await startLive();
+      },
+      setActiveTab,
+      setChild,
+      setDanmuText,
+      setShowStreamKey,
+      setTitle,
+      startDanmu,
+      startLive,
+      stopDanmu,
+      stopLive,
+      submitArea,
+      submitDanmu,
+      submitTitle,
+      switchAccount,
+      toggleLogs: () => setShowLogs((prev) => !prev),
+    },
+    refs: {
+      danmuEndRef,
+      headerDragRef,
+      sidebarDragRef,
+    },
+  };
+}

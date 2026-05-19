@@ -1,16 +1,11 @@
 [package]
 name = "tauri-app"
 version = "0.1.0"
-description = "A Tauri App"
+description = "Bilibili live desktop tool"
 authors = ["you"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "tauri_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -22,4 +17,21 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+anyhow = "1"
+reqwest = { version = "0.12", features = ["json", "cookies", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+url = "2"
+md5 = "0.7"
+chrono = "0.4"
+tokio-tungstenite = { version = "0.23", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+flate2 = "1"
+brotli = "6"
+bytes = "1"
 
+serde_urlencoded = "0.7"
+dirs = "6"
+aes-gcm = "0.10"
+base64 = "0.22"
+rand = "0.8"
+keyring = "3"
