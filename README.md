@@ -1,10 +1,116 @@
-# OpenBlive Studio
+<p align="center">
+  <img src="public/openblive.svg" width="128" height="128" alt="OpenBLive Studio Logo" />
+</p>
 
-OpenBlive Studio 是一个面向哔哩哔哩主播的第三方桌面开播助手，前端使用 Vite + React，桌面容器使用 Tauri。
+<h1 align="center">OpenBLive Studio</h1>
 
-## Development
+<p align="center">
+  <strong>一个基于 Tauri v2 + React 19 构建的轻量、美观的第三方哔哩哔哩（Bilibili）桌面开播助手</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/mozi1924/openblive/stargazers">
+    <img src="https://img.shields.io/github/stars/mozi1924/openblive?style=flat-square&logo=github&color=FADFA1" alt="GitHub stars" />
+  </a>
+  <a href="https://github.com/mozi1924/openblive/network/members">
+    <img src="https://img.shields.io/github/forks/mozi1924/openblive?style=flat-square&logo=github&color=C2D9FF" alt="GitHub forks" />
+  </a>
+  <a href="https://github.com/mozi1924/openblive/issues">
+    <img src="https://img.shields.io/github/issues/mozi1924/openblive?style=flat-square&logo=github&color=F87171" alt="GitHub issues" />
+  </a>
+  <a href="https://github.com/mozi1924/openblive/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/mozi1924/openblive?style=flat-square&logo=github&color=34D399" alt="GitHub license" />
+  </a>
+  <a href="https://tauri.app/">
+    <img src="https://img.shields.io/badge/Tauri-v2-FFC67D?style=flat-square&logo=tauri" alt="Tauri v2" />
+  </a>
+</p>
+
+---
+
+## 📖 项目介绍
+
+**OpenBLive Studio** 是一款专为哔哩哔哩（Bilibili）主播打造的第三方桌面端辅助开播工具。项目采用 **Tauri v2** 作为桌面容器，前端基于 **React 19**、**Vite**、**TypeScript** 以及 **Tailwind CSS** 进行开发。
+
+相比于官方繁重的直播姬，OpenBLive Studio 更加专注于**轻量化**、**低资源占用**与**极致的响应速度**。无论您是单屏幕游戏主播需要精简的弹幕助手，还是想要一个干净清爽的开播推流控制器，OpenBLive Studio 都能满足您的需求。
+
+### ✨ 核心特性
+
+- 🔑 **多账号管理**：支持 Bilibili 扫码快速登录，支持多账号保存与一键无缝切换。
+- 📡 **开播推流控制**：一键获取推流地址（RTMP Link）与推流码（Stream Key），支持在线开播、关播，以及实时修改直播间标题、修改分区和封面。
+- 💬 **轻量级弹幕机**：实时连接 Bilibili 直播间 WebSockets，低延迟接收并清晰呈现弹幕、礼物、大航海、点赞及系统提示。
+- ⚙️ **极佳性能与体验**：得益于 Rust 驱动的 Tauri 架构，软件安装包极小，内存占用低，完美融入系统原生体验。
+- 🎨 **现代 UI 设计**：经过精心设计的现代化深色模式界面，排版精细，交互顺滑。
+
+---
+
+## 🛠️ 技术栈
+
+本项目基于以下优秀的开源技术栈构建：
+
+- **桌面容器**：[Tauri v2](https://tauri.app/) (Rust) - 提供轻量级的系统原生窗口与安全的后端能力
+- **前端框架**：[React 19](https://react.dev/) - 现代化响应式 UI 开发
+- **构建工具**：[Vite 7](https://vite.dev/) - 极速的前端热更新与打包体验
+- **样式方案**：[Tailwind CSS v4](https://tailwindcss.com/) - 现代化的原子类 CSS 框架
+- **开发语言**：[TypeScript](https://www.typescriptlang.org/) & [Rust](https://www.rust-lang.org/)
+
+---
+
+## 🚀 贡献与开发指南
+
+如果您希望在本地运行、修改或打包本项目，请参考以下指南。
+
+### 前提条件
+
+在开始之前，请确保您的开发环境中已安装以下工具：
+
+1. **Node.js** (建议 v18+)
+2. **pnpm** (建议 v8+)
+3. **Rust 开发环境** (需安装 `rustup`、`cargo` 以及对应操作系统的构建工具，详见 [Tauri 官方安装指南](https://v2.tauri.app/start/prerequisites/))
+
+### 本地开发步骤
+
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/mozi1924/openblive.git
+   cd openblive
+   ```
+
+2. **安装依赖**
+   ```bash
+   pnpm install
+   ```
+
+3. **启动开发环境**
+   运行以下命令，Tauri 将自动启动前端 Vite 开发服务器，并在 Rust 后端编译完成后拉起桌面应用窗口：
+   ```bash
+   pnpm tauri dev
+   ```
+
+### 项目构建与打包
+
+根据您当前的操作系统，运行以下命令可以将项目打包为原生安装包（如 Windows 的 `.msi`、macOS 的 `.dmg` 或 Linux 的 `.deb`）：
 
 ```bash
-pnpm install
-pnpm tauri dev
+pnpm tauri build
 ```
+
+打包生成的文件将存放在 `src-tauri/target/release/bundle/` 目录下。
+
+---
+
+## 📈 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=mozi1924/openblive&type=Date)](https://star-history.com/#mozi1924/openblive&Date)
+
+---
+
+## 🤝 特别鸣谢
+
+- 感谢 [bilibili-api-collect](https://github.com/socialsisteryi/bilibili-api-collect) 项目，其整理归纳的哔哩哔哩 API 接口文档为本项目的账号登录、开播控制等核心功能的实现提供了不可或缺的帮助与参考。
+
+---
+
+## 📄 开源协议
+
+本项目采用 [MIT License](LICENSE) 开源协议。
