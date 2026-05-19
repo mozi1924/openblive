@@ -16,6 +16,7 @@ pub struct RuntimeState {
 pub struct AppState {
     pub client: BiliClient,
     pub runtime: Mutex<RuntimeState>,
+    pub auth_refresh_lock: Mutex<()>,
     pub config_path: PathBuf,
     pub master_key: [u8; 32],
 }

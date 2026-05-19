@@ -46,6 +46,11 @@ export function AccountTab({
                     <span className="rounded bg-bili-blue/20 px-2 py-0.5 text-[10px] font-bold text-bili-blue">
                       UL {currentUser.level}
                     </span>
+                    {currentUser.login_invalid ? (
+                      <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold text-rose-300">
+                        登录失效
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500">
                     UID: {currentUser.uid}
@@ -136,14 +141,20 @@ export function AccountTab({
                         <p className="mt-0.5 truncate text-[10px] text-gray-400">
                           UID: {user.uid}
                         </p>
+                        {user.login_invalid ? (
+                          <p className="mt-1 text-[10px] font-semibold text-rose-300">
+                            登录失效，请重新扫码
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
                       <button
                         onClick={() => void onSwitchAccount(user.uid)}
+                        disabled={Boolean(user.login_invalid)}
                         className="rounded-xl bg-bili-blue/15 px-3.5 py-1.5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue/25 hover:text-white"
                       >
-                        切换
+                        {user.login_invalid ? "需重登" : "切换"}
                       </button>
                       <button
                         onClick={() => void onLogout(user.uid)}
@@ -192,7 +203,7 @@ export function AccountTab({
                   使用哔哩哔哩APP扫码
                 </p>
                 <p className="text-xs text-gray-500">
-                  扫码并确认后，请点击下方进行轮询登录
+                  二维码状态会自动检测，扫码并确认后将自动登录
                 </p>
               </div>
               <div className="flex w-full space-x-2">
@@ -208,7 +219,7 @@ export function AccountTab({
                   className="glow-pink flex flex-1 items-center justify-center rounded-2xl bg-gradient-to-r from-bili-pink to-[#ff8bb2] py-3 text-xs font-bold text-white transition-all duration-150 active:scale-95 hover:opacity-95"
                 >
                   <QrCode className="mr-2 h-3.5 w-3.5" />
-                  轮询登录状态
+                  立即检查
                 </button>
               </div>
             </div>

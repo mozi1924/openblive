@@ -51,6 +51,11 @@ export function useStudioController() {
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
   const headerDragRef = useRef<HTMLElement>(null);
+  const expiredAccountNoticeRef = useRef<Set<string>>(new Set());
+  const loginPollBusyRef = useRef(false);
+  const loginStatusCodeRef = useRef<number | null>(null);
+  const qrcodeRefreshBusyRef = useRef(false);
+  const startupCookieRefreshDoneRef = useRef(false);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
 
@@ -60,6 +65,30 @@ export function useStudioController() {
     const ts = new Date().toLocaleTimeString();
     setLogs((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 300));
   }, []);
+
+  const handleExpiredAccounts = useCallback(
+    (uids: string[]) => {
+      if (uids.length === 0) {
+        return;
+      }
+      const firstNotified: string[] = [];
+      for (const uid of uids) {
+        if (expiredAccountNoticeRef.current.has(uid)) {
+          continue;
+        }
+        expiredAccountNoticeRef.current.add(uid);
+        firstNotified.push(uid);
+      }
+      if (firstNotified.length === 0) {
+        return;
+      }
+
+      const text = `以下账号登录已失效，请重新扫码登录：${firstNotified.join(", ")}`;
+      append(text);
+      window.alert(text);
+    },
+    [append],
+  );
 
   const refreshSession = useCallback(async () => {
     const res = await studioApi.getSession();
@@ -94,6 +123,16 @@ export function useStudioController() {
     const res = await studioApi.getAccountList();
     if (res.code === 0 && res.data) {
       setAccounts(res.data.list || []);
+      const validUids = new Set(
+        (res.data.list || [])
+          .filter((user) => !user.login_invalid)
+          .map((user) => user.uid),
+      );
+      for (const uid of Array.from(expiredAccountNoticeRef.current)) {
+        if (validUids.has(uid)) {
+          expiredAccountNoticeRef.current.delete(uid);
+        }
+      }
     }
   }, []);
 
@@ -106,8 +145,9 @@ export function useStudioController() {
         await loadAccounts();
         await studioApi.syncLiveRoomProfile().catch(() => undefined);
       }
-    } catch {
-      append("当前未登录，无法刷新用户信息");
+    } catch (error) {
+      append(`刷新用户信息失败: ${String(error)}`);
+      await loadAccounts();
     }
   }, [append, loadAccounts]);
 
@@ -141,8 +181,13 @@ export function useStudioController() {
   }, [append]);
 
   const loadQrcode = useCallback(async () => {
+    if (qrcodeRefreshBusyRef.current) {
+      return;
+    }
+    qrcodeRefreshBusyRef.current = true;
     setQrcode("");
     setQrcodeKey("");
+    loginStatusCodeRef.current = null;
 
     try {
       const res = await studioApi.getLoginQrcode();
@@ -160,39 +205,68 @@ export function useStudioController() {
       append(`获取二维码失败: ${res.msg || "接口返回异常"}`);
     } catch (error) {
       append(`获取二维码失败: ${String(error)}`);
+    } finally {
+      qrcodeRefreshBusyRef.current = false;
     }
   }, [append]);
 
-  const pollLogin = useCallback(async () => {
+  const pollLogin = useCallback(async (silent = false) => {
     if (!qrcodeKey) {
       return;
     }
-
-    const res = await studioApi.pollLoginStatus(qrcodeKey);
-    if (res.code === 0 && res.data) {
-      setCurrentUser(res.data);
-      append(`登录成功：${res.data.uname || "用户"}`);
-      await refreshSession();
-      await loadAccounts();
-      await syncLiveRoomProfile();
-      setQrcode("");
-      setQrcodeKey("");
+    if (loginPollBusyRef.current) {
       return;
     }
+    loginPollBusyRef.current = true;
 
-    append(`登录状态: ${res.msg || "等待确认"} (${res.code})`);
-  }, [append, loadAccounts, qrcodeKey, refreshSession, syncLiveRoomProfile]);
-
-  const switchAccount = useCallback(
-    async (uid: string) => {
-      const res = await studioApi.switchAccount(uid);
+    try {
+      const res = await studioApi.pollLoginStatus(qrcodeKey);
       if (res.code === 0 && res.data) {
+        loginStatusCodeRef.current = 0;
         setCurrentUser(res.data);
-        setShowFaceModal(false);
-        append(`已切换账号：${res.data.uname}`);
+        append(`登录成功：${res.data.uname || "用户"}`);
         await refreshSession();
         await loadAccounts();
         await syncLiveRoomProfile();
+        setQrcode("");
+        setQrcodeKey("");
+        return;
+      }
+
+      const code = res.code;
+      const statusChanged = loginStatusCodeRef.current !== code;
+      loginStatusCodeRef.current = code;
+
+      if (code === 86038) {
+        if (!silent || statusChanged) {
+          append("二维码已失效，正在自动刷新");
+        }
+        await loadQrcode();
+        return;
+      }
+
+      if (!silent || statusChanged) {
+        append(`登录状态: ${res.msg || "等待确认"} (${code})`);
+      }
+    } finally {
+      loginPollBusyRef.current = false;
+    }
+  }, [append, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile]);
+
+  const switchAccount = useCallback(
+    async (uid: string) => {
+      try {
+        const res = await studioApi.switchAccount(uid);
+        if (res.code === 0 && res.data) {
+          setCurrentUser(res.data);
+          setShowFaceModal(false);
+          append(`已切换账号：${res.data.uname}`);
+          await refreshSession();
+          await loadAccounts();
+          await syncLiveRoomProfile();
+        }
+      } catch (error) {
+        append(`切换账号失败: ${String(error)}`);
       }
     },
     [append, loadAccounts, refreshSession, syncLiveRoomProfile],
@@ -399,23 +473,40 @@ export function useStudioController() {
   }, [currentUser?.uid, syncLiveRoomProfile]);
 
   useEffect(() => {
-    void studioApi
-      .refreshAllAccountCookies()
-      .then(async (res) => {
-        if (res.code !== 0 || !res.data) {
-          return;
-        }
-        if (res.data.failed.length > 0) {
-          append(`启动时 Cookie 刷新部分失败：${res.data.failed.join(" | ")}`);
-        }
-        if (res.data.updated > 0) {
-          await loadSavedUser();
-          await loadAccounts();
-        }
-      })
-      .catch(() => {
-        append("启动时 Cookie 自动刷新失败");
-      });
+    if (!qrcodeKey) {
+      return;
+    }
+
+    void pollLogin(true);
+    const timer = window.setInterval(() => {
+      void pollLogin(true);
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [pollLogin, qrcodeKey]);
+
+  useEffect(() => {
+    if (!startupCookieRefreshDoneRef.current) {
+      startupCookieRefreshDoneRef.current = true;
+      void studioApi
+        .refreshAllAccountCookies()
+        .then(async (res) => {
+          if (res.code !== 0 || !res.data) {
+            return;
+          }
+          handleExpiredAccounts(res.data.expired || []);
+          if (res.data.failed.length > 0) {
+            append(`启动时 Cookie 刷新部分失败：${res.data.failed.join(" | ")}`);
+          }
+          if (res.data.updated > 0) {
+            await loadSavedUser();
+            await loadAccounts();
+          }
+        })
+        .catch(() => {
+          append("启动时 Cookie 自动刷新失败");
+        });
+    }
 
     const timer = window.setInterval(() => {
       void studioApi
@@ -425,6 +516,7 @@ export function useStudioController() {
             return;
           }
 
+          handleExpiredAccounts(res.data.expired || []);
           if (res.data.failed.length > 0) {
             append(`Cookie 自动刷新部分失败：${res.data.failed.join(" | ")}`);
           }
@@ -439,7 +531,7 @@ export function useStudioController() {
     }, 15 * 60 * 1000);
 
     return () => window.clearInterval(timer);
-  }, [append, loadAccounts, loadSavedUser]);
+  }, [append, handleExpiredAccounts, loadAccounts, loadSavedUser]);
 
   useEffect(() => {
     let active = true;

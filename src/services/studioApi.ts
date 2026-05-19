@@ -20,7 +20,7 @@ export const studioApi = {
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
   getAccountList: () => invokeCommand<AccountList>("get_account_list"),
   refreshAllAccountCookies: () =>
-    invokeCommand<{ updated: number; failed: string[] }>(
+    invokeCommand<{ updated: number; failed: string[]; expired: string[] }>(
       "refresh_all_account_cookies",
     ),
   refreshCurrentUser: () => invokeCommand<User>("refresh_current_user"),

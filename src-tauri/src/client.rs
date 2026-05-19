@@ -53,13 +53,14 @@ impl BiliClient {
     }
 
     pub fn apply_cookie_header(&self, cookie_header: &str) {
-        let url = Url::parse("https://.bilibili.com/").unwrap();
+        let url = Url::parse("https://www.bilibili.com/").unwrap();
         for kv in cookie_header
             .split(';')
             .map(|item| item.trim())
             .filter(|item| !item.is_empty())
         {
-            self.jar.add_cookie_str(kv, &url);
+            let enriched = format!("{kv}; Domain=.bilibili.com; Path=/; Secure; HttpOnly");
+            self.jar.add_cookie_str(&enriched, &url);
         }
     }
 }

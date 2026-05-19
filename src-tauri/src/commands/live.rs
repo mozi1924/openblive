@@ -14,6 +14,59 @@ use tokio_tungstenite::tungstenite::Message;
 const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
 const LIVE_PLATFORM_PC_LINK: &str = "pc_link";
 
+fn is_auth_invalid_code(code: i64) -> bool {
+    matches!(code, -101 | 3 | 65530)
+}
+
+fn error_message(value: &serde_json::Value, fallback: &str) -> String {
+    value["msg"]
+        .as_str()
+        .filter(|msg| !msg.trim().is_empty())
+        .or_else(|| {
+            value["message"]
+                .as_str()
+                .filter(|msg| !msg.trim().is_empty())
+        })
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn cookie_diagnostics(cookie_header: &str) -> String {
+    let has_sess = crate::client::parse_cookie_value(cookie_header, "SESSDATA").is_some();
+    let has_uid = crate::client::parse_cookie_value(cookie_header, "DedeUserID").is_some();
+    let has_csrf = crate::client::parse_cookie_value(cookie_header, "bili_jct").is_some();
+    format!(
+        "has_sess={has_sess}, has_uid={has_uid}, has_csrf={has_csrf}, cookie_len={}",
+        cookie_header.len()
+    )
+}
+
+async fn mark_current_user_login_invalid(state: &AppState, reason: &str) {
+    let mut runtime = state.runtime.lock().await;
+    let Some(uid) = runtime.config.current_uid.clone() else {
+        return;
+    };
+    let mut fail_count = 0u32;
+    let mut cookie_diag = String::from("cookie=missing");
+    let mut room_id = String::new();
+    let mut csrf_len = 0usize;
+    if let Some(user) = runtime.config.users.get_mut(&uid) {
+        user.login_invalid = true;
+        user.auth_fail_count = user.auth_fail_count.saturating_add(1);
+        user.last_auth_fail_at = chrono::Utc::now().timestamp();
+        fail_count = user.auth_fail_count;
+        cookie_diag = cookie_diagnostics(&user.cookie);
+        room_id = user.room_id.clone();
+        csrf_len = user.csrf.len();
+    }
+    eprintln!(
+        "[auth][live] mark login invalid uid={}, fail_count={}, room_id={}, csrf_len={}, reason={}, {}",
+        uid, fail_count, room_id, csrf_len, reason, cookie_diag
+    );
+    runtime.session = Default::default();
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+}
+
 fn split_tags(raw: &str) -> Vec<String> {
     raw.split([',', '，'])
         .map(|tag| tag.trim())
@@ -328,7 +381,7 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
 
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), runtime.session.room_id.clone());
-    form.insert("platform".into(), "pc_link".into());
+    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
     form.insert("title".into(), req.title.clone());
     form.insert("csrf".into(), runtime.session.csrf.clone());
     form.insert("csrf_token".into(), runtime.session.csrf.clone());
@@ -340,17 +393,32 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
         .await
         .map_err(|error| error.to_string())?;
 
-    if value["code"].as_i64().unwrap_or(-1) == 0 {
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
         let mut runtime = state.runtime.lock().await;
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
                 user.last_title = req.title.clone();
+                user.login_invalid = false;
+                user.auth_fail_count = 0;
+                user.last_auth_fail_at = 0;
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
         Ok(wrap_ok(json!({})))
     } else {
-        Err(value["msg"].as_str().unwrap_or("更新失败").into())
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "update_title code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("登录已失效，请重新扫码登录".into());
+        }
+        Err(error_message(&value, "更新失败"))
     }
 }
 
@@ -406,10 +474,22 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
             .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
             .await
             .map_err(|error| error.to_string())?;
-        if value["code"].as_i64().unwrap_or(-1) != 0 {
+        let code = value["code"].as_i64().unwrap_or(-1);
+        if code != 0 {
+            if is_auth_invalid_code(code) {
+                mark_current_user_login_invalid(
+                    &state,
+                    &format!(
+                        "update_live_tags(add) tag={tag}, code={code}, msg={}",
+                        error_message(&value, "")
+                    ),
+                )
+                .await;
+                return Err("登录已失效，请重新扫码登录".into());
+            }
             return Err(format!(
                 "新增标签失败({tag}): {}",
-                value["msg"].as_str().unwrap_or("更新失败")
+                error_message(&value, "更新失败")
             ));
         }
     }
@@ -422,10 +502,22 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
             .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
             .await
             .map_err(|error| error.to_string())?;
-        if value["code"].as_i64().unwrap_or(-1) != 0 {
+        let code = value["code"].as_i64().unwrap_or(-1);
+        if code != 0 {
+            if is_auth_invalid_code(code) {
+                mark_current_user_login_invalid(
+                    &state,
+                    &format!(
+                        "update_live_tags(del) tag={tag}, code={code}, msg={}",
+                        error_message(&value, "")
+                    ),
+                )
+                .await;
+                return Err("登录已失效，请重新扫码登录".into());
+            }
             return Err(format!(
                 "删除标签失败({tag}): {}",
-                value["msg"].as_str().unwrap_or("更新失败")
+                error_message(&value, "更新失败")
             ));
         }
     }
@@ -433,6 +525,9 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
     let mut runtime = state.runtime.lock().await;
     if let Some(user) = runtime.config.users.get_mut(&uid) {
         user.last_tags = desired_tags.clone();
+        user.login_invalid = false;
+        user.auth_fail_count = 0;
+        user.last_auth_fail_at = 0;
     }
     runtime.session.current_tags = desired_tags.clone();
     save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -492,11 +587,30 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
         return Ok(json!({ "code": 60043, "msg": "需要人脸验证", "qr": qr }));
     }
     if code != 0 {
-        return Err(response["msg"].as_str().unwrap_or("开播失败").into());
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "start_live code={code}, msg={}",
+                    error_message(&response, "")
+                ),
+            )
+            .await;
+            return Err("登录已失效，请重新扫码登录".into());
+        }
+        return Err(error_message(&response, "开播失败"));
     }
 
     let mut runtime = state.runtime.lock().await;
     runtime.session.is_live = true;
+    if let Some(uid) = runtime.config.current_uid.clone() {
+        if let Some(user) = runtime.config.users.get_mut(&uid) {
+            user.login_invalid = false;
+            user.auth_fail_count = 0;
+            user.last_auth_fail_at = 0;
+        }
+    }
+    save_config(&state.config_path, &runtime.config, &state.master_key);
     Ok(wrap_ok(json!({
         "rtmp1": response["data"]["rtmp"],
         "protocols": response["data"]["protocols"]
@@ -518,12 +632,29 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
         .post_form("https://api.live.bilibili.com/room/v1/Room/stopLive", &form)
         .await
         .map_err(|error| error.to_string())?;
-    if value["code"].as_i64().unwrap_or(-1) == 0 {
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
         let mut runtime = state.runtime.lock().await;
         runtime.session.is_live = false;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                user.login_invalid = false;
+                user.auth_fail_count = 0;
+                user.last_auth_fail_at = 0;
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
         Ok(wrap_ok(json!({})))
     } else {
-        Err(value["msg"].as_str().unwrap_or("停播失败").into())
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("stop_live code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("登录已失效，请重新扫码登录".into());
+        }
+        Err(error_message(&value, "停播失败"))
     }
 }
 
@@ -564,10 +695,28 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
         )
         .await
         .map_err(|error| error.to_string())?;
-    if value["code"].as_i64().unwrap_or(-1) == 0 {
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let mut runtime = state.runtime.lock().await;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                user.login_invalid = false;
+                user.auth_fail_count = 0;
+                user.last_auth_fail_at = 0;
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
         Ok(wrap_ok(json!({ "msg": "发送成功" })))
     } else {
-        Err(value["msg"].as_str().unwrap_or("发送失败").into())
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("send_danmu code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("登录已失效，请重新扫码登录".into());
+        }
+        Err(error_message(&value, "发送失败"))
     }
 }
 

@@ -28,6 +28,7 @@ export type User = {
   last_title: string;
   last_area_name: string[];
   last_tags?: string[];
+  login_invalid?: boolean;
 };
 
 export type StreamInfo = {

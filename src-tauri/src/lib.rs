@@ -51,6 +51,7 @@ pub fn run() {
         .manage(AppState {
             client,
             runtime: Mutex::new(runtime),
+            auth_refresh_lock: Mutex::new(()),
             config_path: path,
             master_key,
         })

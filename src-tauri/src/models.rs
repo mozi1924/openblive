@@ -33,6 +33,10 @@ pub struct UserRecord {
     pub face: String,
     pub cookie: String,
     pub enc_cookie: String,
+    #[serde(default)]
+    pub refresh_token: String,
+    #[serde(default)]
+    pub enc_refresh_token: String,
     #[serde(rename = "roomId")]
     pub room_id: String,
     pub csrf: String,
@@ -53,6 +57,12 @@ pub struct UserRecord {
     pub last_area_name: Vec<String>,
     #[serde(default)]
     pub last_tags: Vec<String>,
+    #[serde(default)]
+    pub login_invalid: bool,
+    #[serde(default)]
+    pub auth_fail_count: u32,
+    #[serde(default)]
+    pub last_auth_fail_at: i64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
