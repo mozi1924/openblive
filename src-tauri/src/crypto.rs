@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Result};
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
+use anyhow::{anyhow, Result};
 use base64::Engine;
 use keyring::Entry;
 use rand::RngCore;

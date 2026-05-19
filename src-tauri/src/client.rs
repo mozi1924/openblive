@@ -15,7 +15,7 @@ impl BiliClient {
         let jar = Arc::new(Jar::default());
         let http = reqwest::Client::builder()
             .cookie_provider(jar.clone())
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
             .build()
             .unwrap();
 
@@ -27,7 +27,14 @@ impl BiliClient {
         url: &str,
         params: &[(&str, String)],
     ) -> Result<serde_json::Value> {
-        Ok(self.http.get(url).query(params).send().await?.json().await?)
+        Ok(self
+            .http
+            .get(url)
+            .query(params)
+            .send()
+            .await?
+            .json()
+            .await?)
     }
 
     pub async fn post_form(
@@ -61,5 +68,8 @@ pub fn parse_cookie_value(cookie_header: &str, key: &str) -> Option<String> {
     cookie_header
         .split(';')
         .map(|item| item.trim())
-        .find_map(|kv| kv.strip_prefix(&(key.to_owned() + "=")).map(|v| v.to_string()))
+        .find_map(|kv| {
+            kv.strip_prefix(&(key.to_owned() + "="))
+                .map(|v| v.to_string())
+        })
 }

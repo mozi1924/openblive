@@ -14,6 +14,12 @@ import { useWindowDrag } from "./useWindowDrag";
 const isValidUser = (value: User | null | undefined): value is User =>
   Boolean(value?.uid);
 
+const splitTagInput = (raw: string) =>
+  raw
+    .split(/[,，]/)
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
@@ -25,6 +31,8 @@ export function useStudioController() {
   const [accounts, setAccounts] = useState<User[]>([]);
 
   const [title, setTitle] = useState("测试开播");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const [partitions, setPartitions] = useState<Record<string, string[]>>({});
   const [parent, setParent] = useState("");
   const [child, setChild] = useState("");
@@ -78,6 +86,8 @@ export function useStudioController() {
       setParent(user.last_area_name[0]);
       setChild(user.last_area_name[1]);
     }
+    setTags([...(user.last_tags || [])]);
+    setTagInput("");
   }, []);
 
   const loadAccounts = useCallback(async () => {
@@ -94,11 +104,41 @@ export function useStudioController() {
         setCurrentUser(res.data);
         append("用户信息已刷新");
         await loadAccounts();
+        await studioApi.syncLiveRoomProfile().catch(() => undefined);
       }
     } catch {
       append("当前未登录，无法刷新用户信息");
     }
   }, [append, loadAccounts]);
+
+  const syncLiveRoomProfile = useCallback(async () => {
+    try {
+      const res = await studioApi.syncLiveRoomProfile();
+      if (res.code !== 0 || !res.data) {
+        return;
+      }
+
+      if (res.data.title) {
+        setTitle(res.data.title);
+      }
+      setTags([...(res.data.tags || [])]);
+      setTagInput("");
+      if (res.data.parent) {
+        setParent(res.data.parent);
+      }
+      if (res.data.child) {
+        setChild(res.data.child);
+      }
+
+      append(
+        res.data.from_cache
+          ? "直播间配置同步失败，已回退本地缓存"
+          : "已同步直播间标题 / 分区 / 标签",
+      );
+    } catch {
+      append("直播间配置同步失败，已保留本地缓存");
+    }
+  }, [append]);
 
   const loadQrcode = useCallback(async () => {
     setQrcode("");
@@ -134,13 +174,14 @@ export function useStudioController() {
       append(`登录成功：${res.data.uname || "用户"}`);
       await refreshSession();
       await loadAccounts();
+      await syncLiveRoomProfile();
       setQrcode("");
       setQrcodeKey("");
       return;
     }
 
     append(`登录状态: ${res.msg || "等待确认"} (${res.code})`);
-  }, [append, loadAccounts, qrcodeKey, refreshSession]);
+  }, [append, loadAccounts, qrcodeKey, refreshSession, syncLiveRoomProfile]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
@@ -150,9 +191,11 @@ export function useStudioController() {
         setShowFaceModal(false);
         append(`已切换账号：${res.data.uname}`);
         await refreshSession();
+        await loadAccounts();
+        await syncLiveRoomProfile();
       }
     },
-    [append, refreshSession],
+    [append, loadAccounts, refreshSession, syncLiveRoomProfile],
   );
 
   const logout = useCallback(
@@ -205,6 +248,45 @@ export function useStudioController() {
     },
     [append, title],
   );
+
+  const submitTags = useCallback(
+    async (event: FormEvent) => {
+      event.preventDefault();
+      const normalized = [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+      const res = await studioApi.updateLiveTags(normalized.join(","));
+      if (res.code === 0 && res.data) {
+        setTags([...(res.data.tags || [])]);
+        setTagInput("");
+        append(
+          `标签更新成功 (+${res.data.added.length} / -${res.data.removed.length})`,
+        );
+        return;
+      }
+      append(`标签更新失败: ${res.msg}`);
+    },
+    [append, tags],
+  );
+
+  const addTag = useCallback(() => {
+    const parsed = splitTagInput(tagInput);
+    if (parsed.length === 0) {
+      return;
+    }
+    setTags((prev) => {
+      const merged = [...prev];
+      for (const tag of parsed) {
+        if (!merged.includes(tag)) {
+          merged.push(tag);
+        }
+      }
+      return merged;
+    });
+    setTagInput("");
+  }, [tagInput]);
+
+  const removeTag = useCallback((tag: string) => {
+    setTags((prev) => prev.filter((value) => value !== tag));
+  }, []);
 
   const startLive = useCallback(async () => {
     const res = await studioApi.startLive();
@@ -310,6 +392,56 @@ export function useStudioController() {
   }, [loadAccounts, loadPartitions, loadSavedUser, refreshSession]);
 
   useEffect(() => {
+    if (!currentUser?.uid) {
+      return;
+    }
+    void syncLiveRoomProfile();
+  }, [currentUser?.uid, syncLiveRoomProfile]);
+
+  useEffect(() => {
+    void studioApi
+      .refreshAllAccountCookies()
+      .then(async (res) => {
+        if (res.code !== 0 || !res.data) {
+          return;
+        }
+        if (res.data.failed.length > 0) {
+          append(`启动时 Cookie 刷新部分失败：${res.data.failed.join(" | ")}`);
+        }
+        if (res.data.updated > 0) {
+          await loadSavedUser();
+          await loadAccounts();
+        }
+      })
+      .catch(() => {
+        append("启动时 Cookie 自动刷新失败");
+      });
+
+    const timer = window.setInterval(() => {
+      void studioApi
+        .refreshAllAccountCookies()
+        .then(async (res) => {
+          if (res.code !== 0 || !res.data) {
+            return;
+          }
+
+          if (res.data.failed.length > 0) {
+            append(`Cookie 自动刷新部分失败：${res.data.failed.join(" | ")}`);
+          }
+          if (res.data.updated > 0) {
+            await loadSavedUser();
+            await loadAccounts();
+          }
+        })
+        .catch(() => {
+          append("Cookie 自动刷新失败，将在下个周期重试");
+        });
+    }, 15 * 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, [append, loadAccounts, loadSavedUser]);
+
+  useEffect(() => {
     let active = true;
 
     const unlistenPromise = studioApi.listenDanmuEvent((payload) => {
@@ -351,6 +483,8 @@ export function useStudioController() {
       showFaceModal,
       showLogs,
       showStreamKey,
+      tagInput,
+      tags,
       title,
     },
     actions: {
@@ -374,15 +508,20 @@ export function useStudioController() {
       setChild,
       setDanmuText,
       setShowStreamKey,
+      setTagInput,
       setTitle,
+      addTag,
+      removeTag,
       startDanmu,
       startLive,
       stopDanmu,
       stopLive,
       submitArea,
       submitDanmu,
+      submitTags,
       submitTitle,
       switchAccount,
+      syncLiveRoomProfile,
       toggleLogs: () => setShowLogs((prev) => !prev),
     },
     refs: {

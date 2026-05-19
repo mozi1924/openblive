@@ -115,40 +115,42 @@ export function AccountTab({
               暂无多余已保存的账号，您可以扫码添加更多账号
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="max-h-[320px] overflow-y-auto pr-1 space-y-3">
               {accounts
                 .filter((user) => user.uid !== currentUser?.uid)
                 .map((user) => (
                   <div
                     key={user.uid}
-                    className="flex items-center space-x-4 rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-200 hover:border-white/10"
+                    className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 p-4 transition-all duration-200 hover:border-bili-blue/20 hover:bg-white/10"
                   >
-                    <img
-                      src={user.face}
-                      alt={user.uname}
-                      className="h-10 w-10 rounded-xl object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <h4 className="truncate text-sm font-bold text-white">
-                        {user.uname}
-                      </h4>
-                      <p className="mt-0.5 truncate text-[10px] text-gray-500">
-                        UID: {user.uid}
-                      </p>
+                    <div className="flex items-center space-x-4 min-w-0 flex-1">
+                      <img
+                        src={user.face}
+                        alt={user.uname}
+                        className="h-10 w-10 rounded-xl border border-white/10 object-cover shadow-md"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="truncate text-sm font-bold text-white">
+                          {user.uname}
+                        </h4>
+                        <p className="mt-0.5 truncate text-[10px] text-gray-400">
+                          UID: {user.uid}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex space-x-1">
+                    <div className="flex items-center space-x-2 ml-4 flex-shrink-0">
                       <button
                         onClick={() => void onSwitchAccount(user.uid)}
-                        className="rounded-lg bg-bili-blue/15 px-2.5 py-1.5 text-[11px] font-bold text-bili-blue transition-colors active:scale-95 hover:bg-bili-blue/30"
+                        className="rounded-xl bg-bili-blue/15 px-3.5 py-1.5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue/25 hover:text-white"
                       >
                         切换
                       </button>
                       <button
                         onClick={() => void onLogout(user.uid)}
-                        className="rounded-lg p-1.5 text-gray-500 transition-colors active:scale-95 hover:bg-rose-500/10 hover:text-rose-400"
+                        className="rounded-xl p-2 text-gray-400 transition-all duration-150 active:scale-95 hover:bg-rose-500/10 hover:text-rose-400"
                         title="删除此账号"
                       >
-                        <LogOut className="h-3.5 w-3.5" />
+                        <LogOut className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -158,14 +160,14 @@ export function AccountTab({
         </div>
       </div>
 
-      <div className="lg:col-span-5">
-        <div className="glass-panel glow-pink flex flex-col items-center rounded-3xl p-6">
+      <div className="lg:col-span-5 lg:sticky lg:top-8">
+        <div className="glass-panel glow-pink flex flex-col items-center rounded-3xl p-6 transition-all duration-300 hover:shadow-2xl">
           <h3 className="mb-6 w-full text-xs font-bold tracking-wider text-gray-400 uppercase">
             扫码新增账号
           </h3>
 
           {qrcode ? (
-            <div className="flex flex-col items-center space-y-6">
+            <div className="flex flex-col items-center space-y-6 w-full">
               <div className="group relative overflow-hidden rounded-3xl border-4 border-bili-pink/20 bg-white p-4 shadow-xl transition-all duration-300">
                 <img
                   src={qrcode}
@@ -211,7 +213,7 @@ export function AccountTab({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center py-12 text-center">
+            <div className="flex flex-col items-center py-12 text-center w-full">
               <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-tr from-bili-pink/20 to-transparent">
                 <QrCode className="h-10 w-10 text-bili-pink" />
               </div>

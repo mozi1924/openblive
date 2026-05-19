@@ -1,8 +1,8 @@
 use crate::bili::{app_sign, get_danmu_info, wbi_signed};
 use crate::config::save_config;
-use crate::constants::CmdResult;
+use crate::constants::{CmdResult, DEFAULT_LIVEHIME_BUILD, DEFAULT_LIVEHIME_VERSION};
 use crate::danmu::decode_and_emit;
-use crate::models::{DanmuReq, UpdateAreaReq, UpdateTitleReq};
+use crate::models::{DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq};
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use futures_util::{SinkExt, StreamExt};
@@ -10,6 +10,256 @@ use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
 use tauri::{AppHandle, State};
 use tokio_tungstenite::tungstenite::Message;
+
+const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
+const LIVE_PLATFORM_PC_LINK: &str = "pc_link";
+
+fn split_tags(raw: &str) -> Vec<String> {
+    raw.split([',', '，'])
+        .map(|tag| tag.trim())
+        .filter(|tag| !tag.is_empty())
+        .map(|tag| tag.to_string())
+        .collect()
+}
+
+fn build_room_update_form(room_id: &str, csrf: &str) -> BTreeMap<String, String> {
+    let mut form = BTreeMap::new();
+    form.insert("room_id".into(), room_id.to_string());
+    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
+    form.insert("csrf".into(), csrf.to_string());
+    form.insert("csrf_token".into(), csrf.to_string());
+    form
+}
+
+fn sanitized_live_client_version(version: &str, build: u64) -> (String, u64) {
+    let normalized_version = if version.trim().is_empty() {
+        DEFAULT_LIVEHIME_VERSION.to_string()
+    } else {
+        version.trim().to_string()
+    };
+    let normalized_build = if build == 0 {
+        DEFAULT_LIVEHIME_BUILD
+    } else {
+        build
+    };
+    (normalized_version, normalized_build)
+}
+
+pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(String, u64), String> {
+    let ts = chrono::Utc::now().timestamp().to_string();
+    let mut params = BTreeMap::new();
+    params.insert("system_version".into(), "2".into());
+    params.insert("ts".into(), ts);
+    let signed = app_sign(&params);
+    let query = signed
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.clone()))
+        .collect::<Vec<_>>();
+
+    let value = state
+        .client
+        .get_json(
+            "https://api.live.bilibili.com/xlive/app-blink/v1/liveVersionInfo/getHomePageLiveVersion",
+            &query,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+
+    if value["code"].as_i64().unwrap_or(-1) != 0 {
+        return Err(value["message"]
+            .as_str()
+            .unwrap_or("获取版本号失败")
+            .to_string());
+    }
+
+    let raw_version = value["data"]["curr_version"].as_str().unwrap_or("");
+    let raw_build = value["data"]["build"].as_u64().unwrap_or(0);
+    let (version, build) = sanitized_live_client_version(raw_version, raw_build);
+
+    let mut runtime = state.runtime.lock().await;
+    runtime.config.live_client_version = version.clone();
+    runtime.config.live_client_build = build;
+    runtime.config.live_client_synced_at = chrono::Utc::now().timestamp();
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+    Ok((version, build))
+}
+
+async fn resolve_live_client_version(state: &AppState, force_refresh: bool) -> (String, u64, bool) {
+    let (cached_version, cached_build, synced_at) = {
+        let runtime = state.runtime.lock().await;
+        (
+            runtime.config.live_client_version.clone(),
+            runtime.config.live_client_build,
+            runtime.config.live_client_synced_at,
+        )
+    };
+
+    let now = chrono::Utc::now().timestamp();
+    let stale = synced_at <= 0 || now - synced_at >= LIVE_CLIENT_VERSION_TTL_SECS;
+    let missing = cached_version.trim().is_empty() || cached_build == 0;
+    let should_refresh = force_refresh || stale || missing;
+
+    if should_refresh {
+        if let Ok((version, build)) = refresh_live_client_version_inner(state).await {
+            return (version, build, false);
+        }
+    }
+
+    let (version, build) = sanitized_live_client_version(&cached_version, cached_build);
+    (version, build, true)
+}
+
+async fn inject_live_client_identity(
+    state: &AppState,
+    form: &mut BTreeMap<String, String>,
+    force_refresh: bool,
+) -> bool {
+    let (version, build, from_cache) = resolve_live_client_version(state, force_refresh).await;
+    form.insert("version".into(), version);
+    form.insert("build".into(), build.to_string());
+    from_cache
+}
+
+#[tauri::command]
+pub async fn refresh_live_client_version(state: State<'_, AppState>) -> CmdResult {
+    let (version, build, from_cache) = resolve_live_client_version(&state, true).await;
+
+    Ok(wrap_ok(json!({
+        "version": version,
+        "build": build,
+        "from_cache": from_cache
+    })))
+}
+
+#[tauri::command]
+pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
+    let (uid, user) = {
+        let runtime = state.runtime.lock().await;
+        let uid = runtime
+            .config
+            .current_uid
+            .clone()
+            .ok_or_else(|| "未登录".to_string())?;
+        let user = runtime
+            .config
+            .users
+            .get(&uid)
+            .cloned()
+            .ok_or_else(|| "未登录".to_string())?;
+        (uid, user)
+    };
+
+    if user.room_id.is_empty() {
+        let parent = user
+            .last_area_name
+            .first()
+            .cloned()
+            .unwrap_or_else(String::new);
+        let child = user
+            .last_area_name
+            .get(1)
+            .cloned()
+            .unwrap_or_else(String::new);
+        return Ok(wrap_ok(json!({
+            "title": user.last_title,
+            "parent": parent,
+            "child": child,
+            "area_id": user.last_area_id.parse::<u64>().ok(),
+            "tags": user.last_tags,
+            "from_cache": true
+        })));
+    }
+
+    state.client.apply_cookie_header(&user.cookie);
+    let result = state
+        .client
+        .get_json(
+            "https://api.live.bilibili.com/room/v1/Room/get_info",
+            &[("room_id", user.room_id.clone())],
+        )
+        .await;
+
+    match result {
+        Ok(value) if value["code"].as_i64().unwrap_or(-1) == 0 => {
+            let data = &value["data"];
+            let title = data["title"]
+                .as_str()
+                .unwrap_or(&user.last_title)
+                .to_string();
+            let parent = data["parent_area_name"].as_str().unwrap_or("").to_string();
+            let child = data["area_name"].as_str().unwrap_or("").to_string();
+            let area_id = data["area_id"]
+                .as_u64()
+                .or_else(|| user.last_area_id.parse::<u64>().ok());
+            let tags = split_tags(data["tags"].as_str().unwrap_or(""));
+            let room_id = data["room_id"]
+                .as_i64()
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| user.room_id.clone());
+
+            let mut runtime = state.runtime.lock().await;
+            if let Some(current) = runtime.config.users.get_mut(&uid) {
+                current.last_title = title.clone();
+                current.last_area_id = area_id.map(|value| value.to_string()).unwrap_or_default();
+                current.last_area_name = if parent.is_empty() || child.is_empty() {
+                    current.last_area_name.clone()
+                } else {
+                    vec![parent.clone(), child.clone()]
+                };
+                current.last_tags = tags.clone();
+                if !room_id.is_empty() {
+                    current.room_id = room_id.clone();
+                }
+            }
+            runtime.session.current_area_id = area_id;
+            runtime.session.current_area_names = if parent.is_empty() || child.is_empty() {
+                runtime.session.current_area_names.clone()
+            } else {
+                vec![parent.clone(), child.clone()]
+            };
+            runtime.session.current_tags = tags.clone();
+            if !room_id.is_empty() {
+                runtime.session.room_id = room_id;
+            }
+            save_config(&state.config_path, &runtime.config, &state.master_key);
+
+            Ok(wrap_ok(json!({
+                "title": title,
+                "parent": parent,
+                "child": child,
+                "area_id": area_id,
+                "tags": tags,
+                "from_cache": false
+            })))
+        }
+        _ => {
+            let parent = user
+                .last_area_name
+                .first()
+                .cloned()
+                .unwrap_or_else(String::new);
+            let child = user
+                .last_area_name
+                .get(1)
+                .cloned()
+                .unwrap_or_else(String::new);
+
+            let mut runtime = state.runtime.lock().await;
+            runtime.session.current_area_id = user.last_area_id.parse::<u64>().ok();
+            runtime.session.current_area_names = user.last_area_name.clone();
+            runtime.session.current_tags = user.last_tags.clone();
+
+            Ok(wrap_ok(json!({
+                "title": user.last_title,
+                "parent": parent,
+                "child": child,
+                "area_id": user.last_area_id.parse::<u64>().ok(),
+                "tags": user.last_tags,
+                "from_cache": true
+            })))
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
@@ -94,7 +344,7 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
         let mut runtime = state.runtime.lock().await;
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
-                user.last_title = req.title;
+                user.last_title = req.title.clone();
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -102,6 +352,96 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
     } else {
         Err(value["msg"].as_str().unwrap_or("更新失败").into())
     }
+}
+
+#[tauri::command]
+pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) -> CmdResult {
+    let desired_tags = split_tags(&req.tags);
+    let (uid, room_id, csrf, current_tags, cookie) = {
+        let runtime = state.runtime.lock().await;
+        let uid = runtime
+            .config
+            .current_uid
+            .clone()
+            .ok_or_else(|| "未登录".to_string())?;
+        let user = runtime
+            .config
+            .users
+            .get(&uid)
+            .ok_or_else(|| "未登录".to_string())?;
+        (
+            uid,
+            user.room_id.clone(),
+            user.csrf.clone(),
+            user.last_tags.clone(),
+            user.cookie.clone(),
+        )
+    };
+
+    if room_id.is_empty() {
+        return Err("未获取到直播间号".into());
+    }
+    if csrf.is_empty() {
+        return Err("未获取到 csrf，请尝试刷新账号信息".into());
+    }
+
+    state.client.apply_cookie_header(&cookie);
+
+    let to_add: Vec<String> = desired_tags
+        .iter()
+        .filter(|tag| !current_tags.iter().any(|old| old == *tag))
+        .cloned()
+        .collect();
+    let to_del: Vec<String> = current_tags
+        .iter()
+        .filter(|tag| !desired_tags.iter().any(|new| new == *tag))
+        .cloned()
+        .collect();
+
+    for tag in &to_add {
+        let mut form = build_room_update_form(&room_id, &csrf);
+        form.insert("add_tag".into(), tag.clone());
+        let value = state
+            .client
+            .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+            .await
+            .map_err(|error| error.to_string())?;
+        if value["code"].as_i64().unwrap_or(-1) != 0 {
+            return Err(format!(
+                "新增标签失败({tag}): {}",
+                value["msg"].as_str().unwrap_or("更新失败")
+            ));
+        }
+    }
+
+    for tag in &to_del {
+        let mut form = build_room_update_form(&room_id, &csrf);
+        form.insert("del_tag".into(), tag.clone());
+        let value = state
+            .client
+            .post_form("https://api.live.bilibili.com/room/v1/Room/update", &form)
+            .await
+            .map_err(|error| error.to_string())?;
+        if value["code"].as_i64().unwrap_or(-1) != 0 {
+            return Err(format!(
+                "删除标签失败({tag}): {}",
+                value["msg"].as_str().unwrap_or("更新失败")
+            ));
+        }
+    }
+
+    let mut runtime = state.runtime.lock().await;
+    if let Some(user) = runtime.config.users.get_mut(&uid) {
+        user.last_tags = desired_tags.clone();
+    }
+    runtime.session.current_tags = desired_tags.clone();
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+
+    Ok(wrap_ok(json!({
+        "tags": desired_tags,
+        "added": to_add,
+        "removed": to_del
+    })))
 }
 
 #[tauri::command]
@@ -115,59 +455,25 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     let room_id = runtime.session.room_id.clone();
     let csrf = runtime.session.csrf.clone();
     drop(runtime);
-
-    let now = state
-        .client
-        .get_json("https://api.bilibili.com/x/report/click/now", &[])
-        .await
-        .map_err(|error| error.to_string())?["data"]["now"]
-        .as_i64()
-        .unwrap_or(0)
-        .to_string();
-
-    let mut homepage_params = BTreeMap::new();
-    homepage_params.insert("system_version".into(), "2".into());
-    homepage_params.insert("ts".into(), now.clone());
-    let homepage_params = app_sign(&homepage_params)
-        .into_iter()
-        .collect::<Vec<_>>();
-    let homepage_query = homepage_params
-        .iter()
-        .map(|(key, value)| (key.as_str(), value.clone()))
-        .collect::<Vec<_>>();
-    let version = state
-        .client
-        .get_json(
-            "https://api.live.bilibili.com/xlive/app-blink/v1/liveVersionInfo/getHomePageLiveVersion",
-            &homepage_query,
-        )
-        .await
-        .map_err(|error| error.to_string())?;
+    let now = chrono::Utc::now().timestamp().to_string();
 
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id);
-    form.insert("platform".into(), "pc_link".into());
+    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
     form.insert("area_v2".into(), area.to_string());
     form.insert("backup_stream".into(), "0".into());
     form.insert("csrf_token".into(), csrf.clone());
     form.insert("csrf".into(), csrf);
-    form.insert(
-        "build".into(),
-        version["data"]["build"].as_i64().unwrap_or(0).to_string(),
-    );
-    form.insert(
-        "version".into(),
-        version["data"]["curr_version"]
-            .as_str()
-            .unwrap_or("0")
-            .into(),
-    );
+    inject_live_client_identity(&state, &mut form, false).await;
     form.insert("ts".into(), now);
     let form = app_sign(&form);
 
     let response = state
         .client
-        .post_form("https://api.live.bilibili.com/room/v1/Room/startLive", &form)
+        .post_form(
+            "https://api.live.bilibili.com/room/v1/Room/startLive",
+            &form,
+        )
         .await
         .map_err(|error| error.to_string())?;
     let code = response["code"].as_i64().unwrap_or(-1);
@@ -202,7 +508,7 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
     let runtime = state.runtime.lock().await;
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), runtime.session.room_id.clone());
-    form.insert("platform".into(), "pc_link".into());
+    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
     form.insert("csrf".into(), runtime.session.csrf.clone());
     form.insert("csrf_token".into(), runtime.session.csrf.clone());
     drop(runtime);

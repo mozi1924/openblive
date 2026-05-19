@@ -1,3 +1,4 @@
+mod avatar;
 mod bili;
 mod client;
 mod commands;
@@ -10,14 +11,16 @@ mod response;
 mod state;
 
 use commands::{
-    get_account_list, get_app_config, get_login_qrcode, get_partitions, get_session,
-    get_version, load_saved_config, logout, poll_login_status, refresh_current_user,
-    send_danmu, set_app_config, start_danmu_monitor, start_live, stop_danmu_monitor,
-    stop_live, switch_account, update_area, update_title,
+    get_account_list, get_app_config, get_login_qrcode, get_partitions, get_session, get_version,
+    load_saved_config, logout, poll_login_status, refresh_all_account_cookies,
+    refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
+    send_danmu, set_app_config, start_danmu_monitor, start_live, stop_danmu_monitor, stop_live,
+    switch_account, sync_live_room_profile, update_area, update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
 use state::{restore_session_from_current, AppState, RuntimeState};
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,6 +38,16 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                if let Err(error) = refresh_live_client_version_inner(&state).await {
+                    eprintln!("refresh live client version on startup failed: {error}");
+                }
+            });
+            Ok(())
+        })
         .manage(AppState {
             client,
             runtime: Mutex::new(runtime),
@@ -47,11 +60,15 @@ pub fn run() {
             load_saved_config,
             refresh_current_user,
             get_account_list,
+            refresh_all_account_cookies,
+            refresh_live_client_version,
             switch_account,
             logout,
             get_partitions,
+            sync_live_room_profile,
             update_area,
             update_title,
+            update_live_tags,
             start_live,
             stop_live,
             start_danmu_monitor,

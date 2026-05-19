@@ -1,6 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+fn default_live_client_version() -> String {
+    crate::constants::DEFAULT_LIVEHIME_VERSION.to_string()
+}
+
+fn default_live_client_build() -> u64 {
+    crate::constants::DEFAULT_LIVEHIME_BUILD
+}
+
+fn default_live_client_synced_at() -> i64 {
+    0
+}
+
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct SessionState {
     pub uid: u64,
@@ -8,7 +20,10 @@ pub struct SessionState {
     pub csrf: String,
     pub is_live: bool,
     pub current_area_id: Option<u64>,
+    #[serde(default)]
     pub current_area_names: Vec<String>,
+    #[serde(default)]
+    pub current_tags: Vec<String>,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -30,9 +45,14 @@ pub struct UserRecord {
     pub following: i64,
     pub follower: i64,
     pub dynamic_count: i64,
+    #[serde(default)]
     pub last_title: String,
+    #[serde(default)]
     pub last_area_id: String,
+    #[serde(default)]
     pub last_area_name: Vec<String>,
+    #[serde(default)]
+    pub last_tags: Vec<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -40,6 +60,12 @@ pub struct PersistConfig {
     pub users: HashMap<String, UserRecord>,
     pub current_uid: Option<String>,
     pub min_to_tray: bool,
+    #[serde(default = "default_live_client_version")]
+    pub live_client_version: String,
+    #[serde(default = "default_live_client_build")]
+    pub live_client_build: u64,
+    #[serde(default = "default_live_client_synced_at")]
+    pub live_client_synced_at: i64,
 }
 
 impl Default for PersistConfig {
@@ -48,6 +74,9 @@ impl Default for PersistConfig {
             users: HashMap::new(),
             current_uid: None,
             min_to_tray: true,
+            live_client_version: default_live_client_version(),
+            live_client_build: default_live_client_build(),
+            live_client_synced_at: default_live_client_synced_at(),
         }
     }
 }
@@ -66,6 +95,11 @@ pub struct UpdateAreaReq {
 #[derive(Deserialize)]
 pub struct UpdateTitleReq {
     pub title: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateTagsReq {
+    pub tags: String,
 }
 
 #[derive(Deserialize)]

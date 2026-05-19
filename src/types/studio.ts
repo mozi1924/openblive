@@ -27,6 +27,7 @@ export type User = {
   bcoin?: number;
   last_title: string;
   last_area_name: string[];
+  last_tags?: string[];
 };
 
 export type StreamInfo = {
@@ -35,6 +36,15 @@ export type StreamInfo = {
     code?: string;
   };
   protocols?: unknown[];
+};
+
+export type LiveRoomProfile = {
+  title: string;
+  parent: string;
+  child: string;
+  area_id?: number;
+  tags: string[];
+  from_cache: boolean;
 };
 
 export type DanmuMsg = {

@@ -57,15 +57,22 @@ function App() {
               rtmp={state.rtmp}
               session={state.session}
               showStreamKey={state.showStreamKey}
+              tagInput={state.tagInput}
+              tags={state.tags}
               title={state.title}
               onChangeChild={actions.setChild}
               onChangeParent={actions.changeParent}
               onChangeShowStreamKey={actions.setShowStreamKey}
+              onChangeTagInput={actions.setTagInput}
               onChangeTitle={actions.setTitle}
+              onAddTag={actions.addTag}
+              onRemoveTag={actions.removeTag}
               onCopyToClipboard={actions.copyToClipboard}
+              onSyncProfile={actions.syncLiveRoomProfile}
               onStartLive={actions.startLive}
               onStopLive={actions.stopLive}
               onSubmitArea={actions.submitArea}
+              onSubmitTags={actions.submitTags}
               onSubmitTitle={actions.submitTitle}
             />
           )}

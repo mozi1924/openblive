@@ -8,7 +8,9 @@ use tauri::State;
 #[tauri::command]
 pub async fn get_session(state: State<'_, AppState>) -> CmdResult {
     let runtime = state.runtime.lock().await;
-    Ok(wrap_ok(serde_json::to_value(runtime.session.clone()).unwrap()))
+    Ok(wrap_ok(
+        serde_json::to_value(runtime.session.clone()).unwrap(),
+    ))
 }
 
 #[tauri::command]

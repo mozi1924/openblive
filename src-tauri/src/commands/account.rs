@@ -1,3 +1,4 @@
+use crate::avatar::{delete_avatar_cache, has_cached_face, refresh_avatar_cache, to_response_user};
 use crate::bili::fetch_full_user_data;
 use crate::client::parse_cookie_value;
 use crate::config::save_config;
@@ -7,6 +8,55 @@ use crate::response::wrap_ok;
 use crate::state::{restore_session_from_current, AppState};
 use serde_json::json;
 use tauri::State;
+
+fn fill_profile_from_full(user: &mut UserRecord, full: &serde_json::Value) {
+    user.uname = full["uname"].as_str().unwrap_or("未知用户").to_string();
+    user.face = full["face"].as_str().unwrap_or("").to_string();
+    user.level = full["level_info"]["current_level"].as_i64().unwrap_or(0);
+    user.current_exp = full["level_info"]["current_exp"].as_i64().unwrap_or(0);
+    user.next_exp = full["level_info"]["next_exp"].as_i64().unwrap_or(0);
+    user.money = full["money"].as_f64().unwrap_or(0.0);
+    user.bcoin = full["wallet"]["bcoin_balance"].as_f64().unwrap_or(0.0);
+    user.following = full["stat"]["following"].as_i64().unwrap_or(0);
+    user.follower = full["stat"]["follower"].as_i64().unwrap_or(0);
+    user.dynamic_count = full["stat"]["dynamic_count"].as_i64().unwrap_or(0);
+}
+
+async fn refresh_cookie_for_uid(uid: &str, state: &AppState) -> Result<Option<UserRecord>, String> {
+    let user = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.users.get(uid).cloned()
+    };
+    let Some(mut user) = user else {
+        return Ok(None);
+    };
+
+    state.client.apply_cookie_header(&user.cookie);
+    let full = fetch_full_user_data(&state.client)
+        .await
+        .map_err(|error| error.to_string())?;
+    let cookie_header = state.client.cookie_header_for("https://api.bilibili.com/");
+    if !cookie_header.is_empty() {
+        user.cookie = cookie_header;
+    }
+    if let Some(csrf) = parse_cookie_value(&user.cookie, "bili_jct") {
+        user.csrf = csrf;
+    }
+    fill_profile_from_full(&mut user, &full);
+
+    if let Err(error) =
+        refresh_avatar_cache(&state.client, &state.config_path, uid, &user.face).await
+    {
+        eprintln!("avatar cache refresh failed for uid {uid}: {error}");
+    }
+
+    let mut runtime = state.runtime.lock().await;
+    runtime.config.users.insert(uid.to_string(), user.clone());
+    if runtime.config.current_uid.as_deref() == Some(uid) {
+        restore_session_from_current(&mut runtime, &state.client);
+    }
+    Ok(Some(user))
+}
 
 #[tauri::command]
 pub async fn get_login_qrcode(state: State<'_, AppState>) -> CmdResult {
@@ -72,25 +122,33 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         .unwrap_or_default();
     let user = UserRecord {
         uid: uid_str.clone(),
-        uname: full["uname"].as_str().unwrap_or("未知用户").to_string(),
-        face: full["face"].as_str().unwrap_or("").to_string(),
+        uname: String::new(),
+        face: String::new(),
         cookie: cookie_header,
         enc_cookie: String::new(),
         room_id: room.clone(),
         csrf: csrf.clone(),
         enc_csrf: String::new(),
-        level: full["level_info"]["current_level"].as_i64().unwrap_or(0),
-        current_exp: full["level_info"]["current_exp"].as_i64().unwrap_or(0),
-        next_exp: full["level_info"]["next_exp"].as_i64().unwrap_or(0),
-        money: full["money"].as_f64().unwrap_or(0.0),
-        bcoin: full["wallet"]["bcoin_balance"].as_f64().unwrap_or(0.0),
-        following: full["stat"]["following"].as_i64().unwrap_or(0),
-        follower: full["stat"]["follower"].as_i64().unwrap_or(0),
-        dynamic_count: full["stat"]["dynamic_count"].as_i64().unwrap_or(0),
+        level: 0,
+        current_exp: 0,
+        next_exp: 0,
+        money: 0.0,
+        bcoin: 0.0,
+        following: 0,
+        follower: 0,
+        dynamic_count: 0,
         last_title: old.last_title,
         last_area_id: old.last_area_id,
         last_area_name: old.last_area_name,
+        last_tags: old.last_tags,
     };
+    let mut user = user;
+    fill_profile_from_full(&mut user, &full);
+    if let Err(error) =
+        refresh_avatar_cache(&state.client, &state.config_path, &uid_str, &user.face).await
+    {
+        eprintln!("avatar cache refresh failed for uid {uid_str}: {error}");
+    }
 
     runtime.config.users.insert(uid_str.clone(), user.clone());
     runtime.config.current_uid = Some(uid_str);
@@ -98,66 +156,81 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     runtime.session.csrf = csrf;
     runtime.session.room_id = room;
     save_config(&state.config_path, &runtime.config, &state.master_key);
-    Ok(wrap_ok(serde_json::to_value(user).unwrap()))
+    let response_user = to_response_user(&state.config_path, &user);
+    Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }
 
 #[tauri::command]
 pub async fn load_saved_config(state: State<'_, AppState>) -> CmdResult {
-    let runtime = state.runtime.lock().await;
-    let data = runtime
-        .config
-        .current_uid
+    let user = {
+        let runtime = state.runtime.lock().await;
+        runtime
+            .config
+            .current_uid
+            .as_ref()
+            .and_then(|uid| runtime.config.users.get(uid))
+            .cloned()
+    };
+    if let Some(user) = &user {
+        if !has_cached_face(&state.config_path, &user.uid) {
+            if let Err(error) =
+                refresh_avatar_cache(&state.client, &state.config_path, &user.uid, &user.face).await
+            {
+                eprintln!("avatar cache warmup failed for uid {}: {}", user.uid, error);
+            }
+        }
+    }
+    let data = user
         .as_ref()
-        .and_then(|uid| runtime.config.users.get(uid))
-        .cloned();
+        .map(|value| to_response_user(&state.config_path, value));
     Ok(wrap_ok(serde_json::to_value(data).unwrap()))
 }
 
 #[tauri::command]
 pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
+    let uid = {
+        let runtime = state.runtime.lock().await;
+        runtime
+            .config
+            .current_uid
+            .clone()
+            .ok_or_else(|| "未登录".to_string())?
+    };
+    let user = refresh_cookie_for_uid(&uid, &state).await?;
+    let user = user.ok_or_else(|| "未登录".to_string())?;
+
     let runtime = state.runtime.lock().await;
-    let uid = runtime
-        .config
-        .current_uid
-        .clone()
-        .ok_or_else(|| "未登录".to_string())?;
-    let user = runtime
-        .config
-        .users
-        .get(&uid)
-        .cloned()
-        .ok_or_else(|| "未登录".to_string())?;
-    drop(runtime);
-
-    state.client.apply_cookie_header(&user.cookie);
-    let full = fetch_full_user_data(&state.client)
-        .await
-        .map_err(|error| error.to_string())?;
-
-    let mut runtime = state.runtime.lock().await;
-    let mut current = runtime.config.users.get(&uid).cloned().unwrap_or_default();
-    current.uname = full["uname"].as_str().unwrap_or("未知用户").to_string();
-    current.face = full["face"].as_str().unwrap_or("").to_string();
-    current.level = full["level_info"]["current_level"].as_i64().unwrap_or(0);
-    current.current_exp = full["level_info"]["current_exp"].as_i64().unwrap_or(0);
-    current.next_exp = full["level_info"]["next_exp"].as_i64().unwrap_or(0);
-    current.money = full["money"].as_f64().unwrap_or(0.0);
-    current.bcoin = full["wallet"]["bcoin_balance"].as_f64().unwrap_or(0.0);
-    current.following = full["stat"]["following"].as_i64().unwrap_or(0);
-    current.follower = full["stat"]["follower"].as_i64().unwrap_or(0);
-    current.dynamic_count = full["stat"]["dynamic_count"].as_i64().unwrap_or(0);
-    runtime.config.users.insert(uid, current.clone());
     save_config(&state.config_path, &runtime.config, &state.master_key);
-    Ok(wrap_ok(serde_json::to_value(current).unwrap()))
+    let response_user = to_response_user(&state.config_path, &user);
+    Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }
 
 #[tauri::command]
 pub async fn get_account_list(state: State<'_, AppState>) -> CmdResult {
-    let runtime = state.runtime.lock().await;
-    let list: Vec<UserRecord> = runtime.config.users.values().cloned().collect();
+    let users = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.users.values().cloned().collect::<Vec<_>>()
+    };
+    for user in &users {
+        if !has_cached_face(&state.config_path, &user.uid) {
+            if let Err(error) =
+                refresh_avatar_cache(&state.client, &state.config_path, &user.uid, &user.face).await
+            {
+                eprintln!("avatar cache warmup failed for uid {}: {}", user.uid, error);
+            }
+        }
+    }
+    let list: Vec<UserRecord> = users
+        .iter()
+        .map(|user| to_response_user(&state.config_path, user))
+        .collect();
+    let current_uid = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.current_uid.clone()
+    };
     Ok(wrap_ok(json!({
         "list": list,
-        "current_uid": runtime.config.current_uid
+        "current_uid": current_uid
     })))
 }
 
@@ -170,19 +243,60 @@ pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResul
 
     runtime.config.current_uid = Some(req.uid.clone());
     restore_session_from_current(&mut runtime, &state.client);
-    let user = runtime.config.users.get(&req.uid).cloned().unwrap_or_default();
+    let user = runtime
+        .config
+        .users
+        .get(&req.uid)
+        .cloned()
+        .unwrap_or_default();
     save_config(&state.config_path, &runtime.config, &state.master_key);
-    Ok(wrap_ok(serde_json::to_value(user).unwrap()))
+    drop(runtime);
+
+    if !has_cached_face(&state.config_path, &user.uid) {
+        if let Err(error) =
+            refresh_avatar_cache(&state.client, &state.config_path, &user.uid, &user.face).await
+        {
+            eprintln!("avatar cache warmup failed for uid {}: {}", user.uid, error);
+        }
+    }
+    let response_user = to_response_user(&state.config_path, &user);
+    Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }
 
 #[tauri::command]
 pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     runtime.config.users.remove(&req.uid);
+    delete_avatar_cache(&state.config_path, &req.uid);
     if runtime.config.current_uid.as_deref() == Some(&req.uid) {
         runtime.config.current_uid = None;
         runtime.session = Default::default();
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
     Ok(wrap_ok(json!({})))
+}
+
+#[tauri::command]
+pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResult {
+    let uids = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.users.keys().cloned().collect::<Vec<_>>()
+    };
+
+    let mut updated = 0;
+    let mut failed: Vec<String> = Vec::new();
+    for uid in uids {
+        match refresh_cookie_for_uid(&uid, &state).await {
+            Ok(Some(_)) => updated += 1,
+            Ok(None) => {}
+            Err(error) => failed.push(format!("{uid}: {error}")),
+        }
+    }
+
+    let runtime = state.runtime.lock().await;
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+    Ok(wrap_ok(json!({
+        "updated": updated,
+        "failed": failed
+    })))
 }

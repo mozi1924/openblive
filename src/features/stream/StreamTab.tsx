@@ -1,4 +1,17 @@
-import { Check, Compass, Copy, Eye, EyeOff, Link, Radio, Trash2 } from "lucide-react";
+import {
+  Check,
+  Compass,
+  Copy,
+  Eye,
+  EyeOff,
+  Link,
+  Plus,
+  Radio,
+  RefreshCw,
+  Tags,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { Session, StreamInfo } from "../../types/studio";
 
 type StreamTabProps = {
@@ -10,15 +23,22 @@ type StreamTabProps = {
   rtmp: StreamInfo | null;
   session: Session | null;
   showStreamKey: boolean;
+  tagInput: string;
+  tags: string[];
   title: string;
   onChangeChild: (value: string) => void;
   onChangeParent: (value: string) => void;
   onChangeShowStreamKey: React.Dispatch<React.SetStateAction<boolean>>;
+  onChangeTagInput: React.Dispatch<React.SetStateAction<string>>;
   onChangeTitle: React.Dispatch<React.SetStateAction<string>>;
+  onAddTag: () => void;
+  onRemoveTag: (tag: string) => void;
   onCopyToClipboard: (text: string, type: "server" | "key") => Promise<void>;
+  onSyncProfile: () => Promise<void>;
   onStartLive: () => Promise<void>;
   onStopLive: () => Promise<void>;
   onSubmitArea: (event: React.FormEvent) => Promise<void>;
+  onSubmitTags: (event: React.FormEvent) => Promise<void>;
   onSubmitTitle: (event: React.FormEvent) => Promise<void>;
 };
 
@@ -31,15 +51,22 @@ export function StreamTab({
   rtmp,
   session,
   showStreamKey,
+  tagInput,
+  tags,
   title,
   onChangeChild,
   onChangeParent,
   onChangeShowStreamKey,
+  onChangeTagInput,
   onChangeTitle,
+  onAddTag,
+  onRemoveTag,
   onCopyToClipboard,
+  onSyncProfile,
   onStartLive,
   onStopLive,
   onSubmitArea,
+  onSubmitTags,
   onSubmitTitle,
 }: StreamTabProps) {
   return (
@@ -50,6 +77,16 @@ export function StreamTab({
             <Compass className="mr-2 h-4 w-4 text-bili-blue" />
             直播参数设置
           </h3>
+
+          <div className="mb-4 flex justify-end">
+            <button
+              onClick={() => void onSyncProfile()}
+              className="flex items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold text-gray-300 transition-all duration-150 active:scale-95 hover:border-bili-blue/25 hover:text-white"
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              同步直播间信息
+            </button>
+          </div>
 
           <div className="space-y-6">
             <form onSubmit={(event) => void onSubmitTitle(event)} className="space-y-2">
@@ -125,6 +162,72 @@ export function StreamTab({
                   className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-5 py-2.5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue/20"
                 >
                   设置分区
+                </button>
+              </div>
+            </form>
+
+            <form onSubmit={(event) => void onSubmitTags(event)} className="space-y-2">
+              <label className="text-xs font-semibold text-gray-500 uppercase">
+                直播间标签
+              </label>
+              <div className="min-h-10 rounded-xl border border-white/10 bg-white/5 p-2">
+                {tags.length === 0 ? (
+                  <p className="px-2 py-1 text-xs text-gray-500">
+                    暂无标签，可在下方输入后添加
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center rounded-lg border border-bili-blue/25 bg-bili-blue/10 px-2.5 py-1 text-xs text-bili-blue"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => onRemoveTag(tag)}
+                          className="ml-1.5 rounded p-0.5 text-bili-blue/80 transition-colors hover:bg-bili-blue/20 hover:text-bili-blue"
+                          title="删除标签"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex space-x-3">
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(event) => onChangeTagInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      onAddTag();
+                    }
+                  }}
+                  placeholder="输入标签后回车或点添加，支持逗号批量添加"
+                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white transition-all focus:border-bili-blue/50 focus:outline-none hover:border-white/15"
+                />
+                <button
+                  type="button"
+                  onClick={onAddTag}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 text-xs font-semibold text-gray-300 transition-all duration-150 active:scale-95 hover:border-white/20 hover:text-white"
+                >
+                  <span className="inline-flex items-center">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    添加
+                  </span>
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-5 text-xs font-bold text-bili-blue transition-all duration-150 active:scale-95 hover:bg-bili-blue/20"
+                >
+                  <span className="inline-flex items-center">
+                    <Tags className="mr-1.5 h-3.5 w-3.5" />
+                    更新标签
+                  </span>
                 </button>
               </div>
             </form>
