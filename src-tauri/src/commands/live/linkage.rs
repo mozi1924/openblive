@@ -128,14 +128,20 @@ where
     let Some(result) = read.next().await else {
         return Err(format!("i18n.live.error.obs_ws_closed({label})"));
     };
-    let message =
-        result.map_err(|error| format!("i18n.live.error.obs_ws_receive_failed({label}): {error}"))?;
+    let message = result
+        .map_err(|error| format!("i18n.live.error.obs_ws_receive_failed({label}): {error}"))?;
     match message {
         Message::Text(text) => serde_json::from_str::<serde_json::Value>(&text)
             .map_err(|error| format!("i18n.live.error.obs_ws_json_parse_failed({label}): {error}")),
-        Message::Binary(bytes) => serde_json::from_slice::<serde_json::Value>(&bytes)
-            .map_err(|error| format!("i18n.live.error.obs_ws_binary_json_parse_failed({label}): {error}")),
-        Message::Close(frame) => Err(format!("i18n.live.error.obs_ws_closed_by_peer({label}): {:?}", frame)),
+        Message::Binary(bytes) => {
+            serde_json::from_slice::<serde_json::Value>(&bytes).map_err(|error| {
+                format!("i18n.live.error.obs_ws_binary_json_parse_failed({label}): {error}")
+            })
+        }
+        Message::Close(frame) => Err(format!(
+            "i18n.live.error.obs_ws_closed_by_peer({label}): {:?}",
+            frame
+        )),
         _ => Err(format!("i18n.live.error.obs_ws_non_json_frame({label})")),
     }
 }
@@ -160,7 +166,9 @@ where
     write
         .send(Message::Text(packet.to_string().into()))
         .await
-        .map_err(|error| format!("i18n.live.error.obs_ws_request_send_failed({request_type}): {error}"))?;
+        .map_err(|error| {
+            format!("i18n.live.error.obs_ws_request_send_failed({request_type}): {error}")
+        })?;
     Ok(request_id)
 }
 
@@ -192,15 +200,13 @@ where
         let comment = value["d"]["requestStatus"]["comment"]
             .as_str()
             .unwrap_or("Unknown error");
-        return Err(format!("i18n.live.error.obs_ws_request_failed({request_type}) code={code}: {comment}"));
+        return Err(format!(
+            "i18n.live.error.obs_ws_request_failed({request_type}) code={code}: {comment}"
+        ));
     }
 }
 
-async fn obs_identify<S1, S2>(
-    write: &mut S1,
-    read: &mut S2,
-    password: &str,
-) -> Result<(), String>
+async fn obs_identify<S1, S2>(write: &mut S1, read: &mut S2, password: &str) -> Result<(), String>
 where
     S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
     S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,

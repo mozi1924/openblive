@@ -152,6 +152,7 @@ export type DanmuMsg = {
   time: string;
   sender: string;
   content: string;
+  segments?: DanmuContentSegment[];
 };
 
 export type AccountList = {
@@ -163,6 +164,45 @@ export type DanmuEventPayload = {
   cmd?: string;
   info?: unknown[];
   data?: Record<string, unknown>;
+};
+
+export type DanmuEmoticon = {
+  emoticon_id?: number;
+  emoticon_unique?: string;
+  text: string;
+  url: string;
+  width: number;
+  height: number;
+  is_dynamic?: boolean;
+};
+
+export type DanmuContentSegment =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "emoticon";
+      text: string;
+      emoticon: DanmuEmoticon;
+    };
+
+export type LiveEmoticon = {
+  emoticon_id: number;
+  emoticon_unique: string;
+  text: string;
+  label: string;
+  url: string;
+  width: number;
+  height: number;
+  is_dynamic: boolean;
+};
+
+export type LiveEmoticonPackage = {
+  pkg_id: number;
+  pkg_name: string;
+  pkg_descript: string;
+  emoticons: LiveEmoticon[];
 };
 
 export type TrayActionPayload = {

@@ -1,6 +1,6 @@
 use anyhow::Result;
-use reqwest::header::COOKIE;
 use reqwest::cookie::{CookieStore, Jar};
+use reqwest::header::COOKIE;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use url::Url;

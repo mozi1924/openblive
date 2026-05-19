@@ -6,6 +6,7 @@ mod config;
 mod constants;
 mod crypto;
 mod danmu;
+mod emoticon;
 mod i18n;
 mod models;
 mod response;
@@ -13,12 +14,12 @@ mod state;
 mod tray;
 
 use commands::{
-    get_account_list, get_app_config, get_linkage_status, get_login_qrcode, get_partitions, get_session, get_version,
-    load_saved_config, logout, poll_login_status, refresh_all_account_cookies,
-    refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
-    send_danmu, set_app_config, start_danmu_monitor, start_live, stop_danmu_monitor, stop_live,
-    switch_account, sync_live_room_profile, sync_live_status, update_area, update_live_tags, update_title,
-    refresh_tray_menu, reveal_main_window,
+    get_account_list, get_app_config, get_linkage_status, get_live_emoticons, get_login_qrcode,
+    get_partitions, get_session, get_version, load_saved_config, logout, poll_login_status,
+    refresh_all_account_cookies, refresh_current_user, refresh_live_client_version,
+    refresh_live_client_version_inner, refresh_tray_menu, reveal_main_window, send_danmu,
+    set_app_config, start_danmu_monitor, start_live, stop_danmu_monitor, stop_live, switch_account,
+    sync_live_room_profile, sync_live_status, update_area, update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -93,6 +94,7 @@ pub fn run() {
             start_danmu_monitor,
             stop_danmu_monitor,
             send_danmu,
+            get_live_emoticons,
             get_session,
             get_app_config,
             get_linkage_status,

@@ -5,12 +5,17 @@ import type {
   AppConfig,
   DanmuMsg,
   LinkageStatus,
+  LiveEmoticonPackage,
   LiveProfileState,
   Session,
   StreamInfo,
   User,
 } from "../types/studio";
-import { createSelfDanmuMessage, parseDanmuEvent } from "../utils/danmu";
+import {
+  createLiveEmoticonIndex,
+  createSelfDanmuMessage,
+  parseDanmuEvent,
+} from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { resolveQrPayload } from "../utils/qrcode";
 import { useWindowDrag } from "./useWindowDrag";
@@ -61,6 +66,8 @@ export function useStudioController() {
   const [danmuText, setDanmuText] = useState("");
   const [danmuListening, setDanmuListening] = useState(false);
   const [danmus, setDanmus] = useState<DanmuMsg[]>([]);
+  const [liveEmoticonPackages, setLiveEmoticonPackages] = useState<LiveEmoticonPackage[]>([]);
+  const [liveEmoticonsLoading, setLiveEmoticonsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
   const [faceQr, setFaceQr] = useState("");
@@ -101,6 +108,10 @@ export function useStudioController() {
   const childRef = useRef("");
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
+  const liveEmoticonMap = useMemo(
+    () => createLiveEmoticonIndex(liveEmoticonPackages),
+    [liveEmoticonPackages],
+  );
 
   useWindowDrag(sidebarDragRef, headerDragRef);
 
@@ -397,6 +408,8 @@ export function useStudioController() {
 
     if (!user) {
       setCurrentUser(null);
+      setLiveEmoticonPackages([]);
+      setLiveEmoticonsLoading(false);
       applyProfileState(defaultProfileState());
       activeUidRef.current = null;
       setDanmuListening(false);
@@ -641,6 +654,8 @@ export function useStudioController() {
           applyProfileState(res.data.live_profile_state);
           setDanmuListening(false);
           setDanmus([]);
+          setLiveEmoticonPackages([]);
+          setLiveEmoticonsLoading(false);
           setShowFaceModal(false);
           titleDirtyRef.current = false;
           areaDirtyRef.current = false;
@@ -668,6 +683,8 @@ export function useStudioController() {
       if (activeUidRef.current === uid) {
         setDanmuListening(false);
         setDanmus([]);
+        setLiveEmoticonPackages([]);
+        setLiveEmoticonsLoading(false);
       }
       const res = await studioApi.logout(uid);
       if (res.code === 0) {
@@ -1032,7 +1049,11 @@ export function useStudioController() {
     if (res.code === 0) {
       append(tf(localeSetting, "ui.ctrl.danmu_send", { text }));
       setDanmus((prev) => [
-        createSelfDanmuMessage(text, currentUser?.uname || t(localeSetting, "ui.ctrl.me")),
+        createSelfDanmuMessage(
+          text,
+          currentUser?.uname || t(localeSetting, "ui.ctrl.me"),
+          liveEmoticonMap,
+        ),
         ...prev,
       ]);
     } else {
@@ -1040,7 +1061,47 @@ export function useStudioController() {
     }
 
     setDanmuText("");
-  }, [append, currentUser?.uname, danmuText, localeSetting]);
+  }, [append, currentUser?.uname, danmuText, liveEmoticonMap, localeSetting]);
+
+  const loadLiveEmoticons = useCallback(async () => {
+    if (!activeUidRef.current || !session?.room_id) {
+      setLiveEmoticonPackages([]);
+      return;
+    }
+
+    const requestUid = activeUidRef.current;
+    setLiveEmoticonsLoading(true);
+    try {
+      const res = await studioApi.getLiveEmoticons();
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      if (res.code === 0 && res.data) {
+        setLiveEmoticonPackages(res.data);
+      } else {
+        setLiveEmoticonPackages([]);
+        append(
+          tf(localeSetting, "ui.ctrl.danmu_emoticon_load_failed", {
+            msg: resolveBackendMessage(res.msg, localeSetting),
+          }),
+        );
+      }
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      setLiveEmoticonPackages([]);
+      append(
+        tf(localeSetting, "ui.ctrl.danmu_emoticon_load_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    } finally {
+      if (requestUid === activeUidRef.current) {
+        setLiveEmoticonsLoading(false);
+      }
+    }
+  }, [append, localeSetting, session?.room_id]);
 
   const submitDanmu = useCallback(
     async (event: FormEvent) => {
@@ -1120,10 +1181,21 @@ export function useStudioController() {
 
   useEffect(() => {
     if (!currentUser?.uid) {
+      setLiveEmoticonPackages([]);
+      setLiveEmoticonsLoading(false);
       return;
     }
     void syncLiveRoomProfile(true);
   }, [currentUser?.uid, syncLiveRoomProfile]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || !session?.room_id) {
+      setLiveEmoticonPackages([]);
+      setLiveEmoticonsLoading(false);
+      return;
+    }
+    void loadLiveEmoticons();
+  }, [currentUser?.uid, loadLiveEmoticons, session?.room_id]);
 
   useEffect(() => {
     if (!qrcodeKey) {
@@ -1202,7 +1274,7 @@ export function useStudioController() {
         return;
       }
 
-      const parsed = parseDanmuEvent(payload, localeSetting);
+      const parsed = parseDanmuEvent(payload, localeSetting, liveEmoticonMap);
       if (parsed) {
         setDanmus((prev) => [parsed, ...prev]);
       }
@@ -1213,7 +1285,7 @@ export function useStudioController() {
       active = false;
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [append, localeSetting]);
+  }, [append, liveEmoticonMap, localeSetting]);
 
   useEffect(() => {
     let active = true;
@@ -1255,6 +1327,8 @@ export function useStudioController() {
       danmuListening,
       danmuText,
       danmus,
+      liveEmoticonPackages,
+      liveEmoticonsLoading,
       faceQr,
       faceQrContent,
       logs,

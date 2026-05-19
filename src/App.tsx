@@ -102,6 +102,8 @@ function App() {
               danmuListening={state.danmuListening}
               danmuText={state.danmuText}
               danmus={state.danmus}
+              liveEmoticonPackages={state.liveEmoticonPackages}
+              liveEmoticonsLoading={state.liveEmoticonsLoading}
               onChangeDanmuText={actions.setDanmuText}
               onClearDanmus={actions.clearDanmus}
               onSendDanmu={actions.submitDanmu}

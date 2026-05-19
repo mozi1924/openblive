@@ -166,18 +166,12 @@ pub fn sync_live_profile_state_defaults(user: &mut UserRecord) {
     }
 
     if user.live_profile_state.area.submitted_parent.is_empty() {
-        user.live_profile_state.area.submitted_parent = user
-            .last_area_name
-            .first()
-            .cloned()
-            .unwrap_or_default();
+        user.live_profile_state.area.submitted_parent =
+            user.last_area_name.first().cloned().unwrap_or_default();
     }
     if user.live_profile_state.area.submitted_child.is_empty() {
-        user.live_profile_state.area.submitted_child = user
-            .last_area_name
-            .get(1)
-            .cloned()
-            .unwrap_or_default();
+        user.live_profile_state.area.submitted_child =
+            user.last_area_name.get(1).cloned().unwrap_or_default();
     }
     if user.live_profile_state.area.submitted_area_id.is_none() {
         user.live_profile_state.area.submitted_area_id = user

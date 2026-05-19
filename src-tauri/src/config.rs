@@ -1,5 +1,7 @@
 use crate::crypto::{decrypt_text, encrypt_text};
-use crate::models::{sync_live_profile_state_defaults, LiveProfileState, PersistConfig, UserRecord};
+use crate::models::{
+    sync_live_profile_state_defaults, LiveProfileState, PersistConfig, UserRecord,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

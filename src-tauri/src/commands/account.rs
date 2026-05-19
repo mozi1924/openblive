@@ -732,7 +732,9 @@ pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
             Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
         }
         RefreshCookieResult::Missing => Err("i18n.common.not_logged_in".into()),
-        RefreshCookieResult::Invalid(msg) => Err(format!("i18n.common.login_expired_relogin:{msg}")),
+        RefreshCookieResult::Invalid(msg) => {
+            Err(format!("i18n.common.login_expired_relogin:{msg}"))
+        }
         RefreshCookieResult::Failed(error) => Err(error),
     };
 

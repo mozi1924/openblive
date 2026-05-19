@@ -2,6 +2,7 @@ use crate::bili::{app_sign, get_danmu_info, wbi_signed};
 use crate::config::save_config;
 use crate::constants::{CmdResult, DEFAULT_LIVEHIME_BUILD, DEFAULT_LIVEHIME_VERSION};
 use crate::danmu::decode_and_emit;
+use crate::emoticon::parse_live_emoticon_packages;
 use crate::models::{
     sync_live_profile_state_defaults, DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
     UserRecord,
@@ -21,12 +22,11 @@ use common::{
     build_room_update_form, clear_user_auth_flags, error_message, is_auth_invalid_code,
     live_platform_pc_link, mark_current_user_login_invalid,
 };
+pub(crate) use linkage::obs_ws_probe;
 use linkage::{
     apply_command_template, build_command_template_context, empty_command_template_context,
-    normalize_live_control_mode, obs_ws_start_stream, obs_ws_stop_stream,
-    spawn_shell_command,
+    normalize_live_control_mode, obs_ws_start_stream, obs_ws_stop_stream, spawn_shell_command,
 };
-pub(crate) use linkage::obs_ws_probe;
 use stream::{collect_stream_endpoints, select_primary_endpoint};
 
 const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
@@ -180,7 +180,10 @@ fn apply_room_area_to_session(
     session: &mut crate::models::SessionState,
     room_info: &serde_json::Value,
 ) {
-    let parent = room_info["parent_area_name"].as_str().unwrap_or("").to_string();
+    let parent = room_info["parent_area_name"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
     let child = room_info["area_name"].as_str().unwrap_or("").to_string();
     if !parent.is_empty() && !child.is_empty() {
         session.current_area_names = vec![parent, child];
@@ -317,7 +320,9 @@ pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
         save_config(&state.config_path, &runtime.config, &state.master_key);
     }
 
-    Ok(wrap_ok(serde_json::to_value(runtime.session.clone()).unwrap()))
+    Ok(wrap_ok(
+        serde_json::to_value(runtime.session.clone()).unwrap(),
+    ))
 }
 
 async fn resolve_live_client_version(state: &AppState, force_refresh: bool) -> (String, u64, bool) {
@@ -515,7 +520,11 @@ pub async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
                     let child_name = child["name"].as_str().unwrap_or("").to_string();
                     let child_id = child["id"]
                         .as_u64()
-                        .or_else(|| child["id"].as_str().and_then(|value| value.parse::<u64>().ok()))
+                        .or_else(|| {
+                            child["id"]
+                                .as_str()
+                                .and_then(|value| value.parse::<u64>().ok())
+                        })
                         .unwrap_or(0);
                     sub_map.insert(child_name.clone(), child_id);
                     names.push(json!(child_name));
@@ -700,13 +709,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
             .users
             .get(&uid)
             .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
-        (
-            uid,
-            room_id,
-            csrf,
-            user.last_tags.clone(),
-            cookie,
-        )
+        (uid, room_id, csrf, user.last_tags.clone(), cookie)
     };
 
     if room_id.is_empty() {
@@ -889,7 +892,10 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        return Err(error_message(&response, "i18n.live.error.start_live_failed"));
+        return Err(error_message(
+            &response,
+            "i18n.live.error.start_live_failed",
+        ));
     }
 
     let stream_data = &response["data"];
@@ -912,7 +918,9 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
 
     let linkage_result = match live_control_mode.as_str() {
         "obs_ws" => {
-            if primary_context.server.trim().is_empty() || primary_context.stream_key.trim().is_empty() {
+            if primary_context.server.trim().is_empty()
+                || primary_context.stream_key.trim().is_empty()
+            {
                 Err("i18n.live.error.obs_stream_context_missing".to_string())
             } else {
                 obs_ws_start_stream(&obs_ws_url, &obs_ws_password, &primary_context).await
@@ -939,7 +947,9 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
                 &cookie,
             )
             .await;
-        return Err(format!("i18n.live.error.start_linkage_failed_with_rollback:{link_error}"));
+        return Err(format!(
+            "i18n.live.error.start_linkage_failed_with_rollback:{link_error}"
+        ));
     }
 
     let mut runtime = state.runtime.lock().await;
@@ -1116,10 +1126,65 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
 }
 
 #[tauri::command]
+pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
+    let (_uid, room_id, _csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            "https://api.live.bilibili.com/xlive/web-ucenter/v2/emoticon/GetEmoticons",
+            &[("platform", "pc".to_string()), ("room_id", room_id)],
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let packages =
+            parse_live_emoticon_packages(&state.client, &state.config_path, &value).await;
+        let mut runtime = state.runtime.lock().await;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                clear_user_auth_flags(user);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        Ok(wrap_ok(json!(packages)))
+    } else {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "get_live_emoticons code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        Err(error_message(
+            &value,
+            "i18n.live.error.fetch_live_emoticons_failed",
+        ))
+    }
+}
+
+#[tauri::command]
 pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if runtime.danmu_task.is_some() {
-        return Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_monitor_already_running" })));
+        return Ok(wrap_ok(
+            json!({ "msg": "i18n.live.danmu_monitor_already_running" }),
+        ));
     }
 
     let room_id = runtime.session.room_id.clone();

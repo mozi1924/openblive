@@ -1,5 +1,15 @@
-import { MessageSquare, Send, Trash2, Radio, Gift, Shield, Terminal } from "lucide-react";
-import type { DanmuMsg, User } from "../../types/studio";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Gift,
+  MessageSquare,
+  Radio,
+  Send,
+  Shield,
+  SmilePlus,
+  Terminal,
+  Trash2,
+} from "lucide-react";
+import type { DanmuMsg, LiveEmoticonPackage, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t, tf } from "../../utils/i18n";
 
@@ -10,11 +20,22 @@ type DanmuTabProps = {
   danmuListening: boolean;
   danmuText: string;
   danmus: DanmuMsg[];
+  liveEmoticonPackages: LiveEmoticonPackage[];
+  liveEmoticonsLoading: boolean;
   onChangeDanmuText: React.Dispatch<React.SetStateAction<string>>;
   onClearDanmus: () => void;
   onSendDanmu: (event: React.FormEvent) => Promise<void>;
   onStartDanmu: () => Promise<void>;
   onStopDanmu: () => Promise<void>;
+};
+
+const resolveEmoticonStyle = (width: number, height: number, targetHeight: number) => {
+  const ratio = width > 0 && height > 0 ? width / height : 1;
+  const resolvedWidth = Math.max(targetHeight, Math.round(targetHeight * ratio));
+  return {
+    width: `${Math.min(resolvedWidth, targetHeight * 3.4)}px`,
+    height: `${targetHeight}px`,
+  };
 };
 
 export function DanmuTab({
@@ -24,17 +45,73 @@ export function DanmuTab({
   danmuListening,
   danmuText,
   danmus,
+  liveEmoticonPackages,
+  liveEmoticonsLoading,
   onChangeDanmuText,
   onClearDanmus,
   onSendDanmu,
   onStartDanmu,
   onStopDanmu,
 }: DanmuTabProps) {
+  const [emoticonPanelOpen, setEmoticonPanelOpen] = useState(false);
+  const composerRef = useRef<HTMLFormElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emoticonPanelRef = useRef<HTMLDivElement>(null);
+  const hasEmoticons = useMemo(
+    () => liveEmoticonPackages.some((pkg) => pkg.emoticons.length > 0),
+    [liveEmoticonPackages],
+  );
+
+  useEffect(() => {
+    if (!emoticonPanelOpen) {
+      return;
+    }
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (emoticonPanelRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      if (composerRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      setEmoticonPanelOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setEmoticonPanelOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [emoticonPanelOpen]);
+
+  const insertEmoticon = (text: string) => {
+    const input = textareaRef.current;
+    const start = input?.selectionStart ?? danmuText.length;
+    const end = input?.selectionEnd ?? danmuText.length;
+
+    onChangeDanmuText((prev) => `${prev.slice(0, start)}${text}${prev.slice(end)}`);
+
+    window.requestAnimationFrame(() => {
+      const nextInput = textareaRef.current;
+      if (!nextInput) {
+        return;
+      }
+      const nextCursor = start + text.length;
+      nextInput.focus();
+      nextInput.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
   return (
     <div className="flex flex-col flex-1 h-full overflow-hidden max-w-5xl mx-auto w-full glass-panel rounded-3xl shadow-2xl bg-[#070a0f]/60 backdrop-blur-xl border border-white/5">
-      {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 bg-[#090d16]/80 px-6 py-4 gap-4">
-        {/* Left: Title & Count */}
         <div className="flex items-center space-x-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bili-blue/10 border border-bili-blue/20">
             <MessageSquare className="h-5 w-5 text-bili-blue" />
@@ -52,9 +129,7 @@ export function DanmuTab({
           </div>
         </div>
 
-        {/* Right: Condensed Listening Controls & Actions */}
         <div className="flex items-center flex-wrap gap-3">
-          {/* Status Indicator */}
           <div className="flex items-center space-x-2 rounded-xl bg-[#05070a] border border-white/5 px-3 py-1.5">
             <span
               className={`h-2 w-2 rounded-full ${
@@ -68,7 +143,6 @@ export function DanmuTab({
             </span>
           </div>
 
-          {/* Start/Stop Buttons */}
           <div className="flex items-center space-x-2">
             {!danmuListening ? (
               <button
@@ -88,7 +162,6 @@ export function DanmuTab({
               </button>
             )}
 
-            {/* Clear Button */}
             <button
               onClick={onClearDanmus}
               className="rounded-xl border border-white/5 bg-white/3 p-2 text-gray-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-white active:scale-95"
@@ -100,7 +173,6 @@ export function DanmuTab({
         </div>
       </div>
 
-      {/* Message Feed Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin flex flex-col-reverse bg-[#06080d]/40">
         <div ref={danmuEndRef} />
 
@@ -121,43 +193,172 @@ export function DanmuTab({
         )}
       </div>
 
-      {/* Bottom Chat Input Bar */}
       <div className="border-t border-white/5 bg-[#090d16]/80 p-4">
         <form
-          onSubmit={(event) => void onSendDanmu(event)}
-          className="relative flex items-center space-x-2 rounded-2xl border border-white/8 bg-[#06080d] p-2 focus-within:border-bili-blue/40 focus-within:bg-[#090c15] transition-all duration-200"
+          ref={composerRef}
+          onSubmit={(event) => {
+            setEmoticonPanelOpen(false);
+            void onSendDanmu(event);
+          }}
+          className="relative"
         >
-          <textarea
-            value={danmuText}
-            onChange={(event) => onChangeDanmuText(event.target.value)}
-            placeholder={t(locale, "ui.danmu.placeholder")}
-            rows={1}
-            className="selectable-text flex-1 resize-none bg-transparent px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none max-h-24 scrollbar-thin"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                const form = event.currentTarget.form;
-                form?.requestSubmit();
-              }
-            }}
-          />
-          <button
-            type="submit"
-            disabled={!danmuText.trim()}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all ${
-              danmuText.trim()
-                ? "bg-bili-blue text-white hover:bg-bili-blue/90 active:scale-95 shadow-[0_2px_8px_rgba(0,174,236,0.3)]"
-                : "cursor-not-allowed bg-white/3 text-gray-600"
-            }`}
-            title={t(locale, "ui.danmu.send")}
-          >
-            <Send className="h-4 w-4" />
-          </button>
+          <div className="flex items-center space-x-2 rounded-2xl border border-white/8 bg-[#06080d] p-2 focus-within:border-bili-blue/40 focus-within:bg-[#090c15] transition-all duration-200">
+            <textarea
+              ref={textareaRef}
+              value={danmuText}
+              onChange={(event) => onChangeDanmuText(event.target.value)}
+              placeholder={t(locale, "ui.danmu.placeholder")}
+              rows={1}
+              className="selectable-text flex-1 resize-none bg-transparent px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none max-h-24 scrollbar-thin"
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && emoticonPanelOpen) {
+                  event.preventDefault();
+                  setEmoticonPanelOpen(false);
+                  return;
+                }
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  const form = event.currentTarget.form;
+                  form?.requestSubmit();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setEmoticonPanelOpen((prev) => !prev)}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                emoticonPanelOpen
+                  ? "border-bili-blue/40 bg-bili-blue/15 text-bili-blue"
+                  : "border-white/5 bg-white/3 text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
+              }`}
+              title={t(locale, "ui.danmu.emoticon.toggle")}
+            >
+              <SmilePlus className="h-4 w-4" />
+            </button>
+            <button
+              type="submit"
+              disabled={!danmuText.trim()}
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all ${
+                danmuText.trim()
+                  ? "bg-bili-blue text-white hover:bg-bili-blue/90 active:scale-95 shadow-[0_2px_8px_rgba(0,174,236,0.3)]"
+                  : "cursor-not-allowed bg-white/3 text-gray-600"
+              }`}
+              title={t(locale, "ui.danmu.send")}
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
+
+          {emoticonPanelOpen && (
+            <div
+              ref={emoticonPanelRef}
+              className="absolute bottom-[calc(100%+12px)] right-0 z-20 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-[#0b1018]/95 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {t(locale, "ui.danmu.emoticon.panel_title")}
+                  </p>
+                  <p className="text-[10px] text-gray-500">
+                    {t(locale, "ui.danmu.emoticon.panel_desc")}
+                  </p>
+                </div>
+                <span className="rounded-full border border-white/5 bg-white/5 px-2 py-0.5 text-[10px] font-mono text-gray-400">
+                  {liveEmoticonPackages.reduce((count, pkg) => count + pkg.emoticons.length, 0)}
+                </span>
+              </div>
+
+              <div className="max-h-[24rem] overflow-y-auto px-4 py-4 scrollbar-thin">
+                {liveEmoticonsLoading ? (
+                  <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/8 bg-white/[0.02] px-4 py-10 text-xs text-gray-400">
+                    {t(locale, "ui.danmu.emoticon.loading")}
+                  </div>
+                ) : !hasEmoticons ? (
+                  <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/8 bg-white/[0.02] px-4 py-10 text-center text-xs text-gray-400">
+                    {t(locale, "ui.danmu.emoticon.empty")}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {liveEmoticonPackages.map((pkg) => (
+                      <section key={pkg.pkg_id} className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <p className="text-xs font-semibold text-gray-200">{pkg.pkg_name}</p>
+                          {pkg.pkg_descript ? (
+                            <span className="text-[10px] text-gray-500">{pkg.pkg_descript}</span>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                          {pkg.emoticons.map((emoticon) => (
+                            <button
+                              key={emoticon.emoticon_unique || `${pkg.pkg_id}-${emoticon.emoticon_id}`}
+                              type="button"
+                              onClick={() => insertEmoticon(emoticon.text)}
+                              className="group flex min-h-24 flex-col items-center justify-between rounded-2xl border border-white/6 bg-white/[0.03] px-2 py-3 text-center transition-all hover:border-bili-blue/30 hover:bg-bili-blue/8"
+                              title={emoticon.text}
+                            >
+                              <img
+                                src={emoticon.url}
+                                alt={emoticon.text}
+                                className="pointer-events-none object-contain"
+                                style={resolveEmoticonStyle(emoticon.width, emoticon.height, 36)}
+                              />
+                              <span className="mt-2 text-[10px] font-medium text-gray-400 transition-colors group-hover:text-gray-100">
+                                {emoticon.label || emoticon.text}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </form>
         <p className="mt-2 px-3 text-[10px] text-gray-500 leading-normal">
           {t(locale, "ui.danmu.fast_desc")}
         </p>
       </div>
+    </div>
+  );
+}
+
+function DanmuBubbleContent({
+  message,
+  className,
+  emoticonHeight = 24,
+}: {
+  message: DanmuMsg;
+  className: string;
+  emoticonHeight?: number;
+}) {
+  if (!message.segments?.length) {
+    return <div className={className}>{message.content}</div>;
+  }
+
+  return (
+    <div className={className}>
+      {message.segments.map((segment, index) =>
+        segment.type === "text" ? (
+          <span key={`${message.id}-text-${index}`} className="whitespace-pre-wrap break-all">
+            {segment.text}
+          </span>
+        ) : (
+          <img
+            key={`${message.id}-emoticon-${index}`}
+            src={segment.emoticon.url}
+            alt={segment.text}
+            title={segment.text}
+            className="mx-0.5 inline-block select-none object-contain align-[-0.35rem]"
+            style={resolveEmoticonStyle(
+              segment.emoticon.width,
+              segment.emoticon.height,
+              emoticonHeight,
+            )}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -206,9 +407,10 @@ function DanmuCard({
             </span>
             <span className="text-[9px] text-gray-500 font-mono">{message.time}</span>
           </div>
-          <div className="rounded-2xl rounded-tl-none bg-gradient-to-br from-bili-pink/15 via-bili-pink/5 to-transparent border border-bili-pink/20 px-4 py-2.5 text-xs text-gray-200 shadow-sm font-semibold select-text break-all">
-            {message.content}
-          </div>
+          <DanmuBubbleContent
+            message={message}
+            className="rounded-2xl rounded-tl-none bg-gradient-to-br from-bili-pink/15 via-bili-pink/5 to-transparent border border-bili-pink/20 px-4 py-2.5 text-xs text-gray-200 shadow-sm font-semibold select-text break-all"
+          />
         </div>
       </div>
     );
@@ -228,15 +430,15 @@ function DanmuCard({
             </span>
             <span className="text-[9px] text-gray-500 font-mono">{message.time}</span>
           </div>
-          <div className="rounded-2xl rounded-tl-none bg-gradient-to-br from-[#8b5cf6]/15 via-[#8b5cf6]/5 to-transparent border border-[#8b5cf6]/20 px-4 py-2.5 text-xs text-gray-200 shadow-sm font-semibold select-text break-all">
-            {message.content}
-          </div>
+          <DanmuBubbleContent
+            message={message}
+            className="rounded-2xl rounded-tl-none bg-gradient-to-br from-[#8b5cf6]/15 via-[#8b5cf6]/5 to-transparent border border-[#8b5cf6]/20 px-4 py-2.5 text-xs text-gray-200 shadow-sm font-semibold select-text break-all"
+          />
         </div>
       </div>
     );
   }
 
-  // Normal Danmaku messages
   if (isMe) {
     return (
       <div className="flex flex-col items-end space-y-1 max-w-[85%] self-end transition-all duration-300">
@@ -244,14 +446,14 @@ function DanmuCard({
           <span>{message.time}</span>
           <span className="font-bold text-bili-blue">{message.sender}</span>
         </div>
-        <div className="rounded-2xl rounded-tr-none bg-gradient-to-br from-bili-blue to-[#0092c7] px-4 py-2.5 text-xs text-white shadow-md select-text break-all border border-bili-blue/20">
-          {message.content}
-        </div>
+        <DanmuBubbleContent
+          message={message}
+          className="rounded-2xl rounded-tr-none bg-gradient-to-br from-bili-blue to-[#0092c7] px-4 py-2.5 text-xs text-white shadow-md select-text break-all border border-bili-blue/20"
+        />
       </div>
     );
   }
 
-  // Audience Danmaku message
   const firstChar = message.sender.trim().charAt(0) || "?";
   const colors = [
     "bg-red-500/20 text-red-300 border-red-500/30",
@@ -263,7 +465,7 @@ function DanmuCard({
     "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
     "bg-violet-500/20 text-violet-300 border-violet-500/30",
     "bg-purple-500/20 text-purple-300 border-purple-500/30",
-    "bg-pink-500/20 text-pink-300 border-pink-500/30"
+    "bg-pink-500/20 text-pink-300 border-pink-500/30",
   ];
   let hash = 0;
   for (let i = 0; i < message.sender.length; i++) {
@@ -273,7 +475,9 @@ function DanmuCard({
 
   return (
     <div className="flex items-start space-x-2.5 max-w-[85%] self-start transition-all duration-300">
-      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-black uppercase ${colorClass}`}>
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-black uppercase ${colorClass}`}
+      >
         {firstChar}
       </div>
       <div className="flex flex-col space-y-1">
@@ -281,9 +485,10 @@ function DanmuCard({
           <span className="text-xs font-bold text-gray-300">{message.sender}</span>
           <span className="text-[9px] text-gray-500 font-mono">{message.time}</span>
         </div>
-        <div className="rounded-2xl rounded-tl-none bg-white/5 border border-white/5 px-4 py-2.5 text-xs text-gray-200 shadow-sm select-text break-all hover:bg-white/8 hover:border-white/10 transition-all duration-150">
-          {message.content}
-        </div>
+        <DanmuBubbleContent
+          message={message}
+          className="rounded-2xl rounded-tl-none bg-white/5 border border-white/5 px-4 py-2.5 text-xs text-gray-200 shadow-sm select-text break-all hover:bg-white/8 hover:border-white/10 transition-all duration-150"
+        />
       </div>
     </div>
   );

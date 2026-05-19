@@ -29,11 +29,9 @@ fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
     #[cfg(not(target_os = "macos"))]
     {
         if let Some(tauri::Theme::Dark) = _app.theme() {
-            tauri::image::Image::from_bytes(TRAY_WHITE)
-                .expect("failed to load white tray icon")
+            tauri::image::Image::from_bytes(TRAY_WHITE).expect("failed to load white tray icon")
         } else {
-            tauri::image::Image::from_bytes(TRAY_BLACK)
-                .expect("failed to load black tray icon")
+            tauri::image::Image::from_bytes(TRAY_BLACK).expect("failed to load black tray icon")
         }
     }
 }
@@ -201,7 +199,7 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
             .map(|runtime| runtime.config.locale.clone())
             .unwrap_or_else(|_| "zh-CN".to_string())
     };
-    
+
     let icon = get_tray_icon(&handle);
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -273,4 +271,3 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
         _ => {}
     }
 }
-

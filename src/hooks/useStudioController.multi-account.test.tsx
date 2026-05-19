@@ -32,6 +32,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     startDanmuMonitor: vi.fn(),
     stopDanmuMonitor: vi.fn(),
     sendDanmu: vi.fn(),
+    getLiveEmoticons: vi.fn(),
     listenDanmuEvent: vi.fn(),
     listenTrayAction: vi.fn(),
   },
@@ -120,6 +121,7 @@ beforeEach(() => {
   mockStudioApi.startDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.stopDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.sendDanmu.mockResolvedValue(ok({}));
+  mockStudioApi.getLiveEmoticons.mockResolvedValue(ok([]));
   mockStudioApi.logout.mockResolvedValue(ok({}));
   mockStudioApi.updateArea.mockResolvedValue(ok({ area_id: 1, profile_state: defaultProfileState() }));
   mockStudioApi.updateLiveTags.mockResolvedValue(

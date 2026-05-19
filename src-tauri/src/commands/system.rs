@@ -118,7 +118,11 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
 }
 
 #[tauri::command]
-pub async fn set_app_config(app: AppHandle, req: AppConfigReq, state: State<'_, AppState>) -> CmdResult {
+pub async fn set_app_config(
+    app: AppHandle,
+    req: AppConfigReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     match req.key.as_str() {
         "min_to_tray" => {

@@ -5,6 +5,7 @@ import type {
   AppConfig,
   DanmuEventPayload,
   LinkageStatus,
+  LiveEmoticonPackage,
   LiveRoomProfile,
   Resp,
   Session,
@@ -62,6 +63,7 @@ export const studioApi = {
   startDanmuMonitor: () => invokeCommand("start_danmu_monitor"),
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
+  getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
   listenDanmuEvent: (handler: (payload: DanmuEventPayload) => void) =>
     listen<DanmuEventPayload>("danmu-event", (event) => handler(event.payload)),
   listenTrayAction: (handler: (payload: TrayActionPayload) => void) =>
