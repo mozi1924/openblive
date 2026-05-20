@@ -3,13 +3,11 @@ import type { CSSProperties, ReactNode } from "react";
 import {
   BarChart3,
   Gift,
-  MessageSquare,
   Radio,
   Send,
   Shield,
   SmilePlus,
   Terminal,
-  Trash2,
 } from "lucide-react";
 import type {
   DanmuMsg,
@@ -27,7 +25,6 @@ type DanmuTabProps = {
   locale: LocaleSetting;
   currentUser: User | null;
   danmuEndRef: React.RefObject<HTMLDivElement | null>;
-  danmuListening: boolean;
   danmuText: string;
   danmus: DanmuMsg[];
   liveEmoticonPackages: LiveEmoticonPackage[];
@@ -43,7 +40,6 @@ type DanmuTabProps = {
   liveVoteDuration: number;
   liveVoteSelectedTemplateId: number | null;
   onChangeDanmuText: React.Dispatch<React.SetStateAction<string>>;
-  onClearDanmus: () => void;
   onRefreshLiveVoteData: () => Promise<void>;
   onApplyLiveVoteTemplate: (templateId: number) => void;
   onClearLiveVoteDraft: () => void;
@@ -54,8 +50,6 @@ type DanmuTabProps = {
   onCreateLiveVote: () => Promise<void>;
   onTerminateLiveVote: (interactionId: number) => Promise<void>;
   onSendDanmu: (event: React.FormEvent) => Promise<void>;
-  onStartDanmu: () => Promise<void>;
-  onStopDanmu: () => Promise<void>;
 };
 
 type DanmuRenderState = {
@@ -144,7 +138,6 @@ export function DanmuTab({
   locale,
   currentUser,
   danmuEndRef,
-  danmuListening,
   danmuText,
   danmus,
   liveEmoticonPackages,
@@ -160,7 +153,6 @@ export function DanmuTab({
   liveVoteDuration,
   liveVoteSelectedTemplateId,
   onChangeDanmuText,
-  onClearDanmus,
   onRefreshLiveVoteData,
   onApplyLiveVoteTemplate,
   onClearLiveVoteDraft,
@@ -171,8 +163,6 @@ export function DanmuTab({
   onCreateLiveVote,
   onTerminateLiveVote,
   onSendDanmu,
-  onStartDanmu,
-  onStopDanmu,
 }: DanmuTabProps) {
   const [openPanel, setOpenPanel] = useState<"emoticon" | "vote" | null>(null);
   const composerRef = useRef<HTMLDivElement>(null);
@@ -249,68 +239,6 @@ export function DanmuTab({
 
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-[#070a0f]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 bg-[#090d16]/80 px-6 py-4 gap-4">
-        <div className="flex items-center space-x-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bili-blue/10 border border-bili-blue/20">
-            <MessageSquare className="h-5 w-5 text-bili-blue" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-bold text-white tracking-wide">
-                {t(locale, "ui.danmu.feed_title")}
-              </span>
-              <span className="rounded-full bg-bili-blue/10 px-2 py-0.5 text-[10px] font-mono font-bold text-bili-blue border border-bili-blue/20">
-                {tf(locale, "ui.danmu.feed_count", { count: danmus.length })}
-              </span>
-            </div>
-            <p className="text-[10px] text-gray-500 font-medium">WebSocket Event Stream</p>
-          </div>
-        </div>
-
-        <div className="flex items-center flex-wrap gap-3">
-          <div className="flex items-center space-x-2 rounded-xl bg-[#05070a] border border-white/5 px-3 py-1.5">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                danmuListening
-                  ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"
-                  : "bg-gray-600"
-              }`}
-            />
-            <span className="text-xs font-semibold text-gray-300">
-              {danmuListening ? t(locale, "ui.danmu.status.on") : t(locale, "ui.danmu.status.off")}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {!danmuListening ? (
-              <button
-                onClick={() => void onStartDanmu()}
-                className="flex items-center space-x-1.5 rounded-xl bg-bili-blue px-3.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-bili-blue/90 active:scale-95 shadow-[0_4px_12px_rgba(0,174,236,0.25)]"
-              >
-                <Radio className="h-3.5 w-3.5" />
-                <span>{t(locale, "ui.danmu.start")}</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => void onStopDanmu()}
-                className="flex items-center space-x-1.5 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3.5 py-1.5 text-xs font-bold text-rose-400 transition-all hover:bg-rose-500/20 active:scale-95"
-              >
-                <Radio className="h-3.5 w-3.5 text-rose-400 animate-pulse" />
-                <span>{t(locale, "ui.danmu.stop")}</span>
-              </button>
-            )}
-
-            <button
-              onClick={onClearDanmus}
-              className="rounded-xl border border-white/5 bg-white/3 p-2 text-gray-400 transition-all hover:border-white/10 hover:bg-white/5 hover:text-white active:scale-95"
-              title={t(locale, "ui.danmu.clear_wall")}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin flex flex-col-reverse bg-[#06080d]/40">
         <div ref={danmuEndRef} />
 

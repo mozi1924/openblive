@@ -39,6 +39,11 @@ function App() {
           headerDragRef={refs.headerDragRef}
           onRefreshAccounts={actions.loadAccounts}
           onRefreshPartitions={actions.loadPartitions}
+          danmuCount={state.danmus.length}
+          danmuListening={state.danmuListening}
+          onStartDanmu={actions.startDanmu}
+          onStopDanmu={actions.stopDanmu}
+          onClearDanmus={actions.clearDanmus}
         />
 
         <div className={`flex-1 ${state.activeTab === "danmu" ? "overflow-hidden flex flex-col" : "overflow-y-auto p-8"}`}>
@@ -103,7 +108,6 @@ function App() {
               locale={locale}
               currentUser={state.currentUser}
               danmuEndRef={refs.danmuEndRef}
-              danmuListening={state.danmuListening}
               danmuText={state.danmuText}
               danmus={state.danmus}
               liveEmoticonPackages={state.liveEmoticonPackages}
@@ -119,7 +123,6 @@ function App() {
               liveVoteDuration={state.liveVoteDuration}
               liveVoteSelectedTemplateId={state.liveVoteSelectedTemplateId}
               onChangeDanmuText={actions.setDanmuText}
-              onClearDanmus={actions.clearDanmus}
               onRefreshLiveVoteData={actions.refreshLiveVoteData}
               onApplyLiveVoteTemplate={actions.applyLiveVoteTemplate}
               onClearLiveVoteDraft={actions.clearLiveVoteDraft}
@@ -130,8 +133,6 @@ function App() {
               onCreateLiveVote={actions.createLiveVote}
               onTerminateLiveVote={actions.terminateLiveVote}
               onSendDanmu={actions.submitDanmu}
-              onStartDanmu={actions.startDanmu}
-              onStopDanmu={actions.stopDanmu}
             />
           )}
 
