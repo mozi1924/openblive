@@ -39,7 +39,7 @@ use tokio::time::Duration;
 pub fn run() {
     let path = config_path();
     let master_key =
-        get_or_create_master_key().expect("failed to load/create master key from system keyring");
+        get_or_create_master_key().expect("failed to load/create local master key");
     let cfg = load_config(&path, &master_key);
     endpoints::set_runtime_overrides_from_config(&cfg);
     let client = client::BiliClient::new();

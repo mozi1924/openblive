@@ -2,7 +2,6 @@ use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::{anyhow, Result};
 use base64::Engine;
-use keyring::Entry;
 use rand::RngCore;
 use std::path::PathBuf;
 
@@ -56,64 +55,33 @@ fn write_master_key_to_file(key: &[u8; 32]) {
         let _ = std::fs::create_dir_all(parent);
     }
     let _ = std::fs::write(&path, encoded);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
 }
 
-fn remove_master_key_file() {
-    let path = local_master_key_path();
-    if path.exists() {
-        let _ = std::fs::remove_file(path);
+fn ensure_master_key_file(key: &[u8; 32]) {
+    let needs_write = read_master_key_from_file() != Some(*key);
+    if needs_write {
+        write_master_key_to_file(key);
     }
 }
 
 pub fn get_or_create_master_key() -> Result<[u8; 32]> {
-    let entry = Entry::new("OpenBliveStudio", "credential_master_key").ok();
-    let keyring_key = entry
-        .as_ref()
-        .and_then(|item| item.get_password().ok())
-        .and_then(|secret| decode_master_key(&secret));
     let file_key = read_master_key_from_file();
 
-    if let Some(key) = keyring_key {
-        crate::runtime_log!("[auth][key] master key source=keyring");
-        remove_master_key_file();
-        return Ok(key);
-    }
-
     if let Some(key) = file_key {
-        crate::runtime_log!("[auth][key] master key source=local_file_fallback");
-        if let Some(item) = entry.as_ref() {
-            let encoded = base64::engine::general_purpose::STANDARD.encode(key);
-            match item.set_password(&encoded) {
-                Ok(()) => {
-                    crate::runtime_log!("[auth][key] master key migrated_to=keyring");
-                    remove_master_key_file();
-                }
-                Err(error) => {
-                    crate::runtime_warn!("[auth][key] keyring store failed, keep local fallback: {error}");
-                }
-            }
-        }
+        crate::runtime_log!("[auth][key] master key source=local_file");
+        ensure_master_key_file(&key);
         return Ok(key);
     }
 
     let mut key = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut key);
-    let encoded = base64::engine::general_purpose::STANDARD.encode(key);
-    if let Some(item) = entry.as_ref() {
-        match item.set_password(&encoded) {
-            Ok(()) => {
-                crate::runtime_log!("[auth][key] master key source=new_generated_keyring");
-                remove_master_key_file();
-                return Ok(key);
-            }
-            Err(error) => {
-                crate::runtime_warn!("[auth][key] keyring unavailable, fallback to local file: {error}");
-            }
-        }
-    }
-
-    write_master_key_to_file(&key);
-    crate::runtime_log!("[auth][key] master key source=new_generated_local_file_fallback");
+    ensure_master_key_file(&key);
+    crate::runtime_log!("[auth][key] master key source=new_generated_local_file");
     Ok(key)
 }
 

@@ -34,7 +34,6 @@ dirs = "6"
 aes-gcm = "0.10"
 base64 = "0.22"
 rand = "0.8"
-keyring = "3"
 rsa = { version = "0.9", features = ["pem"] }
 sha2 = "0.10"
 hex = "0.4"

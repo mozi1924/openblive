@@ -229,11 +229,13 @@ fn write_json<T: Serialize>(path: &Path, value: &T) {
 fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
     let mut cfg: PersistConfig = load_json(path)?;
     for (uid, user) in cfg.users.iter_mut() {
+        let mut credential_corrupted = false;
         user.cookie = match decrypt_text(&user.enc_cookie, key) {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_cookie.is_empty() {
                     crate::runtime_warn!("[auth][config] legacy decrypt cookie failed uid={uid}: {error}");
+                    credential_corrupted = true;
                 }
                 String::new()
             }
@@ -245,6 +247,7 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
                     crate::runtime_log!(
                         "[auth][config] legacy decrypt refresh_token failed uid={uid}: {error}"
                     );
+                    credential_corrupted = true;
                 }
                 String::new()
             }
@@ -254,10 +257,16 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
             Err(error) => {
                 if !user.enc_csrf.is_empty() {
                     crate::runtime_warn!("[auth][config] legacy decrypt csrf failed uid={uid}: {error}");
+                    credential_corrupted = true;
                 }
                 String::new()
             }
         };
+        if credential_corrupted {
+            user.login_invalid = true;
+            user.live_key = None;
+            user.sub_session_key = None;
+        }
     }
     Some(cfg)
 }
@@ -377,11 +386,13 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
 
     for (uid, user) in cfg.users.iter_mut() {
         sync_live_profile_state_defaults(user);
+        let mut credential_corrupted = false;
         user.cookie = match decrypt_text(&user.enc_cookie, key) {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_cookie.is_empty() {
                     crate::runtime_warn!("[auth][config] decrypt cookie failed uid={uid}: {error}");
+                    credential_corrupted = true;
                 }
                 String::new()
             }
@@ -391,6 +402,7 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
             Err(error) => {
                 if !user.enc_refresh_token.is_empty() {
                     crate::runtime_warn!("[auth][config] decrypt refresh_token failed uid={uid}: {error}");
+                    credential_corrupted = true;
                 }
                 String::new()
             }
@@ -400,10 +412,22 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
             Err(error) => {
                 if !user.enc_csrf.is_empty() {
                     crate::runtime_warn!("[auth][config] decrypt csrf failed uid={uid}: {error}");
+                    credential_corrupted = true;
                 }
                 String::new()
             }
         };
+        if credential_corrupted {
+            user.login_invalid = true;
+            user.live_key = None;
+            user.sub_session_key = None;
+        }
+    }
+    if let Some(uid) = cfg.current_uid.clone() {
+        let should_clear_current = !cfg.users.contains_key(&uid);
+        if should_clear_current {
+            cfg.current_uid = None;
+        }
     }
 
     cfg

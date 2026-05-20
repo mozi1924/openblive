@@ -32,6 +32,8 @@ export function AccountTab({
   onRefreshCurrentUser,
   onSwitchAccount,
 }: AccountTabProps) {
+  const switchableAccounts = accounts.filter((user) => user.uid !== currentUser?.uid);
+
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-12">
       {/* Left Column: Account Info & Switcher */}
@@ -151,7 +153,7 @@ export function AccountTab({
             </span>
           </div>
 
-          {accounts.length <= 1 ? (
+          {switchableAccounts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed border-white/5 rounded-xl bg-white/1">
               <p className="text-[11px] text-gray-500">
                 {t(locale, "ui.account.saved_empty")}
@@ -159,9 +161,7 @@ export function AccountTab({
             </div>
           ) : (
             <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2">
-              {accounts
-                .filter((user) => user.uid !== currentUser?.uid)
-                .map((user) => (
+              {switchableAccounts.map((user) => (
                   <div
                     key={user.uid}
                     className="group flex items-center justify-between rounded-xl border border-white/5 bg-white/2 p-3 transition-all duration-200 hover:border-bili-blue/20 hover:bg-white/4"
