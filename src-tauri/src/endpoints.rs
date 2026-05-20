@@ -2,9 +2,7 @@ use std::net::IpAddr;
 use std::sync::{OnceLock, RwLock};
 use url::Url;
 
-use crate::constants::{
-    DEFAULT_APP_KEY, DEFAULT_APP_SEC, DEFAULT_HTTP_USER_AGENT, DEFAULT_LIVE_PLATFORM,
-};
+use crate::constants::{DEFAULT_APP_KEY, DEFAULT_APP_SEC, DEFAULT_LIVE_PLATFORM};
 
 const DEFAULT_HOST_WWW: &str = "www.bilibili.com";
 const DEFAULT_HOST_API: &str = "api.bilibili.com";
@@ -14,6 +12,8 @@ const DEFAULT_HOST_LIVE_WEB: &str = "live.bilibili.com";
 const DEFAULT_COOKIE_DOMAIN: &str = ".bilibili.com";
 const DEFAULT_DANMU_HOST: &str = "broadcastlv.chat.bilibili.com";
 const DEFAULT_DANMU_WSS_PORT: u64 = 2245;
+const DEFAULT_HTTP_UA_SUFFIX: &str =
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
 
 #[derive(Default, Clone)]
 struct RuntimeOverrides {
@@ -146,11 +146,49 @@ fn resolve_app_sec(runtime_value: &str) -> String {
     env_or_default("OPENBLIVE_APP_SEC", DEFAULT_APP_SEC)
 }
 
+fn system_platform_user_agent_prefix() -> String {
+    let arch = std::env::consts::ARCH;
+    if cfg!(target_os = "windows") {
+        return match arch {
+            "x86_64" => "Windows NT 10.0; Win64; x64".to_string(),
+            "aarch64" => "Windows NT 10.0; Win64; ARM64".to_string(),
+            _ => format!("Windows NT 10.0; {arch}"),
+        };
+    }
+    if cfg!(target_os = "macos") {
+        return match arch {
+            "aarch64" => "Macintosh; Apple Silicon; Mac OS X 13_6_7".to_string(),
+            "x86_64" => "Macintosh; Intel Mac OS X 10_15_7".to_string(),
+            _ => format!("Macintosh; {arch}; Mac OS X 13_6_7"),
+        };
+    }
+    if cfg!(target_os = "linux") {
+        return match arch {
+            "x86_64" => "X11; Linux x86_64".to_string(),
+            "aarch64" => "X11; Linux aarch64".to_string(),
+            _ => format!("X11; Linux {arch}"),
+        };
+    }
+    format!("X11; {}", std::env::consts::OS)
+}
+
+pub fn generate_system_http_user_agent() -> String {
+    format!(
+        "Mozilla/5.0 ({}) {}",
+        system_platform_user_agent_prefix(),
+        DEFAULT_HTTP_UA_SUFFIX
+    )
+}
+
 fn resolve_http_user_agent(runtime_value: &str) -> String {
     if !runtime_value.trim().is_empty() {
         return runtime_value.trim().to_string();
     }
-    env_or_default("OPENBLIVE_HTTP_USER_AGENT", DEFAULT_HTTP_USER_AGENT)
+    std::env::var("OPENBLIVE_HTTP_USER_AGENT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(generate_system_http_user_agent)
 }
 
 fn resolve_livehime_version_override(runtime_value: &str) -> String {

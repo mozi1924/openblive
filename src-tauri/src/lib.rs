@@ -16,15 +16,15 @@ mod state_event;
 mod tray;
 
 use commands::{
-    clear_app_logs, get_account_list, get_app_config, get_app_logs, get_linkage_status,
-    get_live_emoticons, get_login_qrcode, get_partitions, get_session, get_version,
-    load_saved_config, logout, poll_login_status, push_app_log, refresh_all_account_cookies,
-    refresh_all_account_profiles, refresh_all_account_profiles_inner, refresh_current_user,
-    refresh_live_client_version, refresh_live_client_version_inner, refresh_tray_menu,
-    render_qrcode, reveal_main_window, send_danmu, set_app_config, set_app_configs,
-    start_danmu_monitor, start_live, start_live_flow, stop_danmu_monitor, stop_live,
-    stop_live_flow, switch_account, sync_live_room_profile, sync_live_status, update_area,
-    update_live_tags, update_title,
+    clear_app_logs, generate_http_user_agent, get_account_list, get_app_config, get_app_logs,
+    get_linkage_status, get_live_emoticons, get_login_qrcode, get_partitions, get_session,
+    get_version, load_saved_config, logout, poll_login_status, push_app_log,
+    refresh_all_account_cookies, refresh_all_account_profiles, refresh_all_account_profiles_inner,
+    refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
+    refresh_tray_menu, render_qrcode, reveal_main_window, send_danmu, set_app_config,
+    set_app_configs, start_danmu_monitor, start_live, start_live_flow, stop_danmu_monitor,
+    stop_live, stop_live_flow, switch_account, sync_live_room_profile, sync_live_status,
+    update_area, update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -123,6 +123,7 @@ pub fn run() {
             get_live_emoticons,
             get_session,
             get_app_config,
+            generate_http_user_agent,
             get_linkage_status,
             set_app_config,
             set_app_configs,

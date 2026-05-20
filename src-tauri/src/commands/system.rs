@@ -287,6 +287,13 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
 }
 
 #[tauri::command]
+pub async fn generate_http_user_agent() -> CmdResult {
+    Ok(wrap_ok(json!({
+        "user_agent": endpoints::generate_system_http_user_agent()
+    })))
+}
+
+#[tauri::command]
 pub async fn set_app_config(
     app: AppHandle,
     req: AppConfigReq,

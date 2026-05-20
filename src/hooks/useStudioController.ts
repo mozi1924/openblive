@@ -318,6 +318,29 @@ export function useStudioController() {
     [],
   );
 
+  const generateHttpUserAgent = useCallback(async () => {
+    try {
+      const res = await studioApi.generateHttpUserAgent();
+      const userAgent = res.data?.user_agent?.trim() || "";
+      if (res.code === 0 && userAgent) {
+        updateAppConfig("http_user_agent", userAgent);
+        append(t(localeSetting, "ui.settings.advanced.http_user_agent.generated"));
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.settings.advanced.http_user_agent.generate_failed", {
+          msg: resolveBackendMessage(res.msg || "empty user-agent", localeSetting),
+        }),
+      );
+    } catch (error) {
+      append(
+        tf(localeSetting, "ui.settings.advanced.http_user_agent.generate_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    }
+  }, [append, localeSetting, updateAppConfig]);
+
   const updateLocaleConfig = useCallback(
     async (nextLocale: AppConfig["locale"]) => {
       if (!appConfig) {
@@ -1525,6 +1548,7 @@ export function useStudioController() {
       setChild: changeChild,
       setDanmuText,
       updateAppConfig,
+      generateHttpUserAgent,
       updateLocaleConfig,
       saveAppConfig,
       setTagInput,

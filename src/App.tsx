@@ -125,6 +125,7 @@ function App() {
               onChangeConfig={actions.updateAppConfig}
               onChangeLocale={actions.updateLocaleConfig}
               onSaveConfig={actions.saveAppConfig}
+              onGenerateHttpUserAgent={actions.generateHttpUserAgent}
             />
           )}
         </div>

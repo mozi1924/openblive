@@ -102,6 +102,7 @@
 - Host 支持填写 `host` 或完整 URL（程序会自动归一化为 origin）。
 - `cookie_domain` 支持填写 host 或 URL，程序会自动提取域名并规范化。
 - `host_live_web` 会同时影响侧边栏“打开直播间”外链。
+- `http_user_agent` 提供“生成系统 UA”按钮，会按当前操作系统自动生成 UA 前缀（也可手动修改）。
 
 ---
 

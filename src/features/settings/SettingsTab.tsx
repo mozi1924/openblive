@@ -12,6 +12,7 @@ type SettingsTabProps = {
   onChangeConfig: <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => void;
   onChangeLocale: (locale: AppConfig["locale"]) => Promise<void>;
   onSaveConfig: () => Promise<void>;
+  onGenerateHttpUserAgent: () => Promise<void>;
 };
 
 export function SettingsTab({
@@ -22,6 +23,7 @@ export function SettingsTab({
   onChangeConfig,
   onChangeLocale,
   onSaveConfig,
+  onGenerateHttpUserAgent,
 }: SettingsTabProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const clearAdvancedConfig = () => {
@@ -453,15 +455,26 @@ export function SettingsTab({
                 placeholder="af125a0d5279fd576c1b4418a3e8276d"
               />
             </label>
-            <label className="space-y-1 sm:col-span-2">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.advanced.http_user_agent")}</span>
+            <div className="space-y-1 sm:col-span-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                  {t(locale, "ui.settings.advanced.http_user_agent")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void onGenerateHttpUserAgent()}
+                  className="rounded-lg border border-white/10 px-2.5 py-1 text-[10px] font-semibold text-gray-300 transition-colors hover:border-white/20 hover:bg-white/8 hover:text-white"
+                >
+                  {t(locale, "ui.settings.advanced.http_user_agent.generate")}
+                </button>
+              </div>
               <input
                 className={inputClass}
                 value={appConfig.http_user_agent}
                 onChange={(event) => onChangeConfig("http_user_agent", event.target.value)}
                 placeholder="Mozilla/5.0 (...)"
               />
-            </label>
+            </div>
             <label className="space-y-1">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.advanced.livehime_version")}</span>
               <input
