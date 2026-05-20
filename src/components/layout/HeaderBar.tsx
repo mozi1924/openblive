@@ -108,8 +108,8 @@ export function HeaderBar({
               <PanelTop className="h-3.5 w-3.5" />
               <span>
                 {danmuOverlayVisible
-                  ? t(locale, "ui.settings.overlay.hide")
-                  : t(locale, "ui.settings.overlay.show")}
+                  ? t(locale, "ui.overlay.hide")
+                  : t(locale, "ui.overlay.show")}
               </span>
             </button>
 

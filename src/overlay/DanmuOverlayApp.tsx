@@ -258,7 +258,7 @@ export function DanmuOverlayApp() {
                 backgroundColor: controlButtonBg,
                 borderColor: controlBorder,
               }}
-              title={t(locale, "ui.settings.overlay.hide")}
+              title={t(locale, "ui.overlay.hide")}
             >
               <X className="h-4 w-4" />
             </button>
