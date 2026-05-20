@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pin, Send, SmilePlus, X } from "lucide-react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { studioApi } from "../services/studioApi";
 import type { AppConfig, DanmuMsg, LiveEmoticonPackage, User } from "../types/studio";
 import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../utils/danmu";
@@ -8,8 +7,6 @@ import { t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
 import { applyIncomingRealtimeMessage } from "../hooks/studio/realtimeDanmu";
 import { DanmuOverlayMessageRow } from "../features/danmu/DanmuOverlayMessageRow";
-
-const overlayWindow = getCurrentWindow();
 
 const resolveEmoticonStyle = (width: number, height: number, targetHeight: number) => {
   const ratio = width > 0 && height > 0 ? width / height : 1;
@@ -43,7 +40,11 @@ export function DanmuOverlayApp() {
     [liveEmoticonPackages],
   );
   const orderedDanmus = useMemo(() => [...danmus].slice(0, 160).reverse(), [danmus]);
-  const panelOpacity = Math.max(40, Math.min(appConfig?.danmu_overlay_opacity ?? 85, 100));
+  const panelOpacity = Math.max(40, Math.min(appConfig?.danmu_overlay_opacity ?? 55, 100));
+  const panelOpacityRatio = panelOpacity / 100;
+  const controlSurface = `rgba(8, 12, 19, ${Math.max(panelOpacityRatio, 0.24)})`;
+  const controlBorder = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.15, 0.05)})`;
+  const controlButtonBg = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.1, 0.03)})`;
 
   useWindowDrag(rootDragRef);
 
@@ -56,6 +57,7 @@ export function DanmuOverlayApp() {
 
       if (configRes.code === 0 && configRes.data) {
         setAppConfig(configRes.data);
+        setAlwaysOnTop(Boolean(configRes.data.danmu_overlay_always_on_top));
       }
       if (userRes.code === 0) {
         setCurrentUser(userRes.data ?? null);
@@ -140,9 +142,11 @@ export function DanmuOverlayApp() {
               ...prev,
               danmu_overlay_enabled: payload.enabled,
               danmu_overlay_opacity: payload.opacity,
+              danmu_overlay_always_on_top: payload.always_on_top,
             }
           : prev,
       );
+      setAlwaysOnTop(payload.always_on_top);
     });
 
     return () => {
@@ -240,20 +244,20 @@ export function DanmuOverlayApp() {
       ref={rootDragRef}
       className="flex h-screen w-screen overflow-hidden rounded-[22px] text-[#eaf2ff]"
       style={{
-        backgroundColor: `rgba(8, 12, 19, ${panelOpacity / 100})`,
+        backgroundColor: `rgba(8, 12, 19, ${panelOpacityRatio})`,
       }}
     >
       <div className="relative flex h-full w-full flex-col">
         <header className="drag-region flex items-center justify-between px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-gray-300">
-            <span className="inline-flex h-2 w-2 rounded-full bg-bili-blue shadow-[0_0_12px_rgba(0,174,236,0.85)]" />
-            Danmu Overlay
-          </div>
           <div data-tauri-drag-region="false" className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => void studioApi.hideDanmuOverlay()}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-200 transition-all hover:bg-white/10"
+              className="flex h-8 w-8 items-center justify-center rounded-full border text-gray-200 transition-all hover:bg-white/10"
+              style={{
+                backgroundColor: controlButtonBg,
+                borderColor: controlBorder,
+              }}
               title={t(locale, "ui.settings.overlay.hide")}
             >
               <X className="h-4 w-4" />
@@ -263,17 +267,32 @@ export function DanmuOverlayApp() {
               onClick={async () => {
                 const nextValue = !alwaysOnTop;
                 setAlwaysOnTop(nextValue);
-                await overlayWindow.setAlwaysOnTop(nextValue);
+                const res = await studioApi.setDanmuOverlayPinned(nextValue);
+                if (res.code !== 0) {
+                  setAlwaysOnTop((prev) => !prev);
+                }
               }}
               className={`flex h-8 w-8 items-center justify-center rounded-full border transition-all ${
                 alwaysOnTop
                   ? "border-bili-pink/40 bg-bili-pink/15 text-bili-pink"
-                  : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                  : "text-gray-200 hover:bg-white/10"
               }`}
+              style={
+                alwaysOnTop
+                  ? undefined
+                  : {
+                      backgroundColor: controlButtonBg,
+                      borderColor: controlBorder,
+                    }
+              }
               title={alwaysOnTop ? t(locale, "ui.overlay.unpin") : t(locale, "ui.overlay.pin")}
             >
               <Pin className="h-4 w-4" />
             </button>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-gray-300">
+            <span className="inline-flex h-2 w-2 rounded-full bg-bili-blue shadow-[0_0_12px_rgba(0,174,236,0.85)]" />
+            Danmu Overlay
           </div>
         </header>
 
@@ -302,7 +321,12 @@ export function DanmuOverlayApp() {
           )}
         </div>
 
-        <div className="border-t border-white/8 px-3 py-3">
+        <div
+          className="border-t px-3 py-3"
+          style={{
+            borderColor: controlBorder,
+          }}
+        >
           <div ref={composerRef} className="relative">
             {openPanel ? (
               <div
@@ -373,7 +397,11 @@ export function DanmuOverlayApp() {
 
             <div
               data-tauri-drag-region="false"
-              className="flex items-center gap-2 rounded-[20px] border border-white/8 bg-[#070b12]/90 p-2"
+              className="flex items-center gap-2 rounded-[20px] border p-2"
+              style={{
+                borderColor: controlBorder,
+                backgroundColor: controlSurface,
+              }}
             >
               <textarea
                 ref={textareaRef}
@@ -400,8 +428,16 @@ export function DanmuOverlayApp() {
                 className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
                   openPanel
                     ? "border-bili-blue/40 bg-bili-blue/15 text-bili-blue"
-                    : "border-white/5 bg-white/3 text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
+                    : "text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
                 }`}
+                style={
+                  openPanel
+                    ? undefined
+                    : {
+                        borderColor: controlBorder,
+                        backgroundColor: controlButtonBg,
+                      }
+                }
                 title={t(locale, "ui.danmu.emoticon.toggle")}
               >
                 <SmilePlus className="h-4 w-4" />
@@ -413,8 +449,15 @@ export function DanmuOverlayApp() {
                 className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
                   danmuText.trim() && !submitting
                     ? "bg-bili-blue text-white hover:bg-bili-blue/90 active:scale-95 shadow-[0_2px_8px_rgba(0,174,236,0.3)]"
-                    : "cursor-not-allowed bg-white/3 text-gray-600"
+                    : "cursor-not-allowed text-gray-600"
                 }`}
+                style={
+                  danmuText.trim() && !submitting
+                    ? undefined
+                    : {
+                        backgroundColor: controlButtonBg,
+                      }
+                }
                 title={t(locale, "ui.danmu.send")}
               >
                 <Send className="h-4 w-4" />

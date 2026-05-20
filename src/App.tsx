@@ -41,8 +41,11 @@ function App() {
           onRefreshPartitions={actions.loadPartitions}
           danmuCount={state.danmus.length}
           danmuListening={state.danmuListening}
+          danmuOverlayVisible={state.danmuOverlayVisible}
           onStartDanmu={actions.startDanmu}
           onStopDanmu={actions.stopDanmu}
+          onShowDanmuOverlay={actions.showDanmuOverlay}
+          onHideDanmuOverlay={actions.hideDanmuOverlay}
           onClearDanmus={actions.clearDanmus}
         />
 
@@ -139,6 +142,7 @@ function App() {
           {state.activeTab === "settings" && (
             <SettingsTab
               appConfig={state.appConfig}
+              hasPendingConfigChanges={state.hasPendingConfigChanges}
               locale={locale}
               savingConfig={state.savingConfig}
               savingLocale={state.savingLocale}

@@ -54,6 +54,46 @@ type ConfirmModalState = {
 const QR_LOGIN_TIMEOUT_MS = 2 * 60 * 1000;
 const QR_LOGIN_POLL_INTERVAL_MS = 2000;
 const LIVE_VOTE_SYNC_DEBOUNCE_MS = 800;
+
+const MANUAL_SAVE_APP_CONFIG_KEYS = [
+  "min_to_tray",
+  "hide_dock_on_minimize",
+  "danmu_overlay_enabled",
+  "danmu_overlay_opacity",
+  "danmu_overlay_always_on_top",
+  "live_control_mode",
+  "obs_ws_url",
+  "obs_ws_password",
+  "obs_ws_auto_start_on_live",
+  "obs_ws_auto_stop_on_live_end",
+  "on_live_start_command",
+  "on_live_stop_command",
+  "host_www",
+  "host_api",
+  "host_live_api",
+  "host_passport",
+  "host_live_web",
+  "cookie_domain",
+  "danmu_host",
+  "app_key",
+  "app_sec",
+  "http_user_agent",
+  "livehime_version_override",
+  "livehime_build_override",
+  "live_platform",
+] as const satisfies ReadonlyArray<keyof AppConfig>;
+
+type ManualSaveConfigKey = (typeof MANUAL_SAVE_APP_CONFIG_KEYS)[number];
+type AppConfigSnapshot = Pick<AppConfig, ManualSaveConfigKey>;
+
+const buildAppConfigSnapshot = (config: AppConfig): AppConfigSnapshot =>
+  MANUAL_SAVE_APP_CONFIG_KEYS.reduce((acc, key) => {
+    (
+      acc as Record<ManualSaveConfigKey, AppConfig[ManualSaveConfigKey]>
+    )[key] = config[key];
+    return acc;
+  }, {} as AppConfigSnapshot);
+
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
@@ -77,6 +117,7 @@ export function useStudioController() {
 
   const [danmuText, setDanmuText] = useState("");
   const [danmuListening, setDanmuListening] = useState(false);
+  const [danmuOverlayVisible, setDanmuOverlayVisible] = useState(false);
   const [danmus, setDanmus] = useState<DanmuMsg[]>([]);
   const [liveEmoticonPackages, setLiveEmoticonPackages] = useState<LiveEmoticonPackage[]>([]);
   const [liveEmoticonsLoading, setLiveEmoticonsLoading] = useState(false);
@@ -107,6 +148,9 @@ export function useStudioController() {
   });
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [savedAppConfigSnapshot, setSavedAppConfigSnapshot] = useState<AppConfigSnapshot | null>(
+    null,
+  );
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingLocale, setSavingLocale] = useState(false);
   const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
@@ -288,6 +332,15 @@ export function useStudioController() {
     [sectionStatus],
   );
 
+  const hasPendingConfigChanges = useMemo(() => {
+    if (!appConfig || !savedAppConfigSnapshot) {
+      return false;
+    }
+    return MANUAL_SAVE_APP_CONFIG_KEYS.some(
+      (key) => appConfig[key] !== savedAppConfigSnapshot[key],
+    );
+  }, [appConfig, savedAppConfigSnapshot]);
+
   useEffect(() => {
     currentUserRef.current = currentUser;
   }, [currentUser]);
@@ -305,6 +358,8 @@ export function useStudioController() {
     const res = await studioApi.getAppConfig();
     if (res.code === 0 && res.data) {
       setAppConfig(res.data);
+      setSavedAppConfigSnapshot(buildAppConfigSnapshot(res.data));
+      setDanmuOverlayVisible(Boolean(res.data.danmu_overlay_enabled));
     }
   }, []);
 
@@ -409,7 +464,9 @@ export function useStudioController() {
   );
 
   const showDanmuOverlay = useCallback(async () => {
-    await studioApi.showDanmuOverlay().catch((error) => {
+    await studioApi.showDanmuOverlay().then(() => {
+      setDanmuOverlayVisible(true);
+    }).catch((error) => {
       append(
         tf(localeSetting, "ui.settings.overlay.action_failed", {
           msg: resolveBackendMessage(String(error), localeSetting),
@@ -419,7 +476,9 @@ export function useStudioController() {
   }, [append, localeSetting]);
 
   const hideDanmuOverlay = useCallback(async () => {
-    await studioApi.hideDanmuOverlay().catch((error) => {
+    await studioApi.hideDanmuOverlay().then(() => {
+      setDanmuOverlayVisible(false);
+    }).catch((error) => {
       append(
         tf(localeSetting, "ui.settings.overlay.action_failed", {
           msg: resolveBackendMessage(String(error), localeSetting),
@@ -434,35 +493,7 @@ export function useStudioController() {
     }
     setSavingConfig(true);
     try {
-      const writableKeys: Array<keyof AppConfig> = [
-        "min_to_tray",
-        "hide_dock_on_minimize",
-        "danmu_overlay_enabled",
-        "danmu_overlay_opacity",
-        "live_control_mode",
-        "obs_ws_enabled",
-        "obs_ws_url",
-        "obs_ws_password",
-        "obs_ws_auto_start_on_live",
-        "obs_ws_auto_stop_on_live_end",
-        "on_live_start_command",
-        "on_live_stop_command",
-        "locale",
-        "host_www",
-        "host_api",
-        "host_live_api",
-        "host_passport",
-        "host_live_web",
-        "cookie_domain",
-        "danmu_host",
-        "app_key",
-        "app_sec",
-        "http_user_agent",
-        "livehime_version_override",
-        "livehime_build_override",
-        "live_platform",
-      ];
-      const values = writableKeys.reduce<Record<string, unknown>>((acc, key) => {
+      const values = MANUAL_SAVE_APP_CONFIG_KEYS.reduce<Record<string, unknown>>((acc, key) => {
         acc[key] = appConfig[key];
         return acc;
       }, {});
@@ -1741,6 +1772,12 @@ export function useStudioController() {
           }
           break;
         }
+        case "overlay.visibility": {
+          if (typeof event.data?.visible === "boolean") {
+            setDanmuOverlayVisible(event.data.visible);
+          }
+          break;
+        }
         default:
           break;
       }
@@ -1800,6 +1837,7 @@ export function useStudioController() {
       confirmModalTone: confirmModal.tone,
       currentUser,
       danmuListening,
+      danmuOverlayVisible,
       danmuText,
       danmus,
       liveEmoticonPackages,
@@ -1824,6 +1862,7 @@ export function useStudioController() {
       profileState,
       sectionStatus,
       dirtyStatus,
+      hasPendingConfigChanges,
       unsavedItems,
       parent,
       partitions,

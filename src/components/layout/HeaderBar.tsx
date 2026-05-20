@@ -1,4 +1,4 @@
-import { Radio, RefreshCw, Trash2, Users } from "lucide-react";
+import { PanelTop, Radio, RefreshCw, Trash2, Users } from "lucide-react";
 import type { ActiveTab } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t, tf } from "../../utils/i18n";
@@ -11,8 +11,11 @@ type HeaderBarProps = {
   onRefreshPartitions: () => Promise<void>;
   danmuCount: number;
   danmuListening: boolean;
+  danmuOverlayVisible: boolean;
   onStartDanmu: () => Promise<void>;
   onStopDanmu: () => Promise<void>;
+  onShowDanmuOverlay: () => Promise<void>;
+  onHideDanmuOverlay: () => Promise<void>;
   onClearDanmus: () => void;
 };
 
@@ -24,8 +27,11 @@ export function HeaderBar({
   onRefreshPartitions,
   danmuCount,
   danmuListening,
+  danmuOverlayVisible,
   onStartDanmu,
   onStopDanmu,
+  onShowDanmuOverlay,
+  onHideDanmuOverlay,
   onClearDanmus,
 }: HeaderBarProps) {
   const title = t(locale, `ui.header.title.${activeTab}`);
@@ -88,6 +94,24 @@ export function HeaderBar({
                 <span>{t(locale, "ui.danmu.stop")}</span>
               </button>
             )}
+
+            <button
+              onClick={() =>
+                void (danmuOverlayVisible ? onHideDanmuOverlay() : onShowDanmuOverlay())
+              }
+              className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                danmuOverlayVisible
+                  ? "border border-amber-500/25 bg-amber-500/12 text-amber-300 hover:bg-amber-500/20"
+                  : "border border-white/8 bg-white/5 text-gray-200 hover:border-white/15 hover:bg-white/10"
+              }`}
+            >
+              <PanelTop className="h-3.5 w-3.5" />
+              <span>
+                {danmuOverlayVisible
+                  ? t(locale, "ui.settings.overlay.hide")
+                  : t(locale, "ui.settings.overlay.show")}
+              </span>
+            </button>
 
             <button
               onClick={onClearDanmus}

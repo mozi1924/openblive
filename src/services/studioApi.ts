@@ -43,6 +43,8 @@ export const studioApi = {
   revealMainWindow: () => invokeCommand("reveal_main_window"),
   showDanmuOverlay: () => invokeCommand("show_danmu_overlay"),
   hideDanmuOverlay: () => invokeCommand("hide_danmu_overlay"),
+  setDanmuOverlayPinned: (pinned: boolean) =>
+    invokeCommand("set_danmu_overlay_pinned", { pinned }),
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
   getAccountList: () => invokeCommand<AccountList>("get_account_list"),
   refreshAllAccountCookies: () =>

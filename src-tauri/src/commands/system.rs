@@ -50,7 +50,8 @@ fn normalize_danmu_overlay_opacity(value: u8) -> u8 {
 fn overlay_settings_payload(config: &PersistConfig) -> serde_json::Value {
     json!({
         "enabled": config.danmu_overlay_enabled,
-        "opacity": normalize_danmu_overlay_opacity(config.danmu_overlay_opacity)
+        "opacity": normalize_danmu_overlay_opacity(config.danmu_overlay_opacity),
+        "always_on_top": config.danmu_overlay_always_on_top
     })
 }
 
@@ -122,8 +123,12 @@ fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<()
         .map_err(|error| format!("position overlay window failed: {error}"))
 }
 
-fn apply_overlay_window_config(window: &WebviewWindow, config: &PersistConfig) {
+fn apply_overlay_window_config(window: &WebviewWindow, config: &PersistConfig) -> Result<(), String> {
+    window
+        .set_always_on_top(config.danmu_overlay_always_on_top)
+        .map_err(|error| format!("set overlay always-on-top failed: {error}"))?;
     emit_overlay_settings(window, config);
+    Ok(())
 }
 
 fn emit_overlay_visibility(app: &AppHandle, visible: bool) {
@@ -137,7 +142,7 @@ fn emit_overlay_visibility(app: &AppHandle, visible: bool) {
 
 fn show_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<(), String> {
     let (window, created_now) = ensure_overlay_window(app)?;
-    apply_overlay_window_config(&window, config);
+    apply_overlay_window_config(&window, config)?;
     if created_now && !overlay_has_saved_window_state(app) {
         position_overlay_window(app, &window)?;
     }
@@ -241,8 +246,11 @@ fn apply_app_config_value(
             let next_opacity = value
                 .as_u64()
                 .and_then(|raw| u8::try_from(raw).ok())
-                .unwrap_or(85);
+                .unwrap_or(55);
             runtime.config.danmu_overlay_opacity = normalize_danmu_overlay_opacity(next_opacity);
+        }
+        "danmu_overlay_always_on_top" => {
+            runtime.config.danmu_overlay_always_on_top = value.as_bool().unwrap_or(false);
         }
         "live_control_mode" => {
             let mode = value.as_str().unwrap_or("none").trim();
@@ -410,6 +418,7 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "hide_dock_on_minimize": runtime.config.hide_dock_on_minimize,
         "danmu_overlay_enabled": runtime.config.danmu_overlay_enabled,
         "danmu_overlay_opacity": normalize_danmu_overlay_opacity(runtime.config.danmu_overlay_opacity),
+        "danmu_overlay_always_on_top": runtime.config.danmu_overlay_always_on_top,
         "live_control_mode": runtime.config.live_control_mode,
         "obs_ws_enabled": runtime.config.obs_ws_enabled,
         "obs_ws_url": runtime.config.obs_ws_url,
@@ -536,6 +545,26 @@ pub async fn show_danmu_overlay(app: AppHandle, state: State<'_, AppState>) -> C
 pub async fn hide_danmu_overlay(app: AppHandle) -> CmdResult {
     hide_overlay_window(&app);
     Ok(wrap_ok(json!({})))
+}
+
+#[tauri::command]
+pub async fn set_danmu_overlay_pinned(
+    app: AppHandle,
+    pinned: bool,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let config = {
+        let mut runtime = state.runtime.lock().await;
+        runtime.config.danmu_overlay_always_on_top = pinned;
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        runtime.config.clone()
+    };
+
+    if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
+        apply_overlay_window_config(&window, &config)?;
+    }
+
+    Ok(wrap_ok(json!({ "always_on_top": pinned })))
 }
 
 #[tauri::command]

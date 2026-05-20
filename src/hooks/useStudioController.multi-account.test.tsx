@@ -16,6 +16,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     revealMainWindow: vi.fn(),
     showDanmuOverlay: vi.fn(),
     hideDanmuOverlay: vi.fn(),
+    setDanmuOverlayPinned: vi.fn(),
     loadSavedConfig: vi.fn(),
     getAccountList: vi.fn(),
     refreshAllAccountCookies: vi.fn(),
@@ -119,7 +120,8 @@ beforeEach(() => {
       min_to_tray: true,
       hide_dock_on_minimize: false,
       danmu_overlay_enabled: true,
-      danmu_overlay_opacity: 85,
+      danmu_overlay_opacity: 55,
+      danmu_overlay_always_on_top: false,
       live_control_mode: "none",
       obs_ws_enabled: false,
       obs_ws_url: "ws://127.0.0.1:4455",
@@ -208,6 +210,7 @@ beforeEach(() => {
   mockStudioApi.revealMainWindow.mockResolvedValue(ok({}));
   mockStudioApi.showDanmuOverlay.mockResolvedValue(ok({}));
   mockStudioApi.hideDanmuOverlay.mockResolvedValue(ok({}));
+  mockStudioApi.setDanmuOverlayPinned.mockResolvedValue(ok({}));
 });
 
 afterEach(() => {

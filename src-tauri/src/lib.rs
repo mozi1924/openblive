@@ -24,7 +24,7 @@ use commands::{
     refresh_all_account_cookies, refresh_all_account_profiles, refresh_all_account_profiles_inner,
     refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
     refresh_tray_menu, render_qrcode, reveal_main_window, send_danmu, set_app_config,
-    set_app_configs, show_danmu_overlay, start_danmu_monitor, start_live, start_live_flow,
+    set_app_configs, set_danmu_overlay_pinned, show_danmu_overlay, start_danmu_monitor, start_live, start_live_flow,
     stop_danmu_monitor, stop_live, stop_live_flow, switch_account, sync_live_room_profile,
     sync_live_status, terminate_live_vote, update_area, update_live_tags, update_title,
 };
@@ -164,6 +164,7 @@ pub fn run() {
             reveal_main_window,
             show_danmu_overlay,
             hide_danmu_overlay,
+            set_danmu_overlay_pinned,
             get_version,
             render_qrcode,
             push_app_log,

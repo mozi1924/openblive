@@ -21,6 +21,8 @@ struct AppSettingsFile {
     danmu_overlay_enabled: bool,
     #[serde(default = "default_danmu_overlay_opacity")]
     danmu_overlay_opacity: u8,
+    #[serde(default)]
+    danmu_overlay_always_on_top: bool,
     #[serde(default = "default_live_control_mode")]
     live_control_mode: String,
     #[serde(default)]
@@ -155,7 +157,7 @@ fn default_danmu_overlay_enabled() -> bool {
 }
 
 fn default_danmu_overlay_opacity() -> u8 {
-    85
+    55
 }
 
 fn default_obs_ws_url() -> String {
@@ -308,6 +310,7 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
         cfg.hide_dock_on_minimize = app_file.hide_dock_on_minimize;
         cfg.danmu_overlay_enabled = app_file.danmu_overlay_enabled;
         cfg.danmu_overlay_opacity = app_file.danmu_overlay_opacity.clamp(40, 100);
+        cfg.danmu_overlay_always_on_top = app_file.danmu_overlay_always_on_top;
         cfg.live_control_mode = app_file.live_control_mode;
         cfg.obs_ws_enabled = app_file.obs_ws_enabled;
         cfg.obs_ws_url = app_file.obs_ws_url;
@@ -470,6 +473,7 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
         hide_dock_on_minimize: cfg.hide_dock_on_minimize,
         danmu_overlay_enabled: cfg.danmu_overlay_enabled,
         danmu_overlay_opacity: cfg.danmu_overlay_opacity.clamp(40, 100),
+        danmu_overlay_always_on_top: cfg.danmu_overlay_always_on_top,
         live_control_mode: cfg.live_control_mode.clone(),
         obs_ws_enabled: cfg.obs_ws_enabled,
         obs_ws_url: cfg.obs_ws_url.clone(),

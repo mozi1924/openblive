@@ -245,6 +245,8 @@ pub struct PersistConfig {
     pub danmu_overlay_enabled: bool,
     #[serde(default = "default_danmu_overlay_opacity")]
     pub danmu_overlay_opacity: u8,
+    #[serde(default)]
+    pub danmu_overlay_always_on_top: bool,
     #[serde(default = "default_live_control_mode")]
     pub live_control_mode: String,
     #[serde(default)]
@@ -306,6 +308,7 @@ impl Default for PersistConfig {
             hide_dock_on_minimize: false,
             danmu_overlay_enabled: default_danmu_overlay_enabled(),
             danmu_overlay_opacity: default_danmu_overlay_opacity(),
+            danmu_overlay_always_on_top: false,
             live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),
@@ -352,7 +355,7 @@ fn default_danmu_overlay_enabled() -> bool {
 }
 
 fn default_danmu_overlay_opacity() -> u8 {
-    85
+    55
 }
 
 #[derive(Deserialize)]

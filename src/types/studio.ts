@@ -16,6 +16,7 @@ export type AppConfig = {
   hide_dock_on_minimize: boolean;
   danmu_overlay_enabled: boolean;
   danmu_overlay_opacity: number;
+  danmu_overlay_always_on_top: boolean;
   live_control_mode: "none" | "obs_ws" | "command";
   obs_ws_enabled: boolean;
   obs_ws_url: string;
@@ -46,6 +47,7 @@ export type AppConfig = {
 export type DanmuOverlaySettingsEvent = {
   enabled: boolean;
   opacity: number;
+  always_on_top: boolean;
 };
 
 export type Session = {
