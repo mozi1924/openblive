@@ -8,7 +8,10 @@ type AccountTabProps = {
   accounts: User[];
   currentUser: User | null;
   qrcode: string;
+  qrLoginRemainingSeconds: number;
+  qrLoginTimedOut: boolean;
   onLoadQrcode: () => Promise<void>;
+  onCancelQrcodeLogin: () => void;
   onRequestLogout: (user: User, current: boolean) => Promise<void>;
   onPollLogin: () => Promise<void>;
   onRefreshCurrentUser: () => Promise<void>;
@@ -20,7 +23,10 @@ export function AccountTab({
   accounts,
   currentUser,
   qrcode,
+  qrLoginRemainingSeconds,
+  qrLoginTimedOut,
   onLoadQrcode,
+  onCancelQrcodeLogin,
   onRequestLogout,
   onPollLogin,
   onRefreshCurrentUser,
@@ -270,6 +276,9 @@ export function AccountTab({
                 <p className="text-[11px] leading-relaxed text-gray-500 max-w-xs mx-auto">
                   {t(locale, "ui.account.qr.scan_desc")}
                 </p>
+                <p className="text-[10px] text-amber-300/90">
+                  {tf(locale, "ui.account.qr.timeout_hint", { seconds: qrLoginRemainingSeconds })}
+                </p>
               </div>
 
               <div className="flex w-full space-x-2">
@@ -288,6 +297,12 @@ export function AccountTab({
                   {t(locale, "ui.account.qr.poll_btn")}
                 </button>
               </div>
+              <button
+                onClick={onCancelQrcodeLogin}
+                className="w-full rounded-xl border border-rose-500/25 bg-rose-500/10 py-2 text-[11px] font-semibold text-rose-300 transition-all duration-150 active:scale-95 hover:bg-rose-500/20"
+              >
+                {t(locale, "ui.account.qr.stop_btn")}
+              </button>
             </div>
           ) : (
             <div className="flex flex-col items-center py-10 text-center w-full">
@@ -304,13 +319,18 @@ export function AccountTab({
               <p className="mb-8 max-w-xs text-xs leading-relaxed text-gray-500">
                 {t(locale, "ui.account.qr.get_desc")}
               </p>
+              {qrLoginTimedOut && (
+                <p className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+                  {t(locale, "ui.account.qr.timed_out")}
+                </p>
+              )}
               
               <button
                 onClick={() => void onLoadQrcode()}
                 className="btn-primary flex items-center justify-center rounded-2xl px-8 py-3.5 text-xs font-bold text-white active:scale-95"
               >
                 <QrCode className="mr-2 h-4 w-4" />
-                {t(locale, "ui.account.qr.get_btn")}
+                {t(locale, qrLoginTimedOut ? "ui.account.qr.restart_btn" : "ui.account.qr.get_btn")}
               </button>
             </div>
           )}

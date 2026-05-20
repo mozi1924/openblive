@@ -284,4 +284,47 @@ describe("useStudioController multi-account regressions", () => {
     expect(result.current.state.danmuListening).toBe(false);
     expect(result.current.state.danmus).toHaveLength(0);
   });
+
+  it("stops QR polling when login session times out", async () => {
+    vi.useFakeTimers();
+    try {
+      mockStudioApi.getLoginQrcode.mockResolvedValue(
+        ok({ url: "", content: "qr", image_src: "data:image/png;base64,abc", qrcode_key: "k1" }),
+      );
+      mockStudioApi.pollLoginStatus.mockResolvedValue({ code: 86101, msg: "pending" });
+
+      const { result } = renderHook(() => useStudioController());
+      await act(async () => {
+        await flush();
+      });
+
+      await act(async () => {
+        await result.current.actions.loadQrcode();
+      });
+
+      expect(result.current.state.qrcode).toContain("data:image/png;base64,abc");
+      expect(result.current.state.qrLoginTimedOut).toBe(false);
+      expect(result.current.state.qrLoginRemainingSeconds).toBeGreaterThan(0);
+
+      await act(async () => {
+        vi.advanceTimersByTime(120_500);
+        await flush();
+      });
+
+      expect(result.current.state.qrcode).toBe("");
+      expect(result.current.state.qrLoginTimedOut).toBe(true);
+      expect(result.current.state.qrLoginRemainingSeconds).toBe(0);
+
+      const pollCallsAtTimeout = mockStudioApi.pollLoginStatus.mock.calls.length;
+
+      await act(async () => {
+        vi.advanceTimersByTime(8_000);
+        await flush();
+      });
+
+      expect(mockStudioApi.pollLoginStatus.mock.calls.length).toBe(pollCallsAtTimeout);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

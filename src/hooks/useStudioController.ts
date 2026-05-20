@@ -41,12 +41,18 @@ type ConfirmModalState = {
   tone: ConfirmModalTone;
 };
 
+const QR_LOGIN_TIMEOUT_MS = 2 * 60 * 1000;
+const QR_LOGIN_POLL_INTERVAL_MS = 2000;
+
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
+  const [qrLoginExpiresAt, setQrLoginExpiresAt] = useState<number | null>(null);
+  const [qrLoginRemainingSeconds, setQrLoginRemainingSeconds] = useState(0);
+  const [qrLoginTimedOut, setQrLoginTimedOut] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<User[]>([]);
@@ -92,6 +98,8 @@ export function useStudioController() {
   const loginPollBusyRef = useRef(false);
   const loginStatusCodeRef = useRef<number | null>(null);
   const qrcodeRefreshBusyRef = useRef(false);
+  const qrLoginExpiresAtRef = useRef<number | null>(null);
+  const qrLoginSessionNonceRef = useRef(0);
   const confirmResolverRef = useRef<((accepted: boolean) => void) | null>(null);
   const titleDirtyRef = useRef(false);
   const areaDirtyRef = useRef(false);
@@ -167,6 +175,30 @@ export function useStudioController() {
       );
     });
   }, [append, localeSetting]);
+
+  const resetQrLoginState = useCallback(() => {
+    qrLoginSessionNonceRef.current += 1;
+    qrLoginExpiresAtRef.current = null;
+    setQrLoginExpiresAt(null);
+    setQrLoginRemainingSeconds(0);
+    setQrcode("");
+    setQrcodeKey("");
+    loginStatusCodeRef.current = null;
+  }, []);
+
+  const cancelQrcodeLogin = useCallback(
+    (reason: "timeout" | "manual" = "manual") => {
+      if (!qrcodeKey && !qrcode) {
+        return;
+      }
+      resetQrLoginState();
+      setQrLoginTimedOut(reason === "timeout");
+      if (reason === "timeout") {
+        append(t(localeSetting, "ui.ctrl.qr_login_timeout"));
+      }
+    },
+    [append, localeSetting, qrcode, qrcodeKey, resetQrLoginState],
+  );
 
   const dirtyStatus = useMemo(
     () => ({
@@ -516,17 +548,44 @@ export function useStudioController() {
     }
   }, [append, applyProfileState, applyUserDraftValues, localeSetting]);
 
-  const loadQrcode = useCallback(async () => {
+  const loadQrcode = useCallback(async (options?: { preserveDeadline?: boolean }) => {
     if (qrcodeRefreshBusyRef.current) {
       return;
     }
+
+    const now = Date.now();
+    const nextExpiresAt =
+      options?.preserveDeadline && qrLoginExpiresAtRef.current
+        ? qrLoginExpiresAtRef.current
+        : now + QR_LOGIN_TIMEOUT_MS;
+    if (nextExpiresAt <= now) {
+      cancelQrcodeLogin("timeout");
+      return;
+    }
+
+    if (!options?.preserveDeadline) {
+      qrLoginSessionNonceRef.current += 1;
+      setQrLoginTimedOut(false);
+    }
+    const requestNonce = qrLoginSessionNonceRef.current;
+
     qrcodeRefreshBusyRef.current = true;
     setQrcode("");
     setQrcodeKey("");
     loginStatusCodeRef.current = null;
+    qrLoginExpiresAtRef.current = nextExpiresAt;
+    setQrLoginExpiresAt(nextExpiresAt);
+    setQrLoginRemainingSeconds(Math.ceil((nextExpiresAt - now) / 1000));
 
     try {
       const res = await studioApi.getLoginQrcode();
+      if (requestNonce !== qrLoginSessionNonceRef.current) {
+        return;
+      }
+      if (Date.now() >= nextExpiresAt) {
+        cancelQrcodeLogin("timeout");
+        return;
+      }
       if (res.code === 0 && res.data?.content) {
         if (!res.data.image_src) {
           append(t(localeSetting, "ui.ctrl.qr_render_failed"));
@@ -544,10 +603,15 @@ export function useStudioController() {
     } finally {
       qrcodeRefreshBusyRef.current = false;
     }
-  }, [append, localeSetting]);
+  }, [append, cancelQrcodeLogin, localeSetting]);
 
   const pollLogin = useCallback(async (silent = false) => {
     if (!qrcodeKey) {
+      return;
+    }
+    const expiresAt = qrLoginExpiresAtRef.current;
+    if (!expiresAt || Date.now() >= expiresAt) {
+      cancelQrcodeLogin("timeout");
       return;
     }
     if (loginPollBusyRef.current) {
@@ -577,8 +641,8 @@ export function useStudioController() {
         await refreshSession();
         await loadAccounts();
         await syncLiveRoomProfile(true);
-        setQrcode("");
-        setQrcodeKey("");
+        resetQrLoginState();
+        setQrLoginTimedOut(false);
         return;
       }
 
@@ -590,7 +654,7 @@ export function useStudioController() {
         if (!silent || statusChanged) {
           append(t(localeSetting, "ui.ctrl.qr_expired_refreshing"));
         }
-        await loadQrcode();
+        await loadQrcode({ preserveDeadline: true });
         return;
       }
 
@@ -600,7 +664,7 @@ export function useStudioController() {
     } finally {
       loginPollBusyRef.current = false;
     }
-  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile, localeSetting]);
+  }, [append, applyProfileState, applyUserDraftValues, cancelQrcodeLogin, loadAccounts, loadQrcode, qrcodeKey, refreshSession, resetQrLoginState, syncLiveRoomProfile, localeSetting]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
@@ -1184,17 +1248,32 @@ export function useStudioController() {
   }, [currentUser?.uid, loadLiveEmoticons, session?.room_id]);
 
   useEffect(() => {
-    if (!qrcodeKey) {
+    if (!qrcodeKey || !qrLoginExpiresAt) {
+      setQrLoginRemainingSeconds(0);
       return;
     }
 
+    const updateRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((qrLoginExpiresAt - Date.now()) / 1000));
+      setQrLoginRemainingSeconds(remaining);
+    };
+    updateRemaining();
+
+    const expiryTimer = window.setTimeout(() => {
+      cancelQrcodeLogin("timeout");
+    }, Math.max(0, qrLoginExpiresAt - Date.now()));
+
     void pollLogin(true);
     const timer = window.setInterval(() => {
+      updateRemaining();
       void pollLogin(true);
-    }, 2000);
+    }, QR_LOGIN_POLL_INTERVAL_MS);
 
-    return () => window.clearInterval(timer);
-  }, [pollLogin, qrcodeKey]);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(expiryTimer);
+    };
+  }, [cancelQrcodeLogin, pollLogin, qrcodeKey, qrLoginExpiresAt]);
 
   useEffect(() => {
     let active = true;
@@ -1289,6 +1368,8 @@ export function useStudioController() {
       parent,
       partitions,
       qrcode,
+      qrLoginRemainingSeconds,
+      qrLoginTimedOut,
       rtmp,
       session,
       showConfirmModal: confirmModal.show,
@@ -1315,6 +1396,7 @@ export function useStudioController() {
       loadAccounts,
       loadPartitions,
       loadQrcode,
+      cancelQrcodeLogin,
       logout,
       requestLogout,
       pollLogin,

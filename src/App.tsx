@@ -48,7 +48,10 @@ function App() {
               accounts={state.accounts}
               currentUser={state.currentUser}
               qrcode={state.qrcode}
+              qrLoginRemainingSeconds={state.qrLoginRemainingSeconds}
+              qrLoginTimedOut={state.qrLoginTimedOut}
               onLoadQrcode={actions.loadQrcode}
+              onCancelQrcodeLogin={actions.cancelQrcodeLogin}
               onRequestLogout={actions.requestLogout}
               onPollLogin={actions.pollLogin}
               onRefreshCurrentUser={actions.refreshCurrentUser}
