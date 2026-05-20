@@ -5,6 +5,7 @@ import type {
   AppLogEvent,
   AppConfig,
   DanmuMsg,
+  DanmuOverlaySettingsEvent,
   LinkageStatus,
   LiveFlowResp,
   LiveEmoticonPackage,
@@ -40,6 +41,8 @@ export const studioApi = {
     invokeCommand("set_app_configs", { req: { values } }),
   refreshTrayMenu: () => invokeCommand("refresh_tray_menu"),
   revealMainWindow: () => invokeCommand("reveal_main_window"),
+  showDanmuOverlay: () => invokeCommand("show_danmu_overlay"),
+  hideDanmuOverlay: () => invokeCommand("hide_danmu_overlay"),
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
   getAccountList: () => invokeCommand<AccountList>("get_account_list"),
   refreshAllAccountCookies: () =>
@@ -114,4 +117,6 @@ export const studioApi = {
     listen<AppLogEvent>("app-log", (event) => handler(event.payload)),
   listenStudioState: (handler: (payload: StudioStateEvent) => void) =>
     listen<StudioStateEvent>("studio-state", (event) => handler(event.payload)),
+  listenDanmuOverlaySettings: (handler: (payload: DanmuOverlaySettingsEvent) => void) =>
+    listen<DanmuOverlaySettingsEvent>("danmu-overlay-settings", (event) => handler(event.payload)),
 };

@@ -63,7 +63,8 @@ fn enrich_sender_face_with_cache(app: &AppHandle, message: &mut Value) {
         {
             crate::runtime_log!(
                 "[danmu] refresh avatar cache failed for uid {}: {}",
-                uid_key, error
+                uid_key,
+                error
             );
         }
         let pending = avatar_cache_pending();

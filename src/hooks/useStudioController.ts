@@ -408,6 +408,26 @@ export function useStudioController() {
     [appConfig, append, loadAppConfig, syncTrayMenu],
   );
 
+  const showDanmuOverlay = useCallback(async () => {
+    await studioApi.showDanmuOverlay().catch((error) => {
+      append(
+        tf(localeSetting, "ui.settings.overlay.action_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    });
+  }, [append, localeSetting]);
+
+  const hideDanmuOverlay = useCallback(async () => {
+    await studioApi.hideDanmuOverlay().catch((error) => {
+      append(
+        tf(localeSetting, "ui.settings.overlay.action_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    });
+  }, [append, localeSetting]);
+
   const saveAppConfig = useCallback(async () => {
     if (!appConfig) {
       return;
@@ -417,6 +437,8 @@ export function useStudioController() {
       const writableKeys: Array<keyof AppConfig> = [
         "min_to_tray",
         "hide_dock_on_minimize",
+        "danmu_overlay_enabled",
+        "danmu_overlay_opacity",
         "live_control_mode",
         "obs_ws_enabled",
         "obs_ws_url",
@@ -1851,6 +1873,8 @@ export function useStudioController() {
       generateHttpUserAgent,
       updateLocaleConfig,
       saveAppConfig,
+      showDanmuOverlay,
+      hideDanmuOverlay,
       setTagInput,
       setTitle,
       addTag,

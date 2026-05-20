@@ -17,6 +17,10 @@ struct AppSettingsFile {
     min_to_tray: bool,
     #[serde(default = "default_hide_dock_on_minimize")]
     hide_dock_on_minimize: bool,
+    #[serde(default = "default_danmu_overlay_enabled")]
+    danmu_overlay_enabled: bool,
+    #[serde(default = "default_danmu_overlay_opacity")]
+    danmu_overlay_opacity: u8,
     #[serde(default = "default_live_control_mode")]
     live_control_mode: String,
     #[serde(default)]
@@ -146,6 +150,14 @@ fn default_hide_dock_on_minimize() -> bool {
     false
 }
 
+fn default_danmu_overlay_enabled() -> bool {
+    true
+}
+
+fn default_danmu_overlay_opacity() -> u8 {
+    85
+}
+
 fn default_obs_ws_url() -> String {
     "ws://127.0.0.1:4455".to_string()
 }
@@ -234,7 +246,9 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_cookie.is_empty() {
-                    crate::runtime_warn!("[auth][config] legacy decrypt cookie failed uid={uid}: {error}");
+                    crate::runtime_warn!(
+                        "[auth][config] legacy decrypt cookie failed uid={uid}: {error}"
+                    );
                     credential_corrupted = true;
                 }
                 String::new()
@@ -256,7 +270,9 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_csrf.is_empty() {
-                    crate::runtime_warn!("[auth][config] legacy decrypt csrf failed uid={uid}: {error}");
+                    crate::runtime_warn!(
+                        "[auth][config] legacy decrypt csrf failed uid={uid}: {error}"
+                    );
                     credential_corrupted = true;
                 }
                 String::new()
@@ -290,6 +306,8 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
     if let Some(app_file) = load_json::<AppSettingsFile>(&app_config_path(path)) {
         cfg.min_to_tray = app_file.min_to_tray;
         cfg.hide_dock_on_minimize = app_file.hide_dock_on_minimize;
+        cfg.danmu_overlay_enabled = app_file.danmu_overlay_enabled;
+        cfg.danmu_overlay_opacity = app_file.danmu_overlay_opacity.clamp(40, 100);
         cfg.live_control_mode = app_file.live_control_mode;
         cfg.obs_ws_enabled = app_file.obs_ws_enabled;
         cfg.obs_ws_url = app_file.obs_ws_url;
@@ -401,7 +419,9 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_refresh_token.is_empty() {
-                    crate::runtime_warn!("[auth][config] decrypt refresh_token failed uid={uid}: {error}");
+                    crate::runtime_warn!(
+                        "[auth][config] decrypt refresh_token failed uid={uid}: {error}"
+                    );
                     credential_corrupted = true;
                 }
                 String::new()
@@ -448,6 +468,8 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
     let app_file = AppSettingsFile {
         min_to_tray: cfg.min_to_tray,
         hide_dock_on_minimize: cfg.hide_dock_on_minimize,
+        danmu_overlay_enabled: cfg.danmu_overlay_enabled,
+        danmu_overlay_opacity: cfg.danmu_overlay_opacity.clamp(40, 100),
         live_control_mode: cfg.live_control_mode.clone(),
         obs_ws_enabled: cfg.obs_ws_enabled,
         obs_ws_url: cfg.obs_ws_url.clone(),

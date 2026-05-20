@@ -241,6 +241,10 @@ pub struct PersistConfig {
     pub current_uid: Option<String>,
     pub min_to_tray: bool,
     pub hide_dock_on_minimize: bool,
+    #[serde(default = "default_danmu_overlay_enabled")]
+    pub danmu_overlay_enabled: bool,
+    #[serde(default = "default_danmu_overlay_opacity")]
+    pub danmu_overlay_opacity: u8,
     #[serde(default = "default_live_control_mode")]
     pub live_control_mode: String,
     #[serde(default)]
@@ -300,6 +304,8 @@ impl Default for PersistConfig {
             current_uid: None,
             min_to_tray: true,
             hide_dock_on_minimize: false,
+            danmu_overlay_enabled: default_danmu_overlay_enabled(),
+            danmu_overlay_opacity: default_danmu_overlay_opacity(),
             live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),
@@ -339,6 +345,14 @@ fn default_obs_ws_url() -> String {
 
 fn default_locale() -> String {
     "auto".to_string()
+}
+
+fn default_danmu_overlay_enabled() -> bool {
+    true
+}
+
+fn default_danmu_overlay_opacity() -> u8 {
+    85
 }
 
 #[derive(Deserialize)]

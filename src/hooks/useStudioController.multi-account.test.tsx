@@ -14,6 +14,8 @@ const { mockStudioApi } = vi.hoisted(() => ({
     setAppConfigs: vi.fn(),
     refreshTrayMenu: vi.fn(),
     revealMainWindow: vi.fn(),
+    showDanmuOverlay: vi.fn(),
+    hideDanmuOverlay: vi.fn(),
     loadSavedConfig: vi.fn(),
     getAccountList: vi.fn(),
     refreshAllAccountCookies: vi.fn(),
@@ -44,6 +46,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     listenDanmuMessage: vi.fn(),
     listenAppLog: vi.fn(),
     listenStudioState: vi.fn(),
+    listenDanmuOverlaySettings: vi.fn(),
   },
 }));
 
@@ -111,7 +114,39 @@ beforeEach(() => {
 
   mockStudioApi.syncLiveStatus.mockResolvedValue(ok(null));
   mockStudioApi.getSession.mockResolvedValue(ok(null));
-  mockStudioApi.getAppConfig.mockResolvedValue(ok({ locale: "zh-CN" }));
+  mockStudioApi.getAppConfig.mockResolvedValue(
+    ok({
+      min_to_tray: true,
+      hide_dock_on_minimize: false,
+      danmu_overlay_enabled: true,
+      danmu_overlay_opacity: 85,
+      live_control_mode: "none",
+      obs_ws_enabled: false,
+      obs_ws_url: "ws://127.0.0.1:4455",
+      obs_ws_password: "",
+      obs_ws_auto_start_on_live: false,
+      obs_ws_auto_stop_on_live_end: false,
+      on_live_start_command: "",
+      on_live_stop_command: "",
+      locale: "zh-CN",
+      host_www: "",
+      host_api: "",
+      host_live_api: "",
+      host_passport: "",
+      host_live_web: "",
+      cookie_domain: "",
+      danmu_host: "",
+      app_key: "",
+      app_sec: "",
+      http_user_agent: "",
+      livehime_version_override: "",
+      livehime_build_override: "",
+      live_platform: "",
+      is_win32: false,
+      is_macos: false,
+      has_tray: true,
+    }),
+  );
   mockStudioApi.getLinkageStatus.mockResolvedValue(
     ok({
       mode: "none",
@@ -124,6 +159,7 @@ beforeEach(() => {
   mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
   mockStudioApi.listenAppLog.mockResolvedValue(() => undefined);
   mockStudioApi.listenStudioState.mockResolvedValue(() => undefined);
+  mockStudioApi.listenDanmuOverlaySettings.mockResolvedValue(() => undefined);
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
   mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
     ok({ updated: 0, failed: [], expired: [] }),
@@ -170,6 +206,8 @@ beforeEach(() => {
   mockStudioApi.setAppConfig.mockResolvedValue(ok({}));
   mockStudioApi.setAppConfigs.mockResolvedValue(ok({}));
   mockStudioApi.revealMainWindow.mockResolvedValue(ok({}));
+  mockStudioApi.showDanmuOverlay.mockResolvedValue(ok({}));
+  mockStudioApi.hideDanmuOverlay.mockResolvedValue(ok({}));
 });
 
 afterEach(() => {
@@ -177,6 +215,32 @@ afterEach(() => {
 });
 
 describe("useStudioController multi-account regressions", () => {
+  it("persists danmu overlay settings in save payload", async () => {
+    const user = makeUser("1", "A", "A-old");
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.appConfig).not.toBeNull());
+
+    act(() => {
+      result.current.actions.updateAppConfig("danmu_overlay_enabled", false);
+      result.current.actions.updateAppConfig("danmu_overlay_opacity", 60);
+    });
+
+    await act(async () => {
+      await result.current.actions.saveAppConfig();
+    });
+
+    expect(mockStudioApi.setAppConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        danmu_overlay_enabled: false,
+        danmu_overlay_opacity: 60,
+      }),
+    );
+  });
+
   it("ignores stale title submit result after account switch", async () => {
     const userA = makeUser("1", "A", "A-old");
     const userB = makeUser("2", "B", "B-old");

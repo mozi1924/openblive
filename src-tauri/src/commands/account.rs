@@ -430,7 +430,9 @@ async fn bump_user_auth_fail_count(uid: &str, state: &AppState) -> u32 {
     if user.last_auth_fail_at > 0 && now - user.last_auth_fail_at < AUTH_FAIL_COOLDOWN_SECS {
         crate::runtime_log!(
             "[auth][check] uid={} auth_fail_count keep={} (within cooldown {}s)",
-            uid, user.auth_fail_count, AUTH_FAIL_COOLDOWN_SECS
+            uid,
+            user.auth_fail_count,
+            AUTH_FAIL_COOLDOWN_SECS
         );
         return user.auth_fail_count;
     }
@@ -438,7 +440,8 @@ async fn bump_user_auth_fail_count(uid: &str, state: &AppState) -> u32 {
     user.auth_fail_count = user.auth_fail_count.saturating_add(1);
     crate::runtime_log!(
         "[auth][check] uid={} auth_fail_count={}",
-        uid, user.auth_fail_count
+        uid,
+        user.auth_fail_count
     );
     user.auth_fail_count
 }
@@ -497,7 +500,8 @@ async fn refresh_cookie_for_uid(
         Err(error) => {
             crate::runtime_log!(
                 "[auth][check] uid={} cookie/info request error: {}",
-                uid, error
+                uid,
+                error
             );
             return RefreshCookieResult::Failed(error.to_string());
         }
@@ -550,7 +554,8 @@ async fn refresh_cookie_for_uid(
             clear_user_login_invalid_flag(uid, state).await;
             crate::runtime_log!(
                 "[auth][refresh] uid={} refresh required but failed: {}",
-                uid, error
+                uid,
+                error
             );
             return RefreshCookieResult::Failed(format!(
                 "i18n.account.error.cookie_refresh_retry_failed:attempt={fail_count}/{AUTH_INVALID_THRESHOLD}:{error}"
@@ -628,7 +633,8 @@ async fn refresh_cookie_for_uid(
         Err(error) => {
             crate::runtime_log!(
                 "[auth][check] uid={} nav/stat request error: {}",
-                uid, error
+                uid,
+                error
             );
             json!({ "data": {} })
         }
@@ -654,7 +660,8 @@ async fn refresh_cookie_for_uid(
     {
         crate::runtime_log!(
             "[auth][check] uid={} avatar cache refresh failed: {}",
-            uid, error
+            uid,
+            error
         );
     }
 
@@ -991,7 +998,8 @@ pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
     if let Err(error) = delete_avatar_cache(&state.config_path, &req.uid) {
         crate::runtime_log!(
             "[auth][logout] delete avatar cache failed uid={}: {}",
-            req.uid, error
+            req.uid,
+            error
         );
     }
     if runtime.config.current_uid.as_deref() == Some(&req.uid) {

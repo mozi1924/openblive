@@ -1,8 +1,9 @@
 use crate::constants::CmdResult;
 use crate::endpoints;
 use crate::i18n::normalize_locale_setting;
-use crate::models::{AppConfigReq, AppConfigsReq, AppLogReq, QrRenderReq};
+use crate::models::{AppConfigReq, AppConfigsReq, AppLogReq, PersistConfig, QrRenderReq};
 use crate::response::wrap_ok;
+use crate::state_event::emit_studio_state_event;
 use crate::{
     config::save_config,
     state::{AppState, RuntimeState},
@@ -11,11 +12,24 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use qrcode_generator::QrCodeEcc;
 use serde_json::json;
-use tauri::{AppHandle, Emitter, Manager, State};
+use std::fs;
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, Manager, State, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
+use tauri_plugin_positioner::{Position, WindowExt};
+use tauri_plugin_window_state::AppHandleExt as WindowStateAppHandleExt;
 use tokio::time::Duration;
 
 const OBS_KEEPALIVE_INTERVAL_SECS: u64 = 15;
 const APP_LOG_LIMIT: usize = 300;
+const DANMU_OVERLAY_LABEL: &str = "overlay";
+const DANMU_OVERLAY_SETTINGS_EVENT: &str = "danmu-overlay-settings";
+const DANMU_OVERLAY_MARGIN_PX: f64 = 16.0;
+const DANMU_OVERLAY_WIDTH: f64 = 420.0;
+const DANMU_OVERLAY_HEIGHT: f64 = 360.0;
+const DANMU_OVERLAY_MIN_WIDTH: f64 = 360.0;
+const DANMU_OVERLAY_MIN_HEIGHT: f64 = 260.0;
 
 fn normalize_live_control_mode(mode: &str) -> &'static str {
     match mode.trim() {
@@ -27,6 +41,134 @@ fn normalize_live_control_mode(mode: &str) -> &'static str {
 
 fn now_hms() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()
+}
+
+fn normalize_danmu_overlay_opacity(value: u8) -> u8 {
+    value.clamp(40, 100)
+}
+
+fn overlay_settings_payload(config: &PersistConfig) -> serde_json::Value {
+    json!({
+        "enabled": config.danmu_overlay_enabled,
+        "opacity": normalize_danmu_overlay_opacity(config.danmu_overlay_opacity)
+    })
+}
+
+fn emit_overlay_settings(window: &WebviewWindow, config: &PersistConfig) {
+    let _ = window.emit(
+        DANMU_OVERLAY_SETTINGS_EVENT,
+        overlay_settings_payload(config),
+    );
+}
+
+fn build_overlay_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    WebviewWindowBuilder::new(
+        app,
+        DANMU_OVERLAY_LABEL,
+        WebviewUrl::App("index.html".into()),
+    )
+    .title("OpenBlive Danmu Overlay")
+    .transparent(true)
+    .decorations(false)
+    .skip_taskbar(true)
+    .visible(false)
+    .resizable(true)
+    .shadow(false)
+    .inner_size(DANMU_OVERLAY_WIDTH, DANMU_OVERLAY_HEIGHT)
+    .min_inner_size(DANMU_OVERLAY_MIN_WIDTH, DANMU_OVERLAY_MIN_HEIGHT)
+    .build()
+    .map_err(|error| format!("create overlay window failed: {error}"))
+}
+
+pub(crate) fn ensure_overlay_window(app: &AppHandle) -> Result<(WebviewWindow, bool), String> {
+    if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
+        return Ok((window, false));
+    }
+    build_overlay_window(app).map(|window| (window, true))
+}
+
+fn overlay_has_saved_window_state(app: &AppHandle) -> bool {
+    let Ok(app_dir) = app.path().app_config_dir() else {
+        return false;
+    };
+    let state_path = app_dir.join(WindowStateAppHandleExt::filename(app));
+    let Ok(raw) = fs::read_to_string(state_path) else {
+        return false;
+    };
+    let Ok(saved_state) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return false;
+    };
+
+    saved_state.get(DANMU_OVERLAY_LABEL).is_some()
+}
+
+fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    let _ = window.as_ref().window().move_window(Position::TopLeft);
+
+    let target_position = if let Some(monitor) = app
+        .primary_monitor()
+        .map_err(|error| format!("read primary monitor failed: {error}"))?
+    {
+        LogicalPosition::new(
+            (monitor.position().x as f64 / monitor.scale_factor()) + DANMU_OVERLAY_MARGIN_PX,
+            (monitor.position().y as f64 / monitor.scale_factor()) + DANMU_OVERLAY_MARGIN_PX,
+        )
+    } else {
+        LogicalPosition::new(DANMU_OVERLAY_MARGIN_PX, DANMU_OVERLAY_MARGIN_PX)
+    };
+
+    window
+        .set_position(target_position)
+        .map_err(|error| format!("position overlay window failed: {error}"))
+}
+
+fn apply_overlay_window_config(window: &WebviewWindow, config: &PersistConfig) {
+    emit_overlay_settings(window, config);
+}
+
+fn emit_overlay_visibility(app: &AppHandle, visible: bool) {
+    emit_studio_state_event(
+        app,
+        "overlay.visibility",
+        "system.overlay",
+        json!({ "visible": visible }),
+    );
+}
+
+fn show_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<(), String> {
+    let (window, created_now) = ensure_overlay_window(app)?;
+    apply_overlay_window_config(&window, config);
+    if created_now && !overlay_has_saved_window_state(app) {
+        position_overlay_window(app, &window)?;
+    }
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+    }
+    let _ = window.show();
+    emit_overlay_visibility(app, true);
+    Ok(())
+}
+
+fn hide_overlay_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
+        let _ = window.hide();
+    }
+    emit_overlay_visibility(app, false);
+}
+
+pub(crate) async fn sync_overlay_window_from_config(app: AppHandle, state: &AppState) {
+    let config = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.clone()
+    };
+
+    if config.danmu_overlay_enabled {
+        if let Err(error) = show_overlay_window(&app, &config) {
+            crate::runtime_warn!("{error}");
+        }
+    } else {
+        hide_overlay_window(&app);
+    }
 }
 
 fn push_app_log_buffer(runtime: &mut RuntimeState, line: String) {
@@ -91,6 +233,16 @@ fn apply_app_config_value(
         }
         "hide_dock_on_minimize" => {
             runtime.config.hide_dock_on_minimize = value.as_bool().unwrap_or(false);
+        }
+        "danmu_overlay_enabled" => {
+            runtime.config.danmu_overlay_enabled = value.as_bool().unwrap_or(true);
+        }
+        "danmu_overlay_opacity" => {
+            let next_opacity = value
+                .as_u64()
+                .and_then(|raw| u8::try_from(raw).ok())
+                .unwrap_or(85);
+            runtime.config.danmu_overlay_opacity = normalize_danmu_overlay_opacity(next_opacity);
         }
         "live_control_mode" => {
             let mode = value.as_str().unwrap_or("none").trim();
@@ -256,6 +408,8 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
     Ok(wrap_ok(json!({
         "min_to_tray": runtime.config.min_to_tray,
         "hide_dock_on_minimize": runtime.config.hide_dock_on_minimize,
+        "danmu_overlay_enabled": runtime.config.danmu_overlay_enabled,
+        "danmu_overlay_opacity": normalize_danmu_overlay_opacity(runtime.config.danmu_overlay_opacity),
         "live_control_mode": runtime.config.live_control_mode,
         "obs_ws_enabled": runtime.config.obs_ws_enabled,
         "obs_ws_url": runtime.config.obs_ws_url,
@@ -304,6 +458,7 @@ pub async fn set_app_config(
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);
     ensure_obs_ws_keepalive_task(app.clone()).await;
+    sync_overlay_window_from_config(app.clone(), &state).await;
     crate::tray::sync_dock_visibility(&app);
     crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(json!({})))
@@ -324,6 +479,7 @@ pub async fn set_app_configs(
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);
     ensure_obs_ws_keepalive_task(app.clone()).await;
+    sync_overlay_window_from_config(app.clone(), &state).await;
     crate::tray::sync_dock_visibility(&app);
     crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(json!({})))
@@ -363,6 +519,22 @@ pub async fn refresh_tray_menu(app: AppHandle) -> CmdResult {
 #[tauri::command]
 pub async fn reveal_main_window(app: AppHandle) -> CmdResult {
     crate::tray::reveal_main_window(&app);
+    Ok(wrap_ok(json!({})))
+}
+
+#[tauri::command]
+pub async fn show_danmu_overlay(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    let config = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.clone()
+    };
+    show_overlay_window(&app, &config)?;
+    Ok(wrap_ok(json!({})))
+}
+
+#[tauri::command]
+pub async fn hide_danmu_overlay(app: AppHandle) -> CmdResult {
+    hide_overlay_window(&app);
     Ok(wrap_ok(json!({})))
 }
 

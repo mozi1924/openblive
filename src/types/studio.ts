@@ -14,6 +14,8 @@ export type ReviewStatus = "none" | "pending" | "approved" | "rejected" | "unkno
 export type AppConfig = {
   min_to_tray: boolean;
   hide_dock_on_minimize: boolean;
+  danmu_overlay_enabled: boolean;
+  danmu_overlay_opacity: number;
   live_control_mode: "none" | "obs_ws" | "command";
   obs_ws_enabled: boolean;
   obs_ws_url: string;
@@ -39,6 +41,11 @@ export type AppConfig = {
   is_win32: boolean;
   is_macos: boolean;
   has_tray: boolean;
+};
+
+export type DanmuOverlaySettingsEvent = {
+  enabled: boolean;
+  opacity: number;
 };
 
 export type Session = {

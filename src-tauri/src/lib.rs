@@ -20,13 +20,13 @@ use commands::{
     clear_app_logs, create_live_vote, generate_http_user_agent, get_account_list, get_app_config,
     get_app_logs, get_linkage_status, get_live_emoticons, get_live_vote_history,
     get_live_vote_panel, get_login_qrcode, get_partitions, get_session, get_version,
-    load_saved_config, logout, poll_login_status, push_app_log, refresh_all_account_cookies,
-    refresh_all_account_profiles, refresh_all_account_profiles_inner, refresh_current_user,
-    refresh_live_client_version, refresh_live_client_version_inner, refresh_tray_menu,
-    render_qrcode, reveal_main_window, send_danmu, set_app_config, set_app_configs,
-    start_danmu_monitor, start_live, start_live_flow, stop_danmu_monitor, stop_live,
-    stop_live_flow, switch_account, sync_live_room_profile, sync_live_status, terminate_live_vote,
-    update_area, update_live_tags, update_title,
+    hide_danmu_overlay, load_saved_config, logout, poll_login_status, push_app_log,
+    refresh_all_account_cookies, refresh_all_account_profiles, refresh_all_account_profiles_inner,
+    refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
+    refresh_tray_menu, render_qrcode, reveal_main_window, send_danmu, set_app_config,
+    set_app_configs, show_danmu_overlay, start_danmu_monitor, start_live, start_live_flow,
+    stop_danmu_monitor, stop_live, stop_live_flow, switch_account, sync_live_room_profile,
+    sync_live_status, terminate_live_vote, update_area, update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -38,8 +38,7 @@ use tokio::time::Duration;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let path = config_path();
-    let master_key =
-        get_or_create_master_key().expect("failed to load/create local master key");
+    let master_key = get_or_create_master_key().expect("failed to load/create local master key");
     let cfg = load_config(&path, &master_key);
     endpoints::set_runtime_overrides_from_config(&cfg);
     let client = client::BiliClient::new();
@@ -58,6 +57,7 @@ pub fn run() {
     };
 
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_positioner::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .clear_targets()
@@ -83,6 +83,11 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
+            let overlay_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state = overlay_handle.state::<AppState>();
+                commands::sync_overlay_window_from_config(overlay_handle.clone(), &state).await;
+            });
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
@@ -157,6 +162,8 @@ pub fn run() {
             set_app_configs,
             refresh_tray_menu,
             reveal_main_window,
+            show_danmu_overlay,
+            hide_danmu_overlay,
             get_version,
             render_qrcode,
             push_app_log,

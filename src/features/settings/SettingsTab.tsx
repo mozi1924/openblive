@@ -1,5 +1,18 @@
 import { useState } from "react";
-import { Cpu, Terminal, Minimize2, LogOut, Save, Sliders, Server, EyeOff, ChevronDown, Globe } from "lucide-react";
+import {
+  Cpu,
+  Terminal,
+  Minimize2,
+  LogOut,
+  Save,
+  Sliders,
+  Server,
+  EyeOff,
+  ChevronDown,
+  Globe,
+  PanelTop,
+  Eye,
+} from "lucide-react";
 import type { AppConfig } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t } from "../../utils/i18n";
@@ -13,6 +26,8 @@ type SettingsTabProps = {
   onChangeLocale: (locale: AppConfig["locale"]) => Promise<void>;
   onSaveConfig: () => Promise<void>;
   onGenerateHttpUserAgent: () => Promise<void>;
+  onShowDanmuOverlay: () => Promise<void>;
+  onHideDanmuOverlay: () => Promise<void>;
 };
 
 export function SettingsTab({
@@ -24,6 +39,8 @@ export function SettingsTab({
   onChangeLocale,
   onSaveConfig,
   onGenerateHttpUserAgent,
+  onShowDanmuOverlay,
+  onHideDanmuOverlay,
 }: SettingsTabProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const clearAdvancedConfig = () => {
@@ -174,6 +191,108 @@ export function SettingsTab({
               </div>
             </button>
           )}
+        </section>
+
+        <section className="space-y-4.5 p-5">
+          <div>
+            <div className="flex items-center space-x-2">
+              <PanelTop className="h-4 w-4 text-bili-pink" />
+              <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+                DANMU OVERLAY
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 font-medium">
+              {t(locale, "ui.settings.overlay.desc")}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => onChangeConfig("danmu_overlay_enabled", true)}
+              className={`${windowBehaviorCardClass} ${
+                appConfig.danmu_overlay_enabled
+                  ? "border-bili-pink/35 bg-bili-pink/5 text-white"
+                  : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+              }`}
+            >
+              <Eye className={`mr-3 h-5 w-5 shrink-0 mt-0.5 ${appConfig.danmu_overlay_enabled ? "text-bili-pink" : "text-gray-500"}`} />
+              <div>
+                <span className="block text-xs font-bold text-gray-200">
+                  {t(locale, "ui.settings.overlay.enable")}
+                </span>
+                <span className="mt-1 block text-[10px] text-gray-500 leading-normal font-medium">
+                  {t(locale, "ui.settings.overlay.enable_desc")}
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onChangeConfig("danmu_overlay_enabled", false)}
+              className={`${windowBehaviorCardClass} ${
+                !appConfig.danmu_overlay_enabled
+                  ? "border-bili-pink/35 bg-bili-pink/5 text-white"
+                  : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+              }`}
+            >
+              <EyeOff className={`mr-3 h-5 w-5 shrink-0 mt-0.5 ${!appConfig.danmu_overlay_enabled ? "text-bili-pink" : "text-gray-500"}`} />
+              <div>
+                <span className="block text-xs font-bold text-gray-200">
+                  {t(locale, "ui.settings.overlay.disable")}
+                </span>
+                <span className="mt-1 block text-[10px] text-gray-500 leading-normal font-medium">
+                  {t(locale, "ui.settings.overlay.disable_desc")}
+                </span>
+              </div>
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] px-4 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-gray-200">
+                  {t(locale, "ui.settings.overlay.opacity")}
+                </p>
+                <p className="mt-1 text-[10px] text-gray-500 font-medium">
+                  {t(locale, "ui.settings.overlay.opacity_desc")}
+                </p>
+              </div>
+              <span className="rounded-full border border-bili-pink/15 bg-bili-pink/10 px-2.5 py-1 text-[10px] font-black text-bili-pink">
+                {appConfig.danmu_overlay_opacity}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={40}
+              max={100}
+              step={5}
+              value={appConfig.danmu_overlay_opacity}
+              onChange={(event) =>
+                onChangeConfig("danmu_overlay_opacity", Number(event.target.value))
+              }
+              className="mt-4 h-2 w-full cursor-pointer appearance-none rounded-full bg-white/8 accent-[#ff6699]"
+            />
+          </div>
+
+          {appConfig.danmu_overlay_enabled ? (
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void onShowDanmuOverlay()}
+                className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-4 py-2 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue/15"
+              >
+                {t(locale, "ui.settings.overlay.show")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void onHideDanmuOverlay()}
+                className="rounded-xl border border-white/8 bg-white/4 px-4 py-2 text-xs font-bold text-gray-200 transition-all hover:border-white/12 hover:bg-white/7"
+              >
+                {t(locale, "ui.settings.overlay.hide")}
+              </button>
+            </div>
+          ) : null}
         </section>
 
         {/* Linkage Mode Select */}

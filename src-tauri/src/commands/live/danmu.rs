@@ -129,11 +129,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                     auth_packet.extend_from_slice(&(7u32).to_be_bytes());
                     auth_packet.extend_from_slice(&(1u32).to_be_bytes());
                     auth_packet.extend_from_slice(auth.as_bytes());
-                    if write
-                        .send(Message::Binary(auth_packet))
-                        .await
-                        .is_err()
-                    {
+                    if write.send(Message::Binary(auth_packet)).await.is_err() {
                         let delay = danmu_reconnect_delay(attempt);
                         attempt = attempt.saturating_add(1);
                         tokio::time::sleep(delay).await;
@@ -148,11 +144,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                             heartbeat_packet.extend_from_slice(&(1u16).to_be_bytes());
                             heartbeat_packet.extend_from_slice(&(2u32).to_be_bytes());
                             heartbeat_packet.extend_from_slice(&(1u32).to_be_bytes());
-                            if write
-                                .send(Message::Binary(heartbeat_packet))
-                                .await
-                                .is_err()
-                            {
+                            if write.send(Message::Binary(heartbeat_packet)).await.is_err() {
                                 break;
                             }
                             tokio::time::sleep(Duration::from_secs(30)).await;
@@ -186,7 +178,8 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                             Err(error) => {
                                 crate::runtime_log!(
                                     "[danmu] read failed on {}:{}: {error}",
-                                    host.host, host.port
+                                    host.host,
+                                    host.port
                                 );
                                 break;
                             }
@@ -207,7 +200,8 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                 Err(error) => {
                     crate::runtime_log!(
                         "[danmu] connect failed on {}:{}: {error}",
-                        host.host, host.port
+                        host.host,
+                        host.port
                     );
                     let delay = danmu_reconnect_delay(attempt);
                     attempt = attempt.saturating_add(1);

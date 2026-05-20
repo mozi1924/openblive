@@ -28,6 +28,18 @@
     letter-spacing: -0.01em;
   }
 
+  html[data-window-label="overlay"],
+  body[data-window-label="overlay"] {
+    background: transparent;
+    background-image: none;
+  }
+
+  body[data-window-label="overlay"] #root {
+    width: 100vw;
+    height: 100vh;
+    background: transparent;
+  }
+
   /* Make inputs, textareas, and log consoles selectable */
   input, textarea, [contenteditable="true"], .selectable-text {
     user-select: text !important;
@@ -169,4 +181,3 @@
 .animate-float {
   animation: float 3s infinite ease-in-out;
 }
-

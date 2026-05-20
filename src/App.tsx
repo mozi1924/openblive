@@ -146,6 +146,8 @@ function App() {
               onChangeLocale={actions.updateLocaleConfig}
               onSaveConfig={actions.saveAppConfig}
               onGenerateHttpUserAgent={actions.generateHttpUserAgent}
+              onShowDanmuOverlay={actions.showDanmuOverlay}
+              onHideDanmuOverlay={actions.hideDanmuOverlay}
             />
           )}
         </div>
