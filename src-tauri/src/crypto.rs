@@ -74,22 +74,22 @@ pub fn get_or_create_master_key() -> Result<[u8; 32]> {
     let file_key = read_master_key_from_file();
 
     if let Some(key) = keyring_key {
-        eprintln!("[auth][key] master key source=keyring");
+        crate::runtime_log!("[auth][key] master key source=keyring");
         remove_master_key_file();
         return Ok(key);
     }
 
     if let Some(key) = file_key {
-        eprintln!("[auth][key] master key source=local_file_fallback");
+        crate::runtime_log!("[auth][key] master key source=local_file_fallback");
         if let Some(item) = entry.as_ref() {
             let encoded = base64::engine::general_purpose::STANDARD.encode(key);
             match item.set_password(&encoded) {
                 Ok(()) => {
-                    eprintln!("[auth][key] master key migrated_to=keyring");
+                    crate::runtime_log!("[auth][key] master key migrated_to=keyring");
                     remove_master_key_file();
                 }
                 Err(error) => {
-                    eprintln!("[auth][key] keyring store failed, keep local fallback: {error}");
+                    crate::runtime_warn!("[auth][key] keyring store failed, keep local fallback: {error}");
                 }
             }
         }
@@ -102,18 +102,18 @@ pub fn get_or_create_master_key() -> Result<[u8; 32]> {
     if let Some(item) = entry.as_ref() {
         match item.set_password(&encoded) {
             Ok(()) => {
-                eprintln!("[auth][key] master key source=new_generated_keyring");
+                crate::runtime_log!("[auth][key] master key source=new_generated_keyring");
                 remove_master_key_file();
                 return Ok(key);
             }
             Err(error) => {
-                eprintln!("[auth][key] keyring unavailable, fallback to local file: {error}");
+                crate::runtime_warn!("[auth][key] keyring unavailable, fallback to local file: {error}");
             }
         }
     }
 
     write_master_key_to_file(&key);
-    eprintln!("[auth][key] master key source=new_generated_local_file_fallback");
+    crate::runtime_log!("[auth][key] master key source=new_generated_local_file_fallback");
     Ok(key)
 }
 

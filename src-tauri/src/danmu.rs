@@ -58,8 +58,13 @@ fn enrich_sender_face_with_cache(app: &AppHandle, message: &mut Value) {
     let client = state.client.clone();
     let config_path = state.config_path.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = avatar::refresh_avatar_cache(&client, &config_path, &uid_key, &face_url).await {
-            eprintln!("[danmu] refresh avatar cache failed for uid {}: {}", uid_key, error);
+        if let Err(error) =
+            avatar::refresh_avatar_cache(&client, &config_path, &uid_key, &face_url).await
+        {
+            crate::runtime_log!(
+                "[danmu] refresh avatar cache failed for uid {}: {}",
+                uid_key, error
+            );
         }
         let pending = avatar_cache_pending();
         let mut pending_guard = pending.lock().unwrap_or_else(|poison| poison.into_inner());

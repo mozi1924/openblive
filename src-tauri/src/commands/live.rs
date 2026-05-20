@@ -4,8 +4,7 @@ use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
-    CreateLiveVoteReq, DanmuReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq,
-    UpdateTitleReq,
+    CreateLiveVoteReq, DanmuReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -426,12 +425,18 @@ pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
                 &state,
-                &format!("create_live_vote code={code}, msg={}", error_message(&value, "")),
+                &format!(
+                    "create_live_vote code={code}, msg={}",
+                    error_message(&value, "")
+                ),
             )
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        Err(error_message(&value, "i18n.live.error.create_live_vote_failed"))
+        Err(error_message(
+            &value,
+            "i18n.live.error.create_live_vote_failed",
+        ))
     }
 }
 

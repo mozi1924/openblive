@@ -40,8 +40,7 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
         let Some(info) = payload["info"].as_array() else {
             return (None, None);
         };
-        let extra_json = info
-            .get(0)
+        let extra_json = info.first()
             .and_then(|value| value.get(15))
             .and_then(|value| value.get("extra"))
             .and_then(Value::as_str)
@@ -55,18 +54,15 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
             .and_then(|extra| extra.get("id_str"))
             .and_then(Value::as_str)
             .map(|raw| raw.to_string());
-        let danmu_rnd = info
-            .get(0)
+        let danmu_rnd = info.first()
             .and_then(Value::as_array)
             .and_then(|meta| meta.get(4))
             .and_then(parse_i64);
-        let danmu_legacy_id = info
-            .get(0)
+        let danmu_legacy_id = info.first()
             .and_then(Value::as_array)
             .and_then(|meta| meta.get(5))
             .and_then(parse_i64);
-        let sender_uid = info
-            .get(0)
+        let sender_uid = info.first()
             .and_then(|value| value.get(15))
             .and_then(|value| value.get("user"))
             .and_then(|value| value.get("uid"))
@@ -83,8 +79,7 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
             .and_then(|meta| meta.get(2))
             .and_then(|value| value.as_i64())
             .unwrap_or(0);
-        let sender_guard_level = info
-            .get(0)
+        let sender_guard_level = info.first()
             .and_then(|value| value.get(15))
             .and_then(|value| value.get("user"))
             .and_then(|value| value.get("medal"))
@@ -104,7 +99,7 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
             .and_then(|value| value.as_str())
             .and_then(normalize_hex_color)
             .or_else(|| {
-                info.get(0)
+                info.first()
                     .and_then(|value| value.get(15))
                     .and_then(|value| value.get("user"))
                     .and_then(|value| value.get("base"))
@@ -113,7 +108,7 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
                     .and_then(normalize_hex_color)
             })
             .or_else(|| {
-                info.get(0)
+                info.first()
                     .and_then(|value| value.get(15))
                     .and_then(|value| value.get("user"))
                     .and_then(|value| value.get("base"))
@@ -121,8 +116,7 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
                     .and_then(|value| value.as_i64())
                     .and_then(dec_color_to_hex)
             });
-        let sender_face = info
-            .get(0)
+        let sender_face = info.first()
             .and_then(|value| value.get(15))
             .and_then(|value| value.get("user"))
             .and_then(|value| value.get("base"))
@@ -130,7 +124,7 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
             .and_then(|value| value.as_str())
             .and_then(normalize_asset_url)
             .or_else(|| {
-                info.get(0)
+                info.first()
                     .and_then(|value| value.get(15))
                     .and_then(|value| value.get("user"))
                     .and_then(|value| value.get("base"))
@@ -404,7 +398,10 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
         let gift_total_coin = data
             .get("total_coin")
             .and_then(|value| value.as_i64())
-            .or_else(|| data.get("combo_total_coin").and_then(|value| value.as_i64()))
+            .or_else(|| {
+                data.get("combo_total_coin")
+                    .and_then(|value| value.as_i64())
+            })
             .unwrap_or_else(|| gift_unit_price.saturating_mul(num.max(1)));
         let gift_coin_type = data
             .get("coin_type")

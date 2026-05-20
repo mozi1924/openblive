@@ -17,6 +17,7 @@ import {
   createLiveEmoticonIndex,
   createSelfDanmuMessage,
 } from "../utils/danmu";
+import { writeClipboardText } from "../utils/clipboard";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
 import { applyIncomingRealtimeMessage } from "./studio/realtimeDanmu";
@@ -1483,7 +1484,7 @@ export function useStudioController() {
   const copyToClipboard = useCallback(
     async (text: string, type: string) => {
       try {
-        await navigator.clipboard.writeText(text);
+        await writeClipboardText(text);
         setCopiedKey(type);
         window.setTimeout(() => setCopiedKey(null), 2000);
       } catch {

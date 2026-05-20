@@ -11,6 +11,7 @@ mod endpoints;
 mod i18n;
 mod models;
 mod response;
+mod runtime_log;
 mod state;
 mod state_event;
 mod tray;
@@ -24,8 +25,8 @@ use commands::{
     refresh_live_client_version, refresh_live_client_version_inner, refresh_tray_menu,
     render_qrcode, reveal_main_window, send_danmu, set_app_config, set_app_configs,
     start_danmu_monitor, start_live, start_live_flow, stop_danmu_monitor, stop_live,
-    stop_live_flow, switch_account, sync_live_room_profile, sync_live_status,
-    terminate_live_vote, update_area, update_live_tags, update_title,
+    stop_live_flow, switch_account, sync_live_room_profile, sync_live_status, terminate_live_vote,
+    update_area, update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -56,15 +57,37 @@ pub fn run() {
         master_key,
     };
 
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .targets([tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("runtime".to_string()),
+                    },
+                )])
+                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(app_state)
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::reveal_main_window(app);
+        }))
+        .manage(app_state);
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_window_state::Builder::new().build());
+    }
+
+    let app = builder
         .setup(|app| {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
                 if let Err(error) = refresh_live_client_version_inner(&state).await {
-                    eprintln!("refresh live client version on startup failed: {error}");
+                    crate::runtime_warn!("refresh live client version on startup failed: {error}");
                 }
             });
             let app_handle = app.handle().clone();
@@ -73,18 +96,18 @@ pub fn run() {
 
                 let first_state = app_handle.state::<AppState>();
                 let first = refresh_all_account_profiles_inner(&first_state).await;
-                eprintln!("[auth][batch][profile] startup refresh: {}", first);
+                crate::runtime_log!("[auth][batch][profile] startup refresh: {}", first);
 
                 let mut ticker = tokio::time::interval(Duration::from_secs(15 * 60));
                 loop {
                     ticker.tick().await;
                     let state = app_handle.state::<AppState>();
                     let result = refresh_all_account_profiles_inner(&state).await;
-                    eprintln!("[auth][batch][profile] periodic refresh: {}", result);
+                    crate::runtime_log!("[auth][batch][profile] periodic refresh: {}", result);
                 }
             });
             if let Err(error) = tray::setup_tray(app) {
-                eprintln!("setup tray failed: {error}");
+                crate::runtime_warn!("setup tray failed: {error}");
             }
             Ok(())
         })

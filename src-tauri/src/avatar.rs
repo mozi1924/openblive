@@ -144,7 +144,10 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        dir.push(format!("openblive-avatar-test-{name}-{}-{now}", std::process::id()));
+        dir.push(format!(
+            "openblive-avatar-test-{name}-{}-{now}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&dir);
         dir.join("config.json")
     }

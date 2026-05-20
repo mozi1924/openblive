@@ -68,7 +68,7 @@ pub(crate) async fn mark_current_user_login_invalid(state: &AppState, reason: &s
         room_id = user.room_id.clone();
         csrf_len = user.csrf.len();
     }
-    eprintln!(
+    crate::runtime_log!(
         "[auth][live] mark login invalid uid={}, fail_count={}, room_id={}, csrf_len={}, reason={}, {}",
         uid, fail_count, room_id, csrf_len, reason, cookie_diag
     );

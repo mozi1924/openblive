@@ -363,7 +363,7 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
             _ => Ok(()),
         };
         if let Err(error) = linkage_result {
-            eprintln!("[live][stop] linkage failed: {error}");
+            crate::runtime_warn!("[live][stop] linkage failed: {error}");
         }
 
         let response_sub_session_key = value["data"]["sub_session_key"]
@@ -384,7 +384,7 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
             && current_sub_session_key == expected_sub_session_key
             && response_session_consistent;
         if !same_session {
-            eprintln!(
+            crate::runtime_log!(
                 "[live][stop] session identity changed during stop, skip local session override"
             );
             return Ok(wrap_ok(json!({ "session_consistent": false })));

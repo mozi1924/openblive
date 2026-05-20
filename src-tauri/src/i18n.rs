@@ -71,7 +71,9 @@ pub fn tr(locale_setting: &str, key: &str) -> String {
             "Super Chat messages removed".to_string()
         }
         ("en-US", "i18n.live.event.moderation.warning") => "Room warning received".to_string(),
-        ("en-US", "i18n.live.event.moderation.cut_off") => "Live stream has been cut off".to_string(),
+        ("en-US", "i18n.live.event.moderation.cut_off") => {
+            "Live stream has been cut off".to_string()
+        }
         ("en-US", "i18n.live.event.moderation.violation_notice") => "Violation notice".to_string(),
         ("en-US", "i18n.live.event.moderation.room_blocked") => "has been muted".to_string(),
         ("en-US", "i18n.live.event.moderation.silent_on") => "Mute mode enabled".to_string(),
@@ -79,12 +81,16 @@ pub fn tr(locale_setting: &str, key: &str) -> String {
         ("en-US", "i18n.live.event.room_change.full") => "Room info updated".to_string(),
         ("en-US", "i18n.live.event.room_change.title") => "Room title updated".to_string(),
         ("en-US", "i18n.live.event.room_change") => "Room info updated".to_string(),
-        ("en-US", "i18n.live.event.guard_honor_update") => "Thousand-guard status updated".to_string(),
+        ("en-US", "i18n.live.event.guard_honor_update") => {
+            "Thousand-guard status updated".to_string()
+        }
         ("en-US", "i18n.live.event.live_started") => "Live started".to_string(),
         ("en-US", "i18n.live.event.preparing_round") => {
             "Streamer temporarily away, room switched to round-play".to_string()
         }
-        ("en-US", "i18n.live.event.preparing") => "Streamer is preparing (not live yet)".to_string(),
+        ("en-US", "i18n.live.event.preparing") => {
+            "Streamer is preparing (not live yet)".to_string()
+        }
         ("en-US", "i18n.live.event.danmu_recalled") => "Danmu recalled".to_string(),
         ("en-US", "i18n.live.event.reenter_requested") => {
             "Server requested re-entering the room".to_string()

@@ -233,7 +233,7 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_cookie.is_empty() {
-                    eprintln!("[auth][config] legacy decrypt cookie failed uid={uid}: {error}");
+                    crate::runtime_warn!("[auth][config] legacy decrypt cookie failed uid={uid}: {error}");
                 }
                 String::new()
             }
@@ -242,7 +242,7 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_refresh_token.is_empty() {
-                    eprintln!(
+                    crate::runtime_log!(
                         "[auth][config] legacy decrypt refresh_token failed uid={uid}: {error}"
                     );
                 }
@@ -253,7 +253,7 @@ fn load_legacy_config(path: &Path, key: &[u8; 32]) -> Option<PersistConfig> {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_csrf.is_empty() {
-                    eprintln!("[auth][config] legacy decrypt csrf failed uid={uid}: {error}");
+                    crate::runtime_warn!("[auth][config] legacy decrypt csrf failed uid={uid}: {error}");
                 }
                 String::new()
             }
@@ -268,7 +268,7 @@ fn split_files_exist(base_path: &Path) -> bool {
         || live_cache_config_path(base_path).is_file()
 }
 
-pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
+pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
     if !split_files_exist(path) {
         if let Some(legacy) = load_legacy_config(path, key) {
             save_config(path, &legacy, key);
@@ -288,7 +288,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
             match decrypt_text(&app_file.obs_ws_password_enc, key) {
                 Ok(value) => value,
                 Err(error) => {
-                    eprintln!("[auth][config] decrypt obs_ws_password failed: {error}");
+                    crate::runtime_warn!("[auth][config] decrypt obs_ws_password failed: {error}");
                     String::new()
                 }
             }
@@ -333,25 +333,27 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
     if let Some(account_file) = load_json::<AccountFile>(&account_config_path(path)) {
         cfg.current_uid = account_file.current_uid;
         for (uid, user) in account_file.users {
-            let mut record = UserRecord::default();
-            record.uid = user.uid;
-            record.uname = user.uname;
-            record.face = user.face;
-            record.room_id = user.room_id;
-            record.enc_cookie = user.enc_cookie;
-            record.enc_refresh_token = user.enc_refresh_token;
-            record.enc_csrf = user.enc_csrf;
-            record.level = user.level;
-            record.current_exp = user.current_exp;
-            record.next_exp = user.next_exp;
-            record.money = user.money;
-            record.bcoin = user.bcoin;
-            record.following = user.following;
-            record.follower = user.follower;
-            record.dynamic_count = user.dynamic_count;
-            record.login_invalid = user.login_invalid;
-            record.auth_fail_count = user.auth_fail_count;
-            record.last_auth_fail_at = user.last_auth_fail_at;
+            let record = UserRecord {
+                uid: user.uid,
+                uname: user.uname,
+                face: user.face,
+                room_id: user.room_id,
+                enc_cookie: user.enc_cookie,
+                enc_refresh_token: user.enc_refresh_token,
+                enc_csrf: user.enc_csrf,
+                level: user.level,
+                current_exp: user.current_exp,
+                next_exp: user.next_exp,
+                money: user.money,
+                bcoin: user.bcoin,
+                following: user.following,
+                follower: user.follower,
+                dynamic_count: user.dynamic_count,
+                login_invalid: user.login_invalid,
+                auth_fail_count: user.auth_fail_count,
+                last_auth_fail_at: user.last_auth_fail_at,
+                ..Default::default()
+            };
             cfg.users.insert(uid, record);
         }
     }
@@ -379,7 +381,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_cookie.is_empty() {
-                    eprintln!("[auth][config] decrypt cookie failed uid={uid}: {error}");
+                    crate::runtime_warn!("[auth][config] decrypt cookie failed uid={uid}: {error}");
                 }
                 String::new()
             }
@@ -388,7 +390,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_refresh_token.is_empty() {
-                    eprintln!("[auth][config] decrypt refresh_token failed uid={uid}: {error}");
+                    crate::runtime_warn!("[auth][config] decrypt refresh_token failed uid={uid}: {error}");
                 }
                 String::new()
             }
@@ -397,7 +399,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
             Ok(value) => value,
             Err(error) => {
                 if !user.enc_csrf.is_empty() {
-                    eprintln!("[auth][config] decrypt csrf failed uid={uid}: {error}");
+                    crate::runtime_warn!("[auth][config] decrypt csrf failed uid={uid}: {error}");
                 }
                 String::new()
             }
@@ -407,51 +409,57 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
     cfg
 }
 
-pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
-    let mut app_file = AppSettingsFile::default();
-    app_file.min_to_tray = cfg.min_to_tray;
-    app_file.hide_dock_on_minimize = cfg.hide_dock_on_minimize;
-    app_file.live_control_mode = cfg.live_control_mode.clone();
-    app_file.obs_ws_enabled = cfg.obs_ws_enabled;
-    app_file.obs_ws_url = cfg.obs_ws_url.clone();
-    app_file.obs_ws_password = String::new();
-    app_file.obs_ws_password_enc = if cfg.obs_ws_password.trim().is_empty() {
+pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
+    let obs_ws_password_enc = if cfg.obs_ws_password.trim().is_empty() {
         String::new()
     } else {
         match encrypt_text(&cfg.obs_ws_password, key) {
             Ok(enc) => enc,
             Err(error) => {
-                eprintln!("[auth][config] encrypt obs_ws_password failed: {error}");
+                crate::runtime_warn!("[auth][config] encrypt obs_ws_password failed: {error}");
                 String::new()
             }
         }
     };
-    app_file.obs_ws_auto_start_on_live = cfg.obs_ws_auto_start_on_live;
-    app_file.obs_ws_auto_stop_on_live_end = cfg.obs_ws_auto_stop_on_live_end;
-    app_file.on_live_start_command = cfg.on_live_start_command.clone();
-    app_file.on_live_stop_command = cfg.on_live_stop_command.clone();
-    app_file.locale = cfg.locale.clone();
-    app_file.host_www = cfg.host_www.clone();
-    app_file.host_api = cfg.host_api.clone();
-    app_file.host_live_api = cfg.host_live_api.clone();
-    app_file.host_passport = cfg.host_passport.clone();
-    app_file.host_live_web = cfg.host_live_web.clone();
-    app_file.cookie_domain = cfg.cookie_domain.clone();
-    app_file.danmu_host = cfg.danmu_host.clone();
-    app_file.app_key = cfg.app_key.clone();
-    app_file.app_sec = cfg.app_sec.clone();
-    app_file.http_user_agent = cfg.http_user_agent.clone();
-    app_file.livehime_version_override = cfg.livehime_version_override.clone();
-    app_file.livehime_build_override = cfg.livehime_build_override.clone();
-    app_file.live_platform = cfg.live_platform.clone();
+    let app_file = AppSettingsFile {
+        min_to_tray: cfg.min_to_tray,
+        hide_dock_on_minimize: cfg.hide_dock_on_minimize,
+        live_control_mode: cfg.live_control_mode.clone(),
+        obs_ws_enabled: cfg.obs_ws_enabled,
+        obs_ws_url: cfg.obs_ws_url.clone(),
+        obs_ws_password: String::new(),
+        obs_ws_password_enc,
+        obs_ws_auto_start_on_live: cfg.obs_ws_auto_start_on_live,
+        obs_ws_auto_stop_on_live_end: cfg.obs_ws_auto_stop_on_live_end,
+        on_live_start_command: cfg.on_live_start_command.clone(),
+        on_live_stop_command: cfg.on_live_stop_command.clone(),
+        locale: cfg.locale.clone(),
+        host_www: cfg.host_www.clone(),
+        host_api: cfg.host_api.clone(),
+        host_live_api: cfg.host_live_api.clone(),
+        host_passport: cfg.host_passport.clone(),
+        host_live_web: cfg.host_live_web.clone(),
+        cookie_domain: cfg.cookie_domain.clone(),
+        danmu_host: cfg.danmu_host.clone(),
+        app_key: cfg.app_key.clone(),
+        app_sec: cfg.app_sec.clone(),
+        http_user_agent: cfg.http_user_agent.clone(),
+        livehime_version_override: cfg.livehime_version_override.clone(),
+        livehime_build_override: cfg.livehime_build_override.clone(),
+        live_platform: cfg.live_platform.clone(),
+    };
 
-    let mut account_file = AccountFile::default();
-    account_file.current_uid = cfg.current_uid.clone();
+    let mut account_file = AccountFile {
+        current_uid: cfg.current_uid.clone(),
+        ..Default::default()
+    };
 
-    let mut live_file = LiveCacheFile::default();
-    live_file.live_client_version = cfg.live_client_version.clone();
-    live_file.live_client_build = cfg.live_client_build;
-    live_file.live_client_synced_at = cfg.live_client_synced_at;
+    let mut live_file = LiveCacheFile {
+        live_client_version: cfg.live_client_version.clone(),
+        live_client_build: cfg.live_client_build,
+        live_client_synced_at: cfg.live_client_synced_at,
+        ..Default::default()
+    };
 
     for (uid, user) in &cfg.users {
         let mut enc_cookie = user.enc_cookie.clone();
@@ -532,7 +540,10 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        dir.push(format!("openblive-config-test-{name}-{}-{now}", std::process::id()));
+        dir.push(format!(
+            "openblive-config-test-{name}-{}-{now}",
+            std::process::id()
+        ));
         let _ = std::fs::create_dir_all(&dir);
         dir.join("config.json")
     }
@@ -545,8 +556,10 @@ mod tests {
     #[test]
     fn save_and_load_obs_password_uses_encrypted_field() {
         let config_path = temp_config_path("obs_encrypt_roundtrip");
-        let mut cfg = PersistConfig::default();
-        cfg.obs_ws_password = "super-secret-password".to_string();
+        let cfg = PersistConfig {
+            obs_ws_password: "super-secret-password".to_string(),
+            ..Default::default()
+        };
 
         save_config(&config_path, &cfg, &test_key());
 

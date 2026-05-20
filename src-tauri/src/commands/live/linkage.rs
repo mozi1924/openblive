@@ -126,7 +126,7 @@ pub(crate) async fn spawn_shell_command(raw_command: &str) -> Result<(), String>
 
     tokio::spawn(async move {
         if let Err(error) = child.wait().await {
-            eprintln!("[live][command] command process wait failed: {error}");
+            crate::runtime_warn!("[live][command] command process wait failed: {error}");
         }
     });
     Ok(())
@@ -192,7 +192,7 @@ where
         }
     });
     write
-        .send(Message::Text(packet.to_string().into()))
+        .send(Message::Text(packet.to_string()))
         .await
         .map_err(|error| {
             format!("i18n.live.error.obs_ws_request_send_failed({request_type}): {error}")
@@ -261,7 +261,7 @@ where
         identify["d"]["authentication"] = json!(obs_compute_auth(password, salt, challenge));
     }
     write
-        .send(Message::Text(identify.to_string().into()))
+        .send(Message::Text(identify.to_string()))
         .await
         .map_err(|error| format!("i18n.live.error.obs_ws_identify_send_failed: {error}"))?;
 
@@ -350,11 +350,8 @@ mod tests {
     #[test]
     fn apply_command_template_replaces_placeholders() {
         let context = demo_context();
-        let output = apply_command_template(
-            "ffmpeg -re -i in.mp4 -f flv {stream_url}",
-            &context,
-        )
-        .expect("template should be valid");
+        let output = apply_command_template("ffmpeg -re -i in.mp4 -f flv {stream_url}", &context)
+            .expect("template should be valid");
         assert_eq!(
             output,
             "ffmpeg -re -i in.mp4 -f flv rtmp://example.com/live/key_abc-123"

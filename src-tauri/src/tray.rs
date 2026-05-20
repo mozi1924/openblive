@@ -207,6 +207,9 @@ pub fn reveal_main_window(app: &AppHandle) {
     };
     #[cfg(target_os = "macos")]
     set_dock_visible(app, true);
+    if window.is_minimized().unwrap_or(false) {
+        let _ = window.unminimize();
+    }
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -274,14 +277,14 @@ pub fn on_tray_menu_event(app: &AppHandle, event: &MenuEvent) {
                 let state = app_handle.state::<AppState>();
                 match crate::commands::start_live_flow_inner(&app_handle, &state).await {
                     Ok(value) if value["code"].as_i64().unwrap_or(-1) == 0 => {
-                        eprintln!("[tray] start live flow success");
+                        crate::runtime_log!("[tray] start live flow success");
                     }
                     Ok(value) => {
-                        eprintln!("[tray] start live flow non-zero response: {}", value);
+                        crate::runtime_log!("[tray] start live flow non-zero response: {}", value);
                         reveal_main_window(&app_handle);
                     }
                     Err(error) => {
-                        eprintln!("[tray] start live flow failed: {error}");
+                        crate::runtime_warn!("[tray] start live flow failed: {error}");
                         reveal_main_window(&app_handle);
                     }
                 }
@@ -294,9 +297,9 @@ pub fn on_tray_menu_event(app: &AppHandle, event: &MenuEvent) {
                 let state = app_handle.state::<AppState>();
                 if let Err(error) = crate::commands::stop_live_flow_inner(&app_handle, &state).await
                 {
-                    eprintln!("[tray] stop live flow failed: {error}");
+                    crate::runtime_warn!("[tray] stop live flow failed: {error}");
                 } else {
-                    eprintln!("[tray] stop live flow success");
+                    crate::runtime_log!("[tray] stop live flow success");
                 }
                 refresh_tray_menu(&app_handle);
             });
@@ -328,11 +331,11 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 .try_lock()
                 .map(|runtime| runtime.config.min_to_tray)
                 .unwrap_or(false)
-                && has_tray(&window.app_handle());
+                && has_tray(window.app_handle());
             if should_min_to_tray {
                 api.prevent_close();
                 let _ = window.hide();
-                apply_hidden_window_dock_policy(&window.app_handle());
+                apply_hidden_window_dock_policy(window.app_handle());
             }
         }
         #[cfg(not(target_os = "macos"))]

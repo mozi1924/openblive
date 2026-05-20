@@ -91,7 +91,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
             let info = match get_danmu_info(&client, &room_id).await {
                 Ok(value) => value,
                 Err(error) => {
-                    eprintln!("[danmu] get_danmu_info failed: {error}");
+                    crate::runtime_warn!("[danmu] get_danmu_info failed: {error}");
                     let delay = danmu_reconnect_delay(attempt);
                     attempt = attempt.saturating_add(1);
                     tokio::time::sleep(delay).await;
@@ -100,7 +100,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
             };
             let token = info["data"]["token"].as_str().unwrap_or("").to_string();
             if token.trim().is_empty() {
-                eprintln!("[danmu] missing token for room_id={room_id}");
+                crate::runtime_warn!("[danmu] missing token for room_id={room_id}");
                 let delay = danmu_reconnect_delay(attempt);
                 attempt = attempt.saturating_add(1);
                 tokio::time::sleep(delay).await;
@@ -130,7 +130,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                     auth_packet.extend_from_slice(&(1u32).to_be_bytes());
                     auth_packet.extend_from_slice(auth.as_bytes());
                     if write
-                        .send(Message::Binary(auth_packet.into()))
+                        .send(Message::Binary(auth_packet))
                         .await
                         .is_err()
                     {
@@ -149,7 +149,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                             heartbeat_packet.extend_from_slice(&(2u32).to_be_bytes());
                             heartbeat_packet.extend_from_slice(&(1u32).to_be_bytes());
                             if write
-                                .send(Message::Binary(heartbeat_packet.into()))
+                                .send(Message::Binary(heartbeat_packet))
                                 .await
                                 .is_err()
                             {
@@ -175,7 +175,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                                             "port": host.port,
                                         }),
                                     );
-                                    eprintln!(
+                                    crate::runtime_log!(
                                         "[danmu] received REENTER_LIVE_ROOM, reconnect in {}s",
                                         delay_secs
                                     );
@@ -184,7 +184,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                             }
                             Ok(_) => {}
                             Err(error) => {
-                                eprintln!(
+                                crate::runtime_log!(
                                     "[danmu] read failed on {}:{}: {error}",
                                     host.host, host.port
                                 );
@@ -205,7 +205,7 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                     tokio::time::sleep(delay).await;
                 }
                 Err(error) => {
-                    eprintln!(
+                    crate::runtime_log!(
                         "[danmu] connect failed on {}:{}: {error}",
                         host.host, host.port
                     );

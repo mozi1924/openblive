@@ -15,7 +15,7 @@ export function LogDrawer({ locale, logs, onClearLogs, onClose }: LogDrawerProps
       <div className="flex shrink-0 items-center justify-between border-b border-[#1b253b] bg-[#0c0f1a] px-6 py-3">
         <div className="flex items-center space-x-2 text-xs font-bold text-gray-400">
           <Terminal className="h-4 w-4 text-bili-blue" />
-          <span>RUST RUNTIME TERMINAL LOG</span>
+          <span>APP RUNTIME EVENT LOG</span>
         </div>
         <div className="no-drag flex space-x-4 text-xs">
           <button

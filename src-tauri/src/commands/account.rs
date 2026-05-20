@@ -46,7 +46,7 @@ fn fill_profile_from_full(user: &mut UserRecord, full: &serde_json::Value) {
 }
 
 enum RefreshCookieResult {
-    Updated(UserRecord),
+    Updated(Box<UserRecord>),
     Missing,
     Invalid(String),
     Failed(String),
@@ -248,7 +248,7 @@ async fn refresh_cookie_with_official_flow(
     state: &AppState,
     timestamp: i64,
 ) -> Result<(), String> {
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} start refresh flow, refresh_token_len={}, {}",
         user.uid,
         user.refresh_token.len(),
@@ -273,7 +273,7 @@ async fn refresh_cookie_with_official_flow(
     } else {
         current_timestamp_millis()
     };
-    eprintln!("[auth][refresh] uid={} use timestamp={ts}", user.uid);
+    crate::runtime_log!("[auth][refresh] uid={} use timestamp={ts}", user.uid);
     let correspond_path = build_correspond_path(ts)?;
     let correspond_url = format!("{}/correspond/1/{}", endpoints::www(""), correspond_path);
 
@@ -291,7 +291,7 @@ async fn refresh_cookie_with_official_flow(
             correspond_response.status()
         ));
     }
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} correspond ok, status={}",
         user.uid,
         correspond_response.status()
@@ -302,7 +302,7 @@ async fn refresh_cookie_with_official_flow(
         .map_err(|error| error.to_string())?;
     let refresh_csrf = extract_refresh_csrf(&html)
         .ok_or_else(|| "i18n.account.error.refresh_csrf_token_missing".to_string())?;
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} refresh_csrf extracted len={}",
         user.uid,
         refresh_csrf.len()
@@ -323,7 +323,7 @@ async fn refresh_cookie_with_official_flow(
         )
         .await
         .map_err(|error| error.to_string())?;
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} cookie/refresh response code={}, message={}",
         user.uid,
         refresh_value["code"].as_i64().unwrap_or(-1),
@@ -350,7 +350,7 @@ async fn refresh_cookie_with_official_flow(
     if let Some(next_csrf) = parse_cookie_value(&user.cookie, "bili_jct") {
         user.csrf = next_csrf;
     }
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} cookie updated after refresh, {}",
         user.uid,
         cookie_diagnostics(&user.cookie)
@@ -377,7 +377,7 @@ async fn refresh_cookie_with_official_flow(
         )
         .await
         .map_err(|error| error.to_string())?;
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} confirm/refresh response code={}, message={}",
         user.uid,
         confirm_value["code"].as_i64().unwrap_or(-1),
@@ -391,7 +391,7 @@ async fn refresh_cookie_with_official_flow(
         ));
     }
 
-    eprintln!(
+    crate::runtime_log!(
         "[auth][refresh] uid={} refresh flow done, refresh_token_len={}",
         user.uid,
         user.refresh_token.len()
@@ -428,7 +428,7 @@ async fn bump_user_auth_fail_count(uid: &str, state: &AppState) -> u32 {
     };
     let now = chrono::Utc::now().timestamp();
     if user.last_auth_fail_at > 0 && now - user.last_auth_fail_at < AUTH_FAIL_COOLDOWN_SECS {
-        eprintln!(
+        crate::runtime_log!(
             "[auth][check] uid={} auth_fail_count keep={} (within cooldown {}s)",
             uid, user.auth_fail_count, AUTH_FAIL_COOLDOWN_SECS
         );
@@ -436,7 +436,7 @@ async fn bump_user_auth_fail_count(uid: &str, state: &AppState) -> u32 {
     }
     user.last_auth_fail_at = now;
     user.auth_fail_count = user.auth_fail_count.saturating_add(1);
-    eprintln!(
+    crate::runtime_log!(
         "[auth][check] uid={} auth_fail_count={}",
         uid, user.auth_fail_count
     );
@@ -463,13 +463,13 @@ async fn refresh_cookie_for_uid(
         return RefreshCookieResult::Missing;
     };
     if user.cookie.trim().is_empty() {
-        eprintln!(
+        crate::runtime_log!(
             "[auth][check] uid={} local cookie missing, skip remote check",
             uid
         );
         return RefreshCookieResult::Failed("i18n.account.error.local_credential_empty".into());
     }
-    eprintln!(
+    crate::runtime_log!(
         "[auth][check] uid={} begin refresh_profile={}, refresh_token_len={}, {}",
         uid,
         refresh_profile,
@@ -495,14 +495,14 @@ async fn refresh_cookie_for_uid(
     {
         Ok(value) => value,
         Err(error) => {
-            eprintln!(
+            crate::runtime_log!(
                 "[auth][check] uid={} cookie/info request error: {}",
                 uid, error
             );
             return RefreshCookieResult::Failed(error.to_string());
         }
     };
-    eprintln!(
+    crate::runtime_log!(
         "[auth][check] uid={} cookie/info code={}, refresh={}, timestamp={}",
         uid,
         info["code"].as_i64().unwrap_or(-1),
@@ -515,7 +515,7 @@ async fn refresh_cookie_for_uid(
         let msg = info["message"]
             .as_str()
             .unwrap_or("i18n.account.error.cookie_status_check_failed");
-        eprintln!(
+        crate::runtime_log!(
             "[auth][check] cookie/info failed for uid {uid}: code={code}, msg={msg}, {}",
             cookie_diagnostics(&user.cookie)
         );
@@ -548,7 +548,7 @@ async fn refresh_cookie_for_uid(
         if let Err(error) = refresh_cookie_with_official_flow(&mut user, state, timestamp).await {
             let fail_count = bump_user_auth_fail_count(uid, state).await;
             clear_user_login_invalid_flag(uid, state).await;
-            eprintln!(
+            crate::runtime_log!(
                 "[auth][refresh] uid={} refresh required but failed: {}",
                 uid, error
             );
@@ -568,7 +568,7 @@ async fn refresh_cookie_for_uid(
         if runtime.config.current_uid.as_deref() == Some(uid) {
             restore_session_from_current(&mut runtime, &state.client);
         }
-        return RefreshCookieResult::Updated(user);
+        return RefreshCookieResult::Updated(Box::new(user));
     }
 
     let nav = match state
@@ -578,11 +578,11 @@ async fn refresh_cookie_for_uid(
     {
         Ok(value) => value,
         Err(error) => {
-            eprintln!("[auth][check] uid={} nav request error: {}", uid, error);
+            crate::runtime_warn!("[auth][check] uid={} nav request error: {}", uid, error);
             return RefreshCookieResult::Failed(error.to_string());
         }
     };
-    eprintln!(
+    crate::runtime_log!(
         "[auth][check] uid={} nav code={}",
         uid,
         nav["code"].as_i64().unwrap_or(-1)
@@ -593,7 +593,7 @@ async fn refresh_cookie_for_uid(
         let msg = nav["message"]
             .as_str()
             .unwrap_or("i18n.account.error.fetch_user_info_failed");
-        eprintln!(
+        crate::runtime_log!(
             "[auth][check] nav failed for uid {uid}: code={code}, msg={msg}, {}",
             cookie_diagnostics(&user.cookie)
         );
@@ -626,7 +626,7 @@ async fn refresh_cookie_for_uid(
     {
         Ok(value) => value,
         Err(error) => {
-            eprintln!(
+            crate::runtime_log!(
                 "[auth][check] uid={} nav/stat request error: {}",
                 uid, error
             );
@@ -652,7 +652,7 @@ async fn refresh_cookie_for_uid(
     if let Err(error) =
         refresh_avatar_cache(&state.client, &state.config_path, uid, &user.face).await
     {
-        eprintln!(
+        crate::runtime_log!(
             "[auth][check] uid={} avatar cache refresh failed: {}",
             uid, error
         );
@@ -664,7 +664,7 @@ async fn refresh_cookie_for_uid(
         restore_session_from_current(&mut runtime, &state.client);
     }
 
-    RefreshCookieResult::Updated(user)
+    RefreshCookieResult::Updated(Box::new(user))
 }
 
 #[tauri::command]
@@ -711,7 +711,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         .map_err(|error| error.to_string())?;
 
     let code = value["data"]["code"].as_i64().unwrap_or(-1);
-    eprintln!(
+    crate::runtime_log!(
         "[auth][qrcode] poll status code={}, message={}",
         code,
         value["data"]["message"].as_str().unwrap_or("")
@@ -746,7 +746,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     let nav_uid = full["mid"].as_u64().unwrap_or(0);
     let uid = if nav_uid > 0 { nav_uid } else { cookie_uid };
     if cookie_uid > 0 && nav_uid > 0 && cookie_uid != nav_uid {
-        eprintln!(
+        crate::runtime_log!(
             "[auth][qrcode] uid mismatch, cookie_uid={}, nav_uid={}, {}",
             cookie_uid,
             nav_uid,
@@ -754,7 +754,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         );
     }
     if uid == 0 {
-        eprintln!(
+        crate::runtime_log!(
             "[auth][qrcode] login success but uid missing, cookie_uid={}, nav_uid={}, {}",
             cookie_uid,
             nav_uid,
@@ -773,7 +773,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         .map(|value| value["data"]["room_id"].as_i64().unwrap_or(0).to_string())
         .unwrap_or_default();
     let uid_str = uid.to_string();
-    eprintln!(
+    crate::runtime_log!(
         "[auth][qrcode] login success uid={}, room_id={}, {}",
         uid_str,
         room,
@@ -830,7 +830,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     if let Err(error) =
         refresh_avatar_cache(&state.client, &state.config_path, &uid_str, &user.face).await
     {
-        eprintln!("avatar cache refresh failed for uid {uid_str}: {error}");
+        crate::runtime_warn!("avatar cache refresh failed for uid {uid_str}: {error}");
     }
 
     runtime.config.users.insert(uid_str.clone(), user.clone());
@@ -867,7 +867,7 @@ pub async fn load_saved_config(state: State<'_, AppState>) -> CmdResult {
             if let Err(error) =
                 refresh_avatar_cache(&state.client, &state.config_path, &user.uid, &user.face).await
             {
-                eprintln!("avatar cache warmup failed for uid {}: {}", user.uid, error);
+                crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
             }
         }
     }
@@ -888,7 +888,7 @@ pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
             .clone()
             .ok_or_else(|| "i18n.common.not_logged_in".to_string())?
     };
-    eprintln!("[auth][manual] refresh_current_user uid={}", uid);
+    crate::runtime_log!("[auth][manual] refresh_current_user uid={}", uid);
     let refreshed = refresh_cookie_for_uid(&uid, &state, true).await;
     let response = match refreshed {
         RefreshCookieResult::Updated(user) => {
@@ -918,7 +918,7 @@ pub async fn get_account_list(state: State<'_, AppState>) -> CmdResult {
             if let Err(error) =
                 refresh_avatar_cache(&state.client, &state.config_path, &user.uid, &user.face).await
             {
-                eprintln!("avatar cache warmup failed for uid {}: {}", user.uid, error);
+                crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
             }
         }
     }
@@ -970,7 +970,7 @@ pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResul
         if let Err(error) =
             refresh_avatar_cache(&state.client, &state.config_path, &user.uid, &user.face).await
         {
-            eprintln!("avatar cache warmup failed for uid {}: {}", user.uid, error);
+            crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
         }
     }
     let response_user = to_response_user(&state.config_path, &user);
@@ -989,7 +989,7 @@ pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
 
     runtime.config.users.remove(&req.uid);
     if let Err(error) = delete_avatar_cache(&state.config_path, &req.uid) {
-        eprintln!(
+        crate::runtime_log!(
             "[auth][logout] delete avatar cache failed uid={}: {}",
             req.uid, error
         );
@@ -1015,27 +1015,27 @@ async fn refresh_accounts_batch(state: &AppState, refresh_profile: bool) -> serd
     let mut failed: Vec<String> = Vec::new();
     let mut expired: Vec<String> = Vec::new();
     let mode = if refresh_profile { "profile" } else { "cookie" };
-    eprintln!("[auth][batch][{mode}] begin total={}", uids.len());
+    crate::runtime_log!("[auth][batch][{mode}] begin total={}", uids.len());
     for uid in uids {
-        eprintln!("[auth][batch][{mode}] checking uid={}", uid);
+        crate::runtime_log!("[auth][batch][{mode}] checking uid={}", uid);
         match refresh_cookie_for_uid(&uid, state, refresh_profile).await {
             RefreshCookieResult::Updated(_) => {
                 updated += 1;
-                eprintln!("[auth][batch][{mode}] uid={} updated", uid);
+                crate::runtime_log!("[auth][batch][{mode}] uid={} updated", uid);
             }
             RefreshCookieResult::Missing => {}
             RefreshCookieResult::Invalid(msg) => {
                 expired.push(uid.clone());
                 failed.push(format!("{uid}: {msg}"));
-                eprintln!("[auth][batch][{mode}] uid={} invalid: {}", uid, msg);
+                crate::runtime_warn!("[auth][batch][{mode}] uid={} invalid: {}", uid, msg);
             }
             RefreshCookieResult::Failed(error) => {
                 failed.push(format!("{uid}: {error}"));
-                eprintln!("[auth][batch][{mode}] uid={} failed: {}", uid, error);
+                crate::runtime_warn!("[auth][batch][{mode}] uid={} failed: {}", uid, error);
             }
         }
     }
-    eprintln!(
+    crate::runtime_log!(
         "[auth][batch][{mode}] done updated={}, expired={}, failed={}",
         updated,
         expired.len(),
@@ -1062,7 +1062,7 @@ async fn refresh_accounts_batch(state: &AppState, refresh_profile: bool) -> serd
 
     let status_reconcile = if refresh_profile {
         let value = reconcile_accounts_live_status_batch(state).await;
-        eprintln!("[auth][batch][profile] live status reconcile: {}", value);
+        crate::runtime_log!("[auth][batch][profile] live status reconcile: {}", value);
         Some(value)
     } else {
         None

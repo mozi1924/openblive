@@ -184,10 +184,8 @@ pub(crate) async fn ensure_obs_ws_keepalive_task(app: AppHandle) {
             runtime.obs_ws_last_error = "i18n.system.obs_ws_not_enabled".to_string();
             runtime.obs_ws_last_checked_at = chrono::Utc::now().timestamp();
             false
-        } else if runtime.obs_ws_keepalive_task.is_some() {
-            false
         } else {
-            true
+            runtime.obs_ws_keepalive_task.is_none()
         }
     };
 
