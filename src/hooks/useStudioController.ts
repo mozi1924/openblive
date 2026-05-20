@@ -14,10 +14,10 @@ import type {
 import {
   createLiveEmoticonIndex,
   createSelfDanmuMessage,
-  upsertIncomingDanmuMessage,
 } from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
+import { applyIncomingRealtimeMessage } from "./studio/realtimeDanmu";
 import {
   buildSectionStatus,
   defaultProfileState,
@@ -1346,7 +1346,7 @@ export function useStudioController() {
       const resolvedMessage = withFallbackSegments
         ? { ...message, segments: withFallbackSegments.segments }
         : message;
-      setDanmus((prev) => upsertIncomingDanmuMessage(prev, resolvedMessage));
+      setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, localeSetting));
       append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
     });
 

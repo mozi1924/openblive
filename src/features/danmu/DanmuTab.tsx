@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import type { DanmuMsg, LiveEmoticonPackage, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
-import { t, tf } from "../../utils/i18n";
+import { resolveBackendMessage, t, tf } from "../../utils/i18n";
+import { CompactEventStrip } from "./CompactEventStrip";
 
 type DanmuTabProps = {
   locale: LocaleSetting;
@@ -454,15 +455,17 @@ export function DanmuTab({
 
 function DanmuBubbleContent({
   message,
+  locale,
   className,
   emoticonHeight = 24,
 }: {
   message: DanmuMsg;
+  locale: LocaleSetting;
   className: string;
   emoticonHeight?: number;
 }) {
   if (!message.segments?.length) {
-    return <div className={className}>{message.content}</div>;
+    return <div className={className}>{resolveBackendMessage(message.content, locale)}</div>;
   }
 
   return (
@@ -470,7 +473,7 @@ function DanmuBubbleContent({
       {message.segments.map((segment, index) =>
         segment.type === "text" ? (
           <span key={`${message.id}-text-${index}`} className="whitespace-pre-wrap break-all">
-            {segment.text}
+            {resolveBackendMessage(segment.text, locale)}
           </span>
         ) : (
           <img
@@ -626,6 +629,9 @@ function DanmuCard({
   mergeWithBelow: boolean;
   showSenderMeta: boolean;
 }) {
+  const rawType = String(message.type ?? "");
+  const localizedSender = resolveBackendMessage(message.sender, locale);
+  const localizedContent = resolveBackendMessage(message.content, locale);
   const isMe = isSelfMessage(message, currentUser, locale);
   const resolvedSenderFace = isMe ? message.sender_face || currentUser?.face : message.sender_face;
   const senderUid =
@@ -642,7 +648,7 @@ function DanmuCard({
       ? "text-cyan-300"
       : isGuard
         ? "text-violet-300"
-        : pickColorBySender(message.sender);
+        : pickColorBySender(localizedSender);
   const senderNameStyle = !isAnchor && !isAdmin && !isGuard && message.sender_name_color
     ? { color: message.sender_name_color }
     : undefined;
@@ -670,36 +676,103 @@ function DanmuCard({
   const bubbleShapeClass = resolveDanmuBubbleShape(isMe, mergeWithAbove, mergeWithBelow);
   const stackGapClass = mergeWithAbove ? "mt-1" : "mt-4";
 
-  if (message.type === "system") {
-    return (
-      <div className="mt-3 flex justify-center w-full">
-        <div className="flex items-center space-x-2 rounded-full bg-black/35 border border-dashed border-white/5 px-4 py-1.5 text-[10px] text-gray-500 font-mono italic">
-          <span className="rounded bg-white/5 border border-white/10 px-1 py-0.2 text-[8px] font-bold text-gray-500 scale-90 uppercase">
-            SYS
-          </span>
-          <span>{message.content}</span>
-          <span className="text-[9px] text-gray-600 font-semibold">{message.time}</span>
-        </div>
-      </div>
-    );
+  if (
+    rawType === "system" ||
+    rawType === "interact" ||
+    rawType === "moderation" ||
+    rawType === "live_state" ||
+    rawType === "recall"
+  ) {
+    return <CompactEventStrip locale={locale} message={message} />;
   }
 
-  if (message.type === "gift") {
-    const giftName = message.gift_name || message.content;
-    const giftCount = Math.max(message.gift_count ?? 1, 1);
-    const giftAmountLabel = resolveGiftAmountLabel(message, locale);
+  if (rawType === "superchat") {
+    const superchatAmount = Math.max(message.superchat_price ?? 0, 0);
+    const superchatAmountLabel =
+      superchatAmount > 0 ? `¥${superchatAmount}` : t(locale, "ui.danmu.superchat.amount_fallback");
+    const cardToneClass =
+      superchatAmount >= 100
+        ? "border-amber-300/30 bg-[linear-gradient(145deg,rgba(251,191,36,0.16),rgba(180,83,9,0.12))]"
+        : "border-sky-300/30 bg-[linear-gradient(145deg,rgba(56,189,248,0.16),rgba(14,116,144,0.12))]";
+    const badgeToneClass =
+      superchatAmount >= 100
+        ? "border-amber-300/35 bg-amber-500/15 text-amber-100"
+        : "border-sky-300/35 bg-sky-500/15 text-sky-100";
 
     return (
-      <div className="mt-4 flex items-start gap-3 max-w-[82%] self-start transition-all duration-300">
+      <div className="mt-4 flex max-w-[84%] items-start gap-3 self-start transition-all duration-300">
         <DanmuAvatar
-          sender={message.sender}
+          sender={localizedSender}
           avatarUrl={resolvedSenderFace}
           className="mt-0.5 h-8 w-8 shrink-0"
         />
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center space-x-2">
             <span className={`text-xs font-black ${senderNameClass}`} style={senderNameStyle}>
-              {message.sender}
+              {localizedSender}
+            </span>
+            {senderBadge ? (
+              <span
+                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[8px] font-black tracking-wider ${senderBadge.className}`}
+              >
+                {senderBadge.icon}
+                <span>{senderBadge.text}</span>
+              </span>
+            ) : null}
+            <span
+              className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider ${badgeToneClass}`}
+            >
+              {t(locale, "ui.danmu.badge.superchat")}
+            </span>
+            <span className="text-[9px] font-mono text-gray-500">{message.time}</span>
+          </div>
+          <div
+            className={`mt-1.5 min-w-0 rounded-[22px] rounded-tl-none border px-4 py-3 text-gray-100 shadow-[0_10px_24px_rgba(0,0,0,0.2)] ${cardToneClass}`}
+          >
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-white">
+                {resolveBackendMessage(
+                  message.gift_name || t(locale, "ui.danmu.superchat.default_title"),
+                  locale,
+                )}
+              </p>
+              <span className="shrink-0 rounded-full border border-white/15 bg-black/25 px-2.5 py-1 text-[11px] font-semibold text-white">
+                {superchatAmountLabel}
+              </span>
+            </div>
+            <DanmuBubbleContent
+              message={message}
+              locale={locale}
+              emoticonHeight={22}
+              className="select-text break-all text-[13px] leading-[1.45] text-gray-100"
+            />
+            {message.superchat_message_jpn ? (
+              <p className="mt-2 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-[11px] text-gray-200">
+                {resolveBackendMessage(message.superchat_message_jpn, locale)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (rawType === "gift") {
+    const giftName = resolveBackendMessage(message.gift_name || message.content, locale);
+    const giftCount = Math.max(message.gift_count ?? 1, 1);
+    const giftAmountLabel = resolveGiftAmountLabel(message, locale);
+
+    return (
+      <div className="mt-4 flex items-start gap-3 max-w-[82%] self-start transition-all duration-300">
+        <DanmuAvatar
+          sender={localizedSender}
+          avatarUrl={resolvedSenderFace}
+          className="mt-0.5 h-8 w-8 shrink-0"
+        />
+        <div className="flex min-w-0 flex-col">
+          <div className="flex items-center space-x-2">
+            <span className={`text-xs font-black ${senderNameClass}`} style={senderNameStyle}>
+              {localizedSender}
             </span>
             {senderBadge ? (
               <span
@@ -728,22 +801,22 @@ function DanmuCard({
     );
   }
 
-  if (message.type === "guard") {
-    const guardName = message.gift_name || message.content;
+  if (rawType === "guard") {
+    const guardName = resolveBackendMessage(message.gift_name || message.content, locale);
     const guardCount = Math.max(message.gift_count ?? 1, 1);
     const guardAmountLabel = resolveGiftAmountLabel(message, locale);
 
     return (
       <div className="mt-4 flex items-start gap-3 max-w-[82%] self-start transition-all duration-300">
         <DanmuAvatar
-          sender={message.sender}
+          sender={localizedSender}
           avatarUrl={resolvedSenderFace}
           className="mt-0.5 h-8 w-8 shrink-0"
         />
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center space-x-2">
             <span className={`text-xs font-black ${senderNameClass}`} style={senderNameStyle}>
-              {message.sender}
+              {localizedSender}
             </span>
             {senderBadge ? (
               <span
@@ -772,13 +845,22 @@ function DanmuCard({
     );
   }
 
+  if (rawType !== "danmu") {
+    return (
+      <CompactEventStrip
+        locale={locale}
+        message={{ ...message, content: localizedContent || rawType }}
+      />
+    );
+  }
+
   if (isMe) {
     return (
       <div className={`flex flex-col items-end max-w-[78%] self-end transition-all duration-300 ${stackGapClass}`}>
         {showSenderMeta ? (
           <DanmuSenderMeta
             align="right"
-            sender={message.sender}
+            sender={localizedSender}
             senderNameClass={meNameClass}
             senderNameStyle={senderNameStyle}
             senderBadge={senderBadge}
@@ -787,6 +869,7 @@ function DanmuCard({
         ) : null}
         <DanmuBubbleContent
           message={message}
+          locale={locale}
           className={`${bubbleShapeClass} bg-[linear-gradient(135deg,rgba(0,174,236,0.96),rgba(0,144,214,0.92))] px-4 py-2.5 text-[13px] leading-[1.45] text-white shadow-[0_10px_24px_rgba(0,174,236,0.14)] select-text break-all border border-bili-blue/18`}
         />
       </div>
@@ -797,7 +880,7 @@ function DanmuCard({
     <div className={`flex items-end space-x-2.5 max-w-[82%] self-start transition-all duration-300 ${stackGapClass}`}>
       {showSenderMeta ? (
         <DanmuAvatar
-          sender={message.sender}
+          sender={localizedSender}
           avatarUrl={resolvedSenderFace}
           className="mt-0.5 h-8 w-8 shrink-0"
         />
@@ -808,7 +891,7 @@ function DanmuCard({
         {showSenderMeta ? (
           <DanmuSenderMeta
             align="left"
-            sender={message.sender}
+            sender={localizedSender}
             senderNameClass={senderNameClass}
             senderNameStyle={senderNameStyle}
             senderBadge={senderBadge}
@@ -817,6 +900,7 @@ function DanmuCard({
         ) : null}
         <DanmuBubbleContent
           message={message}
+          locale={locale}
           className={`${bubbleShapeClass} bg-[rgba(20,26,36,0.92)] border border-white/6 px-4 py-2.5 text-[13px] leading-[1.45] text-gray-100 shadow-[0_10px_24px_rgba(0,0,0,0.14)] select-text break-all hover:bg-[rgba(24,31,43,0.96)] hover:border-white/10 transition-all duration-150`}
         />
       </div>

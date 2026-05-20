@@ -39,3 +39,4 @@ rsa = { version = "0.9", features = ["pem"] }
 sha2 = "0.10"
 hex = "0.4"
 qrcode-generator = "5"
+prost = "0.13"

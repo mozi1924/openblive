@@ -184,16 +184,37 @@ export type UpdateTagsResp = {
 
 export type DanmuMsg = {
   id: string;
-  type: "danmu" | "gift" | "guard" | "system";
+  type:
+    | "danmu"
+    | "gift"
+    | "guard"
+    | "system"
+    | "interact"
+    | "superchat"
+    | "moderation"
+    | "live_state"
+    | "recall";
   time: string;
   created_at_ms?: number;
   sender: string;
   content: string;
+  cmd?: string;
   sender_uid?: number;
   sender_role?: "viewer" | "anchor" | "admin" | "guard";
   sender_name_color?: string;
   sender_guard_level?: number;
   sender_face?: string;
+  interact_type?: "enter" | "follow" | "share" | "unknown";
+  superchat_id?: number;
+  superchat_price?: number;
+  superchat_message_jpn?: string;
+  deleted_ids?: number[];
+  recall_target_id?: string;
+  recalled?: boolean;
+  danmu_msg_id?: string;
+  danmu_id_str?: string;
+  danmu_rnd?: number;
+  danmu_legacy_id?: number;
   gift_name?: string;
   gift_count?: number;
   gift_coin_type?: string;
