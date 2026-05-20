@@ -152,6 +152,9 @@ fn apply_app_config_value(
         "app_sec" => {
             runtime.config.app_sec = value.as_str().unwrap_or("").trim().to_string();
         }
+        "http_user_agent" => {
+            runtime.config.http_user_agent = value.as_str().unwrap_or("").trim().to_string();
+        }
         "livehime_version_override" => {
             runtime.config.livehime_version_override =
                 value.as_str().unwrap_or("").trim().to_string();
@@ -273,6 +276,7 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "danmu_host": runtime.config.danmu_host,
         "app_key": runtime.config.app_key,
         "app_sec": runtime.config.app_sec,
+        "http_user_agent": runtime.config.http_user_agent,
         "livehime_version_override": runtime.config.livehime_version_override,
         "livehime_build_override": runtime.config.livehime_build_override,
         "live_platform": runtime.config.live_platform,

@@ -2,7 +2,9 @@ use std::net::IpAddr;
 use std::sync::{OnceLock, RwLock};
 use url::Url;
 
-use crate::constants::{DEFAULT_APP_KEY, DEFAULT_APP_SEC, DEFAULT_LIVE_PLATFORM};
+use crate::constants::{
+    DEFAULT_APP_KEY, DEFAULT_APP_SEC, DEFAULT_HTTP_USER_AGENT, DEFAULT_LIVE_PLATFORM,
+};
 
 const DEFAULT_HOST_WWW: &str = "www.bilibili.com";
 const DEFAULT_HOST_API: &str = "api.bilibili.com";
@@ -24,6 +26,7 @@ struct RuntimeOverrides {
     danmu_host: String,
     app_key: String,
     app_sec: String,
+    http_user_agent: String,
     livehime_version_override: String,
     livehime_build_override: String,
     live_platform: String,
@@ -143,6 +146,13 @@ fn resolve_app_sec(runtime_value: &str) -> String {
     env_or_default("OPENBLIVE_APP_SEC", DEFAULT_APP_SEC)
 }
 
+fn resolve_http_user_agent(runtime_value: &str) -> String {
+    if !runtime_value.trim().is_empty() {
+        return runtime_value.trim().to_string();
+    }
+    env_or_default("OPENBLIVE_HTTP_USER_AGENT", DEFAULT_HTTP_USER_AGENT)
+}
+
 fn resolve_livehime_version_override(runtime_value: &str) -> String {
     if !runtime_value.trim().is_empty() {
         return runtime_value.trim().to_string();
@@ -193,6 +203,7 @@ pub fn set_runtime_overrides_from_config(cfg: &crate::models::PersistConfig) {
         guard.danmu_host = cfg.danmu_host.clone();
         guard.app_key = cfg.app_key.clone();
         guard.app_sec = cfg.app_sec.clone();
+        guard.http_user_agent = cfg.http_user_agent.clone();
         guard.livehime_version_override = cfg.livehime_version_override.clone();
         guard.livehime_build_override = cfg.livehime_build_override.clone();
         guard.live_platform = cfg.live_platform.clone();
@@ -251,6 +262,10 @@ pub fn app_key() -> String {
 
 pub fn app_sec() -> String {
     with_runtime(|cfg| resolve_app_sec(&cfg.app_sec))
+}
+
+pub fn http_user_agent() -> String {
+    with_runtime(|cfg| resolve_http_user_agent(&cfg.http_user_agent))
 }
 
 pub fn livehime_version_override() -> String {

@@ -75,6 +75,7 @@
 - `danmu_host`
 - `app_key`
 - `app_sec`
+- `http_user_agent`
 - `livehime_version_override`
 - `livehime_build_override`
 - `live_platform`
@@ -91,6 +92,7 @@
 - `OPENBLIVE_DANMU_WSS_PORT`
 - `OPENBLIVE_APP_KEY`
 - `OPENBLIVE_APP_SEC`
+- `OPENBLIVE_HTTP_USER_AGENT`
 - `OPENBLIVE_LIVEHIME_VERSION`
 - `OPENBLIVE_LIVEHIME_BUILD`
 - `OPENBLIVE_LIVE_PLATFORM`

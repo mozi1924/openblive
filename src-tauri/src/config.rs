@@ -54,6 +54,8 @@ struct AppSettingsFile {
     #[serde(default)]
     app_sec: String,
     #[serde(default)]
+    http_user_agent: String,
+    #[serde(default)]
     livehime_version_override: String,
     #[serde(default)]
     livehime_build_override: String,
@@ -295,6 +297,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
         cfg.danmu_host = app_file.danmu_host;
         cfg.app_key = app_file.app_key;
         cfg.app_sec = app_file.app_sec;
+        cfg.http_user_agent = app_file.http_user_agent;
         cfg.livehime_version_override = app_file.livehime_version_override;
         cfg.livehime_build_override = app_file.livehime_build_override;
         cfg.live_platform = app_file.live_platform;
@@ -409,6 +412,7 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     app_file.danmu_host = cfg.danmu_host.clone();
     app_file.app_key = cfg.app_key.clone();
     app_file.app_sec = cfg.app_sec.clone();
+    app_file.http_user_agent = cfg.http_user_agent.clone();
     app_file.livehime_version_override = cfg.livehime_version_override.clone();
     app_file.livehime_build_override = cfg.livehime_build_override.clone();
     app_file.live_platform = cfg.live_platform.clone();

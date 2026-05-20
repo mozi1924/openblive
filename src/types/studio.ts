@@ -32,6 +32,7 @@ export type AppConfig = {
   danmu_host: string;
   app_key: string;
   app_sec: string;
+  http_user_agent: string;
   livehime_version_override: string;
   livehime_build_override: string;
   live_platform: string;

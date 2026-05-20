@@ -34,6 +34,7 @@ export function SettingsTab({
     onChangeConfig("danmu_host", "");
     onChangeConfig("app_key", "");
     onChangeConfig("app_sec", "");
+    onChangeConfig("http_user_agent", "");
     onChangeConfig("livehime_version_override", "");
     onChangeConfig("livehime_build_override", "");
     onChangeConfig("live_platform", "");
@@ -450,6 +451,15 @@ export function SettingsTab({
                 value={appConfig.app_sec}
                 onChange={(event) => onChangeConfig("app_sec", event.target.value)}
                 placeholder="af125a0d5279fd576c1b4418a3e8276d"
+              />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{t(locale, "ui.settings.advanced.http_user_agent")}</span>
+              <input
+                className={inputClass}
+                value={appConfig.http_user_agent}
+                onChange={(event) => onChangeConfig("http_user_agent", event.target.value)}
+                placeholder="Mozilla/5.0 (...)"
               />
             </label>
             <label className="space-y-1">

@@ -79,6 +79,7 @@ pub async fn refresh_avatar_cache(
     let resp = client
         .http
         .get(&face_url)
+        .header("user-agent", endpoints::http_user_agent())
         .header("referer", endpoints::www_origin())
         .send()
         .await

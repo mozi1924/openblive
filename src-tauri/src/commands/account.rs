@@ -84,6 +84,142 @@ fn cookie_diagnostics(cookie_header: &str) -> String {
     )
 }
 
+fn normalize_live_status(status: i64) -> i64 {
+    match status {
+        1 => 1,
+        2 => 2,
+        _ => 0,
+    }
+}
+
+async fn reconcile_accounts_live_status_batch(state: &AppState) -> serde_json::Value {
+    let uid_list = {
+        let runtime = state.runtime.lock().await;
+        runtime
+            .config
+            .users
+            .keys()
+            .filter_map(|uid| uid.parse::<u64>().ok())
+            .map(|uid| uid.to_string())
+            .collect::<Vec<_>>()
+    };
+    if uid_list.is_empty() {
+        return json!({
+            "requested": 0,
+            "updated": 0,
+            "missing": 0
+        });
+    }
+
+    let mut params: Vec<(&str, String)> = Vec::with_capacity(uid_list.len());
+    for uid in &uid_list {
+        params.push(("uids[]", uid.clone()));
+    }
+
+    let value = match state
+        .client
+        .get_json(
+            &endpoints::live_api("/room/v1/Room/get_status_info_by_uids"),
+            &params,
+        )
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            return json!({
+                "requested": uid_list.len(),
+                "updated": 0,
+                "missing": uid_list.len(),
+                "error": error.to_string(),
+            });
+        }
+    };
+
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        return json!({
+            "requested": uid_list.len(),
+            "updated": 0,
+            "missing": uid_list.len(),
+            "error": error_message(&value, "batch_live_status_failed"),
+            "code": code
+        });
+    }
+
+    let data = value["data"].as_object().cloned().unwrap_or_default();
+    let requested = uid_list.len();
+    let mut runtime = state.runtime.lock().await;
+    let current_uid = runtime.config.current_uid.clone();
+    let mut updated = 0usize;
+    let mut missing = 0usize;
+    let mut changed = false;
+
+    for uid in uid_list {
+        let Some(item) = data.get(&uid) else {
+            missing += 1;
+            continue;
+        };
+        let mut user_changed = false;
+        if let Some(user) = runtime.config.users.get_mut(&uid) {
+            if let Some(room_id) = item["room_id"].as_i64() {
+                let room_id_text = room_id.to_string();
+                if user.room_id != room_id_text {
+                    user.room_id = room_id_text;
+                    user_changed = true;
+                }
+            }
+        }
+
+        if current_uid.as_deref() == Some(uid.as_str()) {
+            let status = normalize_live_status(item["live_status"].as_i64().unwrap_or(0));
+            if runtime.session.live_status != Some(status) {
+                runtime.session.live_status = Some(status);
+                user_changed = true;
+            }
+            let is_live = status == 1 || status == 2;
+            if runtime.session.is_live != is_live {
+                runtime.session.is_live = is_live;
+                user_changed = true;
+            }
+            let live_time = item["live_time"]
+                .as_i64()
+                .filter(|value| *value > 0)
+                .map(|value| value.to_string())
+                .unwrap_or_default();
+            if runtime.session.live_time != live_time {
+                runtime.session.live_time = live_time;
+                user_changed = true;
+            }
+            if !is_live
+                && (runtime.session.live_key.is_some() || runtime.session.sub_session_key.is_some())
+            {
+                runtime.session.live_key = None;
+                runtime.session.sub_session_key = None;
+                if let Some(user) = runtime.config.users.get_mut(&uid) {
+                    user.live_key = None;
+                    user.sub_session_key = None;
+                }
+                user_changed = true;
+            }
+        }
+
+        if user_changed {
+            updated += 1;
+            changed = true;
+        }
+    }
+
+    if changed {
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+    }
+
+    json!({
+        "requested": requested,
+        "updated": updated,
+        "missing": missing
+    })
+}
+
 fn extract_refresh_csrf(html: &str) -> Option<String> {
     let marker = "id=\"1-name\">";
     let start = html.find(marker)? + marker.len();
@@ -145,6 +281,7 @@ async fn refresh_cookie_with_official_flow(
         .client
         .http
         .get(&correspond_url)
+        .header("user-agent", endpoints::http_user_agent())
         .send()
         .await
         .map_err(|error| error.to_string())?;
@@ -564,6 +701,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         .client
         .http
         .get(endpoints::passport("/x/passport-login/web/qrcode/poll"))
+        .header("user-agent", endpoints::http_user_agent())
         .query(&[("qrcode_key", req.key)])
         .send()
         .await
@@ -591,6 +729,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
                 .client
                 .http
                 .get(auth_url)
+                .header("user-agent", endpoints::http_user_agent())
                 .send()
                 .await
                 .map_err(|error| error.to_string())?;
@@ -907,10 +1046,20 @@ async fn refresh_accounts_batch(state: &AppState, refresh_profile: bool) -> serd
         runtime.session = Default::default();
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
+    drop(runtime);
+
+    let status_reconcile = if refresh_profile {
+        let value = reconcile_accounts_live_status_batch(state).await;
+        eprintln!("[auth][batch][profile] live status reconcile: {}", value);
+        Some(value)
+    } else {
+        None
+    };
     json!({
         "updated": updated,
         "failed": failed,
-        "expired": expired
+        "expired": expired,
+        "status_reconcile": status_reconcile
     })
 }
 

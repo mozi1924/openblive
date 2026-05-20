@@ -278,6 +278,8 @@ pub struct PersistConfig {
     #[serde(default)]
     pub app_sec: String,
     #[serde(default)]
+    pub http_user_agent: String,
+    #[serde(default)]
     pub livehime_version_override: String,
     #[serde(default)]
     pub livehime_build_override: String,
@@ -316,6 +318,7 @@ impl Default for PersistConfig {
             danmu_host: String::new(),
             app_key: String::new(),
             app_sec: String::new(),
+            http_user_agent: String::new(),
             livehime_version_override: String::new(),
             livehime_build_override: String::new(),
             live_platform: String::new(),

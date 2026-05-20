@@ -1,7 +1,7 @@
 use crate::endpoints;
 use anyhow::Result;
 use reqwest::cookie::{CookieStore, Jar};
-use reqwest::header::COOKIE;
+use reqwest::header::{COOKIE, USER_AGENT};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use url::Url;
@@ -15,9 +15,10 @@ pub struct BiliClient {
 impl BiliClient {
     pub fn new() -> Self {
         let jar = Arc::new(Jar::default());
+        let ua = endpoints::http_user_agent();
         let http = reqwest::Client::builder()
             .cookie_provider(jar.clone())
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
+            .user_agent(ua)
             .build()
             .unwrap();
 
@@ -32,6 +33,7 @@ impl BiliClient {
         Ok(self
             .http
             .get(url)
+            .header(USER_AGENT, endpoints::http_user_agent())
             .query(params)
             .send()
             .await?
@@ -45,7 +47,11 @@ impl BiliClient {
         params: &[(&str, String)],
         cookie_header: &str,
     ) -> Result<serde_json::Value> {
-        let mut request = self.http.get(url).query(params);
+        let mut request = self
+            .http
+            .get(url)
+            .header(USER_AGENT, endpoints::http_user_agent())
+            .query(params);
         if !cookie_header.trim().is_empty() {
             request = request.header(COOKIE, cookie_header.trim());
         }
@@ -57,7 +63,15 @@ impl BiliClient {
         url: &str,
         form: &BTreeMap<String, String>,
     ) -> Result<serde_json::Value> {
-        Ok(self.http.post(url).form(form).send().await?.json().await?)
+        Ok(self
+            .http
+            .post(url)
+            .header(USER_AGENT, endpoints::http_user_agent())
+            .form(form)
+            .send()
+            .await?
+            .json()
+            .await?)
     }
 
     pub async fn post_form_with_cookie(
@@ -66,7 +80,11 @@ impl BiliClient {
         form: &BTreeMap<String, String>,
         cookie_header: &str,
     ) -> Result<serde_json::Value> {
-        let mut request = self.http.post(url).form(form);
+        let mut request = self
+            .http
+            .post(url)
+            .header(USER_AGENT, endpoints::http_user_agent())
+            .form(form);
         if !cookie_header.trim().is_empty() {
             request = request.header(COOKIE, cookie_header.trim());
         }

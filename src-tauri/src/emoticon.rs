@@ -115,6 +115,7 @@ async fn refresh_emoticon_cache(
     let resp = client
         .http
         .get(&normalized_url)
+        .header("user-agent", endpoints::http_user_agent())
         .header("referer", endpoints::live_web_origin())
         .send()
         .await

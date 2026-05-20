@@ -372,6 +372,7 @@ export function useStudioController() {
         "danmu_host",
         "app_key",
         "app_sec",
+        "http_user_agent",
         "livehime_version_override",
         "livehime_build_override",
         "live_platform",
@@ -1375,6 +1376,34 @@ export function useStudioController() {
             append(t(localeSetting, "ui.ctrl.stop_live_session_mismatch"));
           } else {
             append(t(localeSetting, "ui.ctrl.tray_stop"));
+          }
+          break;
+        }
+        case "live.preflight": {
+          const ok = event.data?.ok !== false;
+          if (!ok) {
+            append(
+              tf(localeSetting, "ui.ctrl.live_precheck_failed", {
+                msg: resolveBackendMessage(String(event.data?.error || "UNKNOWN"), localeSetting),
+              }),
+            );
+            break;
+          }
+          if (event.data?.skipped) {
+            append(t(localeSetting, "ui.ctrl.live_precheck_skipped"));
+            break;
+          }
+          const auditStatus = Number(event.data?.audit_title_status ?? -1);
+          const reason = String(event.data?.audit_title_reason || "").trim();
+          if (reason) {
+            append(
+              tf(localeSetting, "ui.ctrl.live_precheck_audit_hint", {
+                status: String(auditStatus),
+                reason,
+              }),
+            );
+          } else {
+            append(tf(localeSetting, "ui.ctrl.live_precheck_ok", { status: String(auditStatus) }));
           }
           break;
         }

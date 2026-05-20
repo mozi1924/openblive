@@ -217,6 +217,82 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
     })))
 }
 
+async fn preflight_update_pre_live_info(state: &AppState) -> Result<serde_json::Value, String> {
+    let (csrf, cookie, title) = {
+        let runtime = state.runtime.lock().await;
+        let (uid, _room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        let title = runtime
+            .config
+            .users
+            .get(&uid)
+            .map(|user| {
+                let submitted = user.live_profile_state.title.submitted.trim();
+                if !submitted.is_empty() {
+                    submitted.to_string()
+                } else {
+                    user.last_title.trim().to_string()
+                }
+            })
+            .unwrap_or_default();
+        (csrf, cookie, title)
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+    if title.trim().is_empty() {
+        return Ok(json!({
+            "ok": true,
+            "skipped": true,
+            "reason": "TITLE_EMPTY",
+        }));
+    }
+
+    let mut form = BTreeMap::new();
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
+    form.insert("platform".into(), "web".to_string());
+    form.insert("mobi_app".into(), "web".to_string());
+    form.insert("build".into(), "1".to_string());
+    form.insert("title".into(), title.clone());
+
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/preLive/UpdatePreLiveInfo"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                state,
+                &format!(
+                    "preflight_update_pre_live_info code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(&value, "i18n.live.error.update_title_failed"));
+    }
+
+    let audit_info = value["data"]["audit_info"].clone();
+    Ok(json!({
+        "ok": true,
+        "skipped": false,
+        "title": title,
+        "audit_title_status": audit_info["audit_title_status"].as_i64().unwrap_or(-1),
+        "audit_title_reason": audit_info["audit_title_reason"].as_str().unwrap_or(""),
+    }))
+}
+
 pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
     let (room_id, csrf, cookie, expected_live_key, expected_sub_session_key) = {
         let runtime = state.runtime.lock().await;
@@ -339,6 +415,24 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
 }
 
 pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResult {
+    match preflight_update_pre_live_info(state).await {
+        Ok(preflight) => {
+            emit_studio_state_event(app, "live.preflight", "start_live_flow_inner", preflight);
+        }
+        Err(error) => {
+            emit_studio_state_event(
+                app,
+                "live.preflight",
+                "start_live_flow_inner",
+                json!({
+                    "ok": false,
+                    "error": error
+                }),
+            );
+            return Err(error);
+        }
+    }
+
     let start_result = start_live_inner(state).await?;
     let code = start_result["code"].as_i64().unwrap_or(-1);
     if code != 0 {
