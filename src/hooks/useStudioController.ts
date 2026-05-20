@@ -16,7 +16,6 @@ import {
   createSelfDanmuMessage,
 } from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
-import { resolveQrPayload } from "../utils/qrcode";
 import { useWindowDrag } from "./useWindowDrag";
 import {
   buildSectionStatus,
@@ -111,8 +110,13 @@ export function useStudioController() {
   useWindowDrag(sidebarDragRef, headerDragRef);
 
   const append = useCallback((line: string) => {
-    const ts = new Date().toLocaleTimeString();
-    setLogs((prev) => [`[${ts}] ${line}`, ...prev].slice(0, 300));
+    const message = line.trim();
+    if (!message) {
+      return;
+    }
+    void studioApi.pushAppLog(message).catch(() => {
+      setLogs((prev) => [message, ...prev].slice(0, 300));
+    });
   }, []);
 
   const resolveConfirm = useCallback((accepted: boolean) => {
@@ -523,16 +527,12 @@ export function useStudioController() {
 
     try {
       const res = await studioApi.getLoginQrcode();
-      if (res.code === 0 && res.data?.url) {
-        const qrPayload = await resolveQrPayload(res.data.url, {
-          width: 220,
-          margin: 2,
-        });
-        if (!qrPayload.imageSrc) {
+      if (res.code === 0 && res.data?.content) {
+        if (!res.data.image_src) {
           append(t(localeSetting, "ui.ctrl.qr_render_failed"));
           return;
         }
-        setQrcode(qrPayload.imageSrc);
+        setQrcode(res.data.image_src);
         setQrcodeKey(res.data.qrcode_key || "");
         append(t(localeSetting, "ui.ctrl.qr_ready"));
         return;
@@ -854,10 +854,28 @@ export function useStudioController() {
   }, []);
 
   const resolveFaceQrImage = useCallback(async (qr: string) => {
-    return resolveQrPayload(qr, {
-      width: 220,
-      margin: 2,
-    });
+    const content = qr.trim();
+    if (!content) {
+      return {
+        content: "",
+        imageSrc: "",
+      };
+    }
+    try {
+      const res = await studioApi.renderQrcode(content, 220, 2);
+      if (res.code === 0 && res.data) {
+        return {
+          content: res.data.content || content,
+          imageSrc: res.data.image_src || "",
+        };
+      }
+    } catch {
+      // no-op
+    }
+    return {
+      content,
+      imageSrc: "",
+    };
   }, []);
 
   const startLive = useCallback(async (source: StartLiveSource = "manual") => {
@@ -1205,6 +1223,39 @@ export function useStudioController() {
     };
   }, [append, liveEmoticonMap, localeSetting]);
 
+  useEffect(() => {
+    let active = true;
+
+    void studioApi.getAppLogs().then((res) => {
+      if (!active) {
+        return;
+      }
+      if (res.code === 0 && Array.isArray(res.data)) {
+        setLogs(res.data.filter((item) => typeof item === "string" && item.trim().length > 0));
+      }
+    });
+
+    const unlistenPromise = studioApi.listenAppLog((payload) => {
+      if (!active) {
+        return;
+      }
+      if (Array.isArray(payload?.logs)) {
+        setLogs(payload.logs.filter((item) => typeof item === "string" && item.trim().length > 0));
+        return;
+      }
+      const line = payload?.line?.trim() || "";
+      if (!line) {
+        return;
+      }
+      setLogs((prev) => [line, ...prev].slice(0, 300));
+    });
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
+
   return {
     state: {
       accounts,
@@ -1252,7 +1303,10 @@ export function useStudioController() {
     actions: {
       changeParent,
       clearDanmus: () => setDanmus([]),
-      clearLogs: () => setLogs([]),
+      clearLogs: async () => {
+        await studioApi.clearAppLogs().catch(() => undefined);
+        setLogs([]);
+      },
       cancelConfirmAction: () => resolveConfirm(false),
       closeFaceModal: () => setShowFaceModal(false),
       closeLogs: () => setShowLogs(false),

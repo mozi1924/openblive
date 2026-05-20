@@ -242,3 +242,13 @@ export type LinkageStatus = {
     template_preview: string;
   };
 };
+
+export type QrPayload = {
+  content: string;
+  image_src: string;
+};
+
+export type AppLogEvent = {
+  line: string;
+  logs?: string[];
+};

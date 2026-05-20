@@ -1,6 +1,7 @@
 use crate::avatar::{delete_avatar_cache, has_cached_face, refresh_avatar_cache, to_response_user};
 use crate::bili::fetch_full_user_data;
 use crate::client::parse_cookie_value;
+use crate::commands::system::render_qr_data_url;
 use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::endpoints;
@@ -539,7 +540,22 @@ pub async fn get_login_qrcode(state: State<'_, AppState>) -> CmdResult {
         )
         .await
         .map_err(|error| error.to_string())?;
-    Ok(wrap_ok(value["data"].clone()))
+    let qr_content = value["data"]["url"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let qrcode_key = value["data"]["qrcode_key"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    let image_src = render_qr_data_url(&qr_content, Some(220), Some(2))?;
+    Ok(wrap_ok(json!({
+        "url": qr_content,
+        "content": qr_content,
+        "qrcode_key": qrcode_key,
+        "image_src": image_src
+    })))
 }
 
 #[tauri::command]

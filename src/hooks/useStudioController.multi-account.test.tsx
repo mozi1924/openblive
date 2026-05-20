@@ -37,7 +37,12 @@ const { mockStudioApi } = vi.hoisted(() => ({
     stopDanmuMonitor: vi.fn(),
     sendDanmu: vi.fn(),
     getLiveEmoticons: vi.fn(),
+    renderQrcode: vi.fn(),
+    pushAppLog: vi.fn(),
+    getAppLogs: vi.fn(),
+    clearAppLogs: vi.fn(),
     listenDanmuMessage: vi.fn(),
+    listenAppLog: vi.fn(),
   },
 }));
 
@@ -116,6 +121,7 @@ beforeEach(() => {
   mockStudioApi.refreshTrayMenu.mockResolvedValue(ok({}));
   mockStudioApi.getPartitions.mockResolvedValue(ok({ 手游: ["王者荣耀", "永劫无间"] }));
   mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
+  mockStudioApi.listenAppLog.mockResolvedValue(() => undefined);
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
   mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
     ok({ updated: 0, failed: [], expired: [] }),
@@ -124,6 +130,10 @@ beforeEach(() => {
   mockStudioApi.stopDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.sendDanmu.mockResolvedValue(ok({}));
   mockStudioApi.getLiveEmoticons.mockResolvedValue(ok([]));
+  mockStudioApi.renderQrcode.mockResolvedValue(ok({ content: "", image_src: "" }));
+  mockStudioApi.pushAppLog.mockResolvedValue(ok({ line: "" }));
+  mockStudioApi.getAppLogs.mockResolvedValue(ok([]));
+  mockStudioApi.clearAppLogs.mockResolvedValue(ok({}));
   mockStudioApi.logout.mockResolvedValue(ok({}));
   mockStudioApi.updateArea.mockResolvedValue(ok({ area_id: 1, profile_state: defaultProfileState() }));
   mockStudioApi.updateLiveTags.mockResolvedValue(
@@ -151,7 +161,9 @@ beforeEach(() => {
     }),
   );
   mockStudioApi.refreshCurrentUser.mockResolvedValue(ok(makeUser("1", "A", "A-old")));
-  mockStudioApi.getLoginQrcode.mockResolvedValue(ok({ url: "", qrcode_key: "" }));
+  mockStudioApi.getLoginQrcode.mockResolvedValue(
+    ok({ url: "", content: "", image_src: "", qrcode_key: "" }),
+  );
   mockStudioApi.pollLoginStatus.mockResolvedValue({ code: 86101, msg: "pending" });
   mockStudioApi.setAppConfig.mockResolvedValue(ok({}));
   mockStudioApi.setAppConfigs.mockResolvedValue(ok({}));

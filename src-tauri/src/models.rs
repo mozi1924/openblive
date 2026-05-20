@@ -365,3 +365,17 @@ pub struct AppConfigReq {
 pub struct AppConfigsReq {
     pub values: HashMap<String, serde_json::Value>,
 }
+
+#[derive(Deserialize)]
+pub struct QrRenderReq {
+    pub content: String,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub margin: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct AppLogReq {
+    pub message: String,
+}

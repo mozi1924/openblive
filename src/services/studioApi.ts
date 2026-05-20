@@ -2,11 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   AccountList,
+  AppLogEvent,
   AppConfig,
   DanmuMsg,
   LinkageStatus,
   LiveFlowResp,
   LiveEmoticonPackage,
+  QrPayload,
   LiveRoomProfile,
   Resp,
   Session,
@@ -44,7 +46,11 @@ export const studioApi = {
     ),
   refreshCurrentUser: () => invokeCommand<User>("refresh_current_user"),
   getLoginQrcode: () =>
-    invokeCommand<{ url: string; qrcode_key: string }>("get_login_qrcode"),
+    invokeCommand<{ url: string; content: string; image_src: string; qrcode_key: string }>(
+      "get_login_qrcode",
+    ),
+  renderQrcode: (content: string, width = 220, margin = 2) =>
+    invokeCommand<QrPayload>("render_qrcode", { req: { content, width, margin } }),
   pollLoginStatus: (key: string) =>
     invokeCommand<User>("poll_login_status", { req: { key } }),
   switchAccount: (uid: string) =>
@@ -72,6 +78,12 @@ export const studioApi = {
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
   getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
+  pushAppLog: (message: string) =>
+    invokeCommand<{ line: string; logs: string[] }>("push_app_log", { req: { message } }),
+  getAppLogs: () => invokeCommand<string[]>("get_app_logs"),
+  clearAppLogs: () => invokeCommand("clear_app_logs"),
   listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
     listen<DanmuMsg>("danmu-message", (event) => handler(event.payload)),
+  listenAppLog: (handler: (payload: AppLogEvent) => void) =>
+    listen<AppLogEvent>("app-log", (event) => handler(event.payload)),
 };

@@ -1,17 +1,21 @@
 use crate::constants::CmdResult;
 use crate::endpoints;
 use crate::i18n::normalize_locale_setting;
-use crate::models::{AppConfigReq, AppConfigsReq};
+use crate::models::{AppConfigReq, AppConfigsReq, AppLogReq, QrRenderReq};
 use crate::response::wrap_ok;
 use crate::{
     config::save_config,
     state::{AppState, RuntimeState},
 };
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
+use qrcode_generator::QrCodeEcc;
 use serde_json::json;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::time::Duration;
 
 const OBS_KEEPALIVE_INTERVAL_SECS: u64 = 15;
+const APP_LOG_LIMIT: usize = 300;
 
 fn normalize_live_control_mode(mode: &str) -> &'static str {
     match mode.trim() {
@@ -19,6 +23,61 @@ fn normalize_live_control_mode(mode: &str) -> &'static str {
         "command" => "command",
         _ => "none",
     }
+}
+
+fn now_hms() -> String {
+    chrono::Local::now().format("%H:%M:%S").to_string()
+}
+
+fn push_app_log_buffer(runtime: &mut RuntimeState, line: String) {
+    runtime.app_logs.insert(0, line);
+    if runtime.app_logs.len() > APP_LOG_LIMIT {
+        runtime.app_logs.truncate(APP_LOG_LIMIT);
+    }
+}
+
+pub(crate) fn render_qr_data_url(
+    content: &str,
+    width: Option<u32>,
+    _margin: Option<u32>,
+) -> Result<String, String> {
+    let normalized = content.trim();
+    if normalized.is_empty() {
+        return Ok(String::new());
+    }
+    if normalized.starts_with("data:image/") {
+        return Ok(normalized.to_string());
+    }
+
+    let size = width.unwrap_or(220).clamp(120, 1024) as usize;
+    let png = qrcode_generator::to_png_to_vec(normalized, QrCodeEcc::Medium, size)
+        .map_err(|error| format!("i18n.system.error.qrcode_render_failed: {error}"))?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        BASE64_STANDARD.encode(png)
+    ))
+}
+
+pub(crate) async fn emit_app_log_line(
+    app: &AppHandle,
+    state: &AppState,
+    message: &str,
+) -> (String, Vec<String>) {
+    let message = message.trim();
+    if message.is_empty() {
+        return (String::new(), Vec::new());
+    }
+    let line = format!("[{}] {}", now_hms(), message);
+    let logs = {
+        let mut runtime = state.runtime.lock().await;
+        push_app_log_buffer(&mut runtime, line.clone());
+        runtime.app_logs.clone()
+    };
+    let _ = app.emit(
+        "app-log",
+        json!({ "line": line.clone(), "logs": logs.clone() }),
+    );
+    (line, logs)
 }
 
 fn apply_app_config_value(
@@ -301,4 +360,33 @@ pub async fn reveal_main_window(app: AppHandle) -> CmdResult {
 #[tauri::command]
 pub async fn get_version() -> CmdResult {
     Ok(wrap_ok(json!({ "version": env!("CARGO_PKG_VERSION") })))
+}
+
+#[tauri::command]
+pub async fn render_qrcode(req: QrRenderReq) -> CmdResult {
+    let content = req.content.trim().to_string();
+    let image_src = render_qr_data_url(&content, req.width, req.margin)?;
+    Ok(wrap_ok(json!({
+        "content": content,
+        "image_src": image_src
+    })))
+}
+
+#[tauri::command]
+pub async fn push_app_log(app: AppHandle, req: AppLogReq, state: State<'_, AppState>) -> CmdResult {
+    let (line, logs) = emit_app_log_line(&app, &state, &req.message).await;
+    Ok(wrap_ok(json!({ "line": line, "logs": logs })))
+}
+
+#[tauri::command]
+pub async fn get_app_logs(state: State<'_, AppState>) -> CmdResult {
+    let runtime = state.runtime.lock().await;
+    Ok(wrap_ok(json!(runtime.app_logs.clone())))
+}
+
+#[tauri::command]
+pub async fn clear_app_logs(state: State<'_, AppState>) -> CmdResult {
+    let mut runtime = state.runtime.lock().await;
+    runtime.app_logs.clear();
+    Ok(wrap_ok(json!({})))
 }

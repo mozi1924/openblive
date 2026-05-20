@@ -14,6 +14,7 @@ pub struct RuntimeState {
     pub obs_ws_connected: bool,
     pub obs_ws_last_error: String,
     pub obs_ws_last_checked_at: i64,
+    pub app_logs: Vec<String>,
     pub config: PersistConfig,
 }
 
