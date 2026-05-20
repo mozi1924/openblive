@@ -32,7 +32,7 @@ use commands::{
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
 use state::{restore_session_from_current, AppState, RuntimeState};
-use tauri::Manager;
+use tauri::{webview::PageLoadEvent, Manager};
 use tokio::sync::Mutex;
 use tokio::time::Duration;
 
@@ -75,6 +75,18 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::reveal_main_window(app);
         }))
+        .on_page_load(|webview, payload| {
+            if webview.label() != "main" {
+                return;
+            }
+            if let PageLoadEvent::Finished = payload.event() {
+                let app_handle = webview.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<AppState>();
+                    commands::sync_overlay_window_from_config(app_handle.clone(), &state).await;
+                });
+            }
+        })
         .manage(app_state);
 
     #[cfg(desktop)]
@@ -84,11 +96,6 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
-            let overlay_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let state = overlay_handle.state::<AppState>();
-                commands::sync_overlay_window_from_config(overlay_handle.clone(), &state).await;
-            });
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
