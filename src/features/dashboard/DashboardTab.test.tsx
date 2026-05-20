@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardTab } from "./DashboardTab";
 import type { LiveDashboardSnapshot } from "../../types/studio";
 
 const snapshot: LiveDashboardSnapshot = {
+  current_uid: "1001",
   overview: [
     { name: "收益", index: "income", me: 1, aver: 0.8, max: 1.4 },
   ],
@@ -86,6 +87,11 @@ vi.mock("recharts", async () => {
 });
 
 describe("DashboardTab", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
   it("renders empty state when there is no snapshot data", async () => {
     const { useDashboardData } = await import("./useDashboardData");
     vi.mocked(useDashboardData).mockReturnValue({
@@ -116,5 +122,20 @@ describe("DashboardTab", () => {
     expect(screen.getByText("最近多场趋势")).toBeTruthy();
     expect(screen.getByText("Night Stream")).toBeTruthy();
     expect(screen.getByText("弹幕高峰")).toBeTruthy();
+  });
+
+  it("does not render a mismatched account snapshot", async () => {
+    const { useDashboardData } = await import("./useDashboardData");
+    vi.mocked(useDashboardData).mockReturnValue({
+      snapshot,
+      loading: false,
+      refreshing: false,
+      error: null,
+      reload: vi.fn(),
+    });
+
+    render(<DashboardTab locale="zh-CN" currentUid="another-account" />);
+
+    expect(screen.getAllByText("暂无可展示的直播数据").length).toBeGreaterThan(0);
   });
 });

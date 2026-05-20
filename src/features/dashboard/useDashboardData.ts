@@ -1,31 +1,37 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { studioApi } from "../../services/studioApi";
 import type { LiveDashboardSnapshot } from "../../types/studio";
 
-type DashboardCache = {
-  currentUid: string | null;
-  snapshot: LiveDashboardSnapshot | null;
-};
+const dashboardCache = new Map<string, LiveDashboardSnapshot>();
 
-let dashboardCache: DashboardCache = {
-  currentUid: null,
-  snapshot: null,
-};
+function getCachedSnapshot(uid: string | null): LiveDashboardSnapshot | null {
+  if (!uid) {
+    return null;
+  }
+  return dashboardCache.get(uid) || null;
+}
+
+export function resetDashboardCacheForTests() {
+  dashboardCache.clear();
+}
 
 export function useDashboardData(currentUid: string | null) {
+  const activeUidRef = useRef<string | null>(currentUid);
+  const requestVersionRef = useRef(0);
+
   const [snapshot, setSnapshot] = useState<LiveDashboardSnapshot | null>(() =>
-    dashboardCache.currentUid === currentUid ? dashboardCache.snapshot : null,
+    getCachedSnapshot(currentUid),
   );
-  const [loading, setLoading] = useState(
-    Boolean(currentUid) && !(dashboardCache.currentUid === currentUid && dashboardCache.snapshot),
-  );
+  const [loading, setLoading] = useState(Boolean(currentUid) && !getCachedSnapshot(currentUid));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
-    async (force = false) => {
-      if (!currentUid) {
-        dashboardCache = { currentUid: null, snapshot: null };
+    async (options?: { background?: boolean }) => {
+      const uid = currentUid?.trim() || null;
+      const requestVersion = ++requestVersionRef.current;
+
+      if (!uid) {
         setSnapshot(null);
         setLoading(false);
         setRefreshing(false);
@@ -33,23 +39,16 @@ export function useDashboardData(currentUid: string | null) {
         return;
       }
 
-      const hasCached =
-        !force &&
-        dashboardCache.currentUid === currentUid &&
-        dashboardCache.snapshot !== null;
-      if (hasCached) {
-        setSnapshot(dashboardCache.snapshot);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
-      const hasExistingSnapshot = Boolean(snapshot);
+      const cached = getCachedSnapshot(uid);
+      const hasExistingSnapshot = Boolean(cached);
       setError(null);
-      if (hasExistingSnapshot) {
+      if (options?.background || hasExistingSnapshot) {
+        setSnapshot(cached);
+        setLoading(false);
         setRefreshing(true);
       } else {
         setLoading(true);
+        setRefreshing(false);
       }
 
       try {
@@ -57,37 +56,60 @@ export function useDashboardData(currentUid: string | null) {
         if (response.code !== 0 || !response.data) {
           throw new Error(response.msg || "load dashboard failed");
         }
-        dashboardCache = {
-          currentUid,
-          snapshot: response.data,
-        };
+        if (
+          requestVersion !== requestVersionRef.current ||
+          activeUidRef.current !== uid ||
+          response.data.current_uid !== uid
+        ) {
+          return;
+        }
+
+        dashboardCache.set(uid, response.data);
         setSnapshot(response.data);
       } catch (nextError) {
+        if (
+          requestVersion !== requestVersionRef.current ||
+          activeUidRef.current !== uid
+        ) {
+          return;
+        }
         setError(String(nextError));
       } finally {
+        if (
+          requestVersion !== requestVersionRef.current ||
+          activeUidRef.current !== uid
+        ) {
+          return;
+        }
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [currentUid, snapshot],
+    [currentUid],
   );
 
   useEffect(() => {
-    const cached =
-      dashboardCache.currentUid === currentUid ? dashboardCache.snapshot : null;
+    activeUidRef.current = currentUid?.trim() || null;
+    const cached = getCachedSnapshot(activeUidRef.current);
     setSnapshot(cached);
     setError(null);
-    if (!currentUid) {
+    requestVersionRef.current += 1;
+
+    if (!activeUidRef.current) {
       setLoading(false);
       setRefreshing(false);
       return;
     }
+
     if (cached) {
       setLoading(false);
-      setRefreshing(false);
+      setRefreshing(true);
+      void load({ background: true });
       return;
     }
-    void load(true);
+    setLoading(true);
+    setRefreshing(false);
+    void load();
   }, [currentUid, load]);
 
   return {
@@ -95,6 +117,6 @@ export function useDashboardData(currentUid: string | null) {
     loading,
     refreshing,
     error,
-    reload: () => load(true),
+    reload: () => load({ background: Boolean(getCachedSnapshot(currentUid)) }),
   };
 }

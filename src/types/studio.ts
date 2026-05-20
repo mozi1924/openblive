@@ -371,6 +371,7 @@ export type LiveSessionDetail = {
 };
 
 export type LiveDashboardSnapshot = {
+  current_uid: string;
   overview: LiveOverviewMetric[];
   sessions: LiveSessionSummary[];
   latest_session?: LiveSessionDetail | null;

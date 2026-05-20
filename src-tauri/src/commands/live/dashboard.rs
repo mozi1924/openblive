@@ -71,6 +71,7 @@ pub struct LiveSessionDetail {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LiveDashboardSnapshot {
+    current_uid: String,
     overview: Vec<LiveOverviewMetric>,
     sessions: Vec<LiveSessionSummary>,
     latest_session: Option<LiveSessionDetail>,
@@ -96,7 +97,7 @@ enum DashboardFetchError {
 }
 
 pub async fn get_live_dashboard_snapshot_inner(state: State<'_, AppState>) -> CmdResult {
-    let (_uid, _room_id, _csrf, cookie) = {
+    let (uid, _room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
         resolve_current_auth_context(&runtime)?
     };
@@ -177,6 +178,7 @@ pub async fn get_live_dashboard_snapshot_inner(state: State<'_, AppState>) -> Cm
     }
 
     let snapshot = LiveDashboardSnapshot {
+        current_uid: uid,
         overview,
         sessions,
         latest_session,

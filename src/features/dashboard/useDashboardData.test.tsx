@@ -1,10 +1,11 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { useDashboardData } from "./useDashboardData";
+import { resetDashboardCacheForTests, useDashboardData } from "./useDashboardData";
 import { studioApi } from "../../services/studioApi";
 import type { LiveDashboardSnapshot } from "../../types/studio";
 
 const snapshot: LiveDashboardSnapshot = {
+  current_uid: "1001",
   overview: [],
   sessions: [
     {
@@ -48,6 +49,7 @@ function HookHarness({ uid }: { uid: string | null }) {
 describe("useDashboardData", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    resetDashboardCacheForTests();
     cleanup();
   });
 
@@ -72,7 +74,7 @@ describe("useDashboardData", () => {
       .mockResolvedValueOnce({
         code: 0,
         msg: "ok",
-        data: snapshot,
+        data: { ...snapshot, current_uid: "2002" },
       })
       .mockRejectedValueOnce(new Error("network"));
 
@@ -89,5 +91,99 @@ describe("useDashboardData", () => {
     });
     expect(screen.getByTestId("title").textContent).toBe("Session A");
     expect(apiSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores stale responses after switching accounts", async () => {
+    let resolveFirst!: (value: {
+      code: number;
+      msg: string;
+      data: LiveDashboardSnapshot;
+    }) => void;
+    const firstPromise = new Promise<{ code: number; msg: string; data: LiveDashboardSnapshot }>(
+      (resolve) => {
+        resolveFirst = resolve;
+      },
+    );
+
+    const apiSpy = vi
+      .spyOn(studioApi, "getLiveDashboardSnapshot")
+      .mockImplementationOnce(() => firstPromise)
+      .mockResolvedValueOnce({
+        code: 0,
+        msg: "ok",
+        data: {
+          ...snapshot,
+          current_uid: "3002",
+          sessions: [{ ...snapshot.sessions[0], title: "Session B" }],
+        },
+      });
+
+    const { rerender } = render(<HookHarness uid="3001" />);
+    rerender(<HookHarness uid="3002" />);
+
+    resolveFirst({
+      code: 0,
+      msg: "ok",
+      data: {
+        ...snapshot,
+        current_uid: "3001",
+        sessions: [{ ...snapshot.sessions[0], title: "Session A old" }],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("title").textContent).toBe("Session B");
+    });
+    expect(apiSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("revalidates cached data when returning to an account", async () => {
+    const apiSpy = vi
+      .spyOn(studioApi, "getLiveDashboardSnapshot")
+      .mockResolvedValueOnce({
+        code: 0,
+        msg: "ok",
+        data: {
+          ...snapshot,
+          current_uid: "4001",
+          sessions: [{ ...snapshot.sessions[0], title: "Session A cached" }],
+        },
+      })
+      .mockResolvedValueOnce({
+        code: 0,
+        msg: "ok",
+        data: {
+          ...snapshot,
+          current_uid: "4002",
+          sessions: [{ ...snapshot.sessions[0], title: "Session B" }],
+        },
+      })
+      .mockResolvedValueOnce({
+        code: 0,
+        msg: "ok",
+        data: {
+          ...snapshot,
+          current_uid: "4001",
+          sessions: [{ ...snapshot.sessions[0], title: "Session A refreshed" }],
+        },
+      });
+
+    const { rerender } = render(<HookHarness uid="4001" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("title").textContent).toBe("Session A cached");
+    });
+
+    rerender(<HookHarness uid="4002" />);
+    await waitFor(() => {
+      expect(screen.getByTestId("title").textContent).toBe("Session B");
+    });
+
+    rerender(<HookHarness uid="4001" />);
+    expect(screen.getByTestId("title").textContent).toBe("Session A cached");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("title").textContent).toBe("Session A refreshed");
+    });
+    expect(apiSpy).toHaveBeenCalledTimes(3);
   });
 });

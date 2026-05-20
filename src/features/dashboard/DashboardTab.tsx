@@ -16,8 +16,10 @@ type DashboardTabProps = {
 export function DashboardTab({ locale, currentUid }: DashboardTabProps) {
   const { snapshot, loading, refreshing, error, reload } =
     useDashboardData(currentUid);
+  const activeSnapshot =
+    snapshot && snapshot.current_uid === currentUid ? snapshot : null;
 
-  if (loading && !snapshot) {
+  if (loading && !activeSnapshot) {
     return (
       <DashboardEmptyState
         title={t(locale, "ui.dashboard.refreshing")}
@@ -26,7 +28,7 @@ export function DashboardTab({ locale, currentUid }: DashboardTabProps) {
     );
   }
 
-  if (!snapshot && error) {
+  if (!activeSnapshot && error) {
     return (
       <DashboardEmptyState
         title={t(locale, "ui.dashboard.error.title")}
@@ -35,7 +37,10 @@ export function DashboardTab({ locale, currentUid }: DashboardTabProps) {
     );
   }
 
-  if (!snapshot || (snapshot.sessions.length === 0 && snapshot.overview.length === 0)) {
+  if (
+    !activeSnapshot ||
+    (activeSnapshot.sessions.length === 0 && activeSnapshot.overview.length === 0)
+  ) {
     return (
       <DashboardEmptyState
         title={t(locale, "ui.dashboard.empty.title")}
@@ -50,7 +55,7 @@ export function DashboardTab({ locale, currentUid }: DashboardTabProps) {
         <div>
           <p className="text-sm text-gray-400">
             {tf(locale, "ui.dashboard.updated_at", {
-              value: formatDateTime(snapshot.fetched_at, locale),
+              value: formatDateTime(activeSnapshot.fetched_at, locale),
             })}
           </p>
           {error ? (
@@ -74,9 +79,9 @@ export function DashboardTab({ locale, currentUid }: DashboardTabProps) {
       </div>
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.25fr)]">
-        <OverviewRadarPanel locale={locale} metrics={snapshot.overview} />
-        {snapshot.sessions.length > 0 ? (
-          <HistoricalTrendPanel locale={locale} sessions={snapshot.sessions} />
+        <OverviewRadarPanel locale={locale} metrics={activeSnapshot.overview} />
+        {activeSnapshot.sessions.length > 0 ? (
+          <HistoricalTrendPanel locale={locale} sessions={activeSnapshot.sessions} />
         ) : (
           <DashboardEmptyState
             title={t(locale, "ui.dashboard.section.trend")}
@@ -85,8 +90,8 @@ export function DashboardTab({ locale, currentUid }: DashboardTabProps) {
         )}
       </div>
 
-      {snapshot.latest_session ? (
-        <LatestSessionPanel locale={locale} session={snapshot.latest_session} />
+      {activeSnapshot.latest_session ? (
+        <LatestSessionPanel locale={locale} session={activeSnapshot.latest_session} />
       ) : (
         <DashboardEmptyState
           title={t(locale, "ui.dashboard.section.latest")}
