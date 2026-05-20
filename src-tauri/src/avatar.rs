@@ -27,7 +27,14 @@ fn avatar_path(config_path: &Path, uid: &str) -> PathBuf {
     avatar_dir(config_path).join(uid)
 }
 
+fn is_safe_uid(uid: &str) -> bool {
+    !uid.is_empty() && uid.chars().all(|ch| ch.is_ascii_digit())
+}
+
 pub fn has_cached_face(config_path: &Path, uid: &str) -> bool {
+    if !is_safe_uid(uid) {
+        return false;
+    }
     avatar_path(config_path, uid).is_file()
 }
 
@@ -46,6 +53,9 @@ fn detect_mime(bytes: &[u8]) -> &'static str {
 }
 
 pub fn load_cached_face_data_url(config_path: &Path, uid: &str) -> Option<String> {
+    if !is_safe_uid(uid) {
+        return None;
+    }
     let path = avatar_path(config_path, uid);
     let bytes = std::fs::read(path).ok()?;
     if bytes.is_empty() {
@@ -73,6 +83,10 @@ pub async fn refresh_avatar_cache(
     uid: &str,
     face: &str,
 ) -> Result<(), String> {
+    if !is_safe_uid(uid) {
+        return Err("Invalid UID format".to_string());
+    }
+
     let face_url = normalize_face_url(face);
     if face_url.is_empty() {
         return Ok(());
@@ -102,6 +116,82 @@ pub async fn refresh_avatar_cache(
     Ok(())
 }
 
-pub fn delete_avatar_cache(config_path: &Path, uid: &str) {
-    let _ = std::fs::remove_file(avatar_path(config_path, uid));
+pub fn delete_avatar_cache(config_path: &Path, uid: &str) -> Result<(), String> {
+    if !is_safe_uid(uid) {
+        return Err("Invalid UID format".to_string());
+    }
+
+    let dir = avatar_dir(config_path);
+    let path = avatar_path(config_path, uid);
+    if !path.starts_with(&dir) {
+        return Err("Resolved avatar cache path is outside of avatar directory".to_string());
+    }
+
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{delete_avatar_cache, has_cached_face};
+    use std::path::PathBuf;
+
+    fn temp_config_path(name: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        dir.push(format!("openblive-avatar-test-{name}-{}-{now}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("config.json")
+    }
+
+    #[test]
+    fn has_cached_face_rejects_invalid_uid() {
+        let config_path = temp_config_path("invalid_uid_cached_face");
+        assert!(!has_cached_face(&config_path, "../../etc/passwd"));
+        let _ = std::fs::remove_dir_all(
+            config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".")),
+        );
+    }
+
+    #[test]
+    fn delete_avatar_cache_rejects_invalid_uid() {
+        let config_path = temp_config_path("invalid_uid_delete");
+        let result = delete_avatar_cache(&config_path, "../123");
+        assert!(result.is_err());
+        let _ = std::fs::remove_dir_all(
+            config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".")),
+        );
+    }
+
+    #[test]
+    fn delete_avatar_cache_deletes_existing_file_for_valid_uid() {
+        let config_path = temp_config_path("valid_uid_delete");
+        let avatar_dir = config_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("avatars");
+        let _ = std::fs::create_dir_all(&avatar_dir);
+        let avatar_file = avatar_dir.join("12345");
+        let _ = std::fs::write(&avatar_file, b"demo");
+        assert!(avatar_file.exists());
+
+        let result = delete_avatar_cache(&config_path, "12345");
+        assert!(result.is_ok());
+        assert!(!avatar_file.exists());
+
+        let _ = std::fs::remove_dir_all(
+            config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(".")),
+        );
+    }
 }

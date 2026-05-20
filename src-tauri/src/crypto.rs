@@ -58,6 +58,13 @@ fn write_master_key_to_file(key: &[u8; 32]) {
     let _ = std::fs::write(&path, encoded);
 }
 
+fn remove_master_key_file() {
+    let path = local_master_key_path();
+    if path.exists() {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 pub fn get_or_create_master_key() -> Result<[u8; 32]> {
     let entry = Entry::new("OpenBliveStudio", "credential_master_key").ok();
     let keyring_key = entry
@@ -68,17 +75,23 @@ pub fn get_or_create_master_key() -> Result<[u8; 32]> {
 
     if let Some(key) = keyring_key {
         eprintln!("[auth][key] master key source=keyring");
-        if file_key != Some(key) {
-            write_master_key_to_file(&key);
-        }
+        remove_master_key_file();
         return Ok(key);
     }
 
     if let Some(key) = file_key {
-        eprintln!("[auth][key] master key source=local_file");
+        eprintln!("[auth][key] master key source=local_file_fallback");
         if let Some(item) = entry.as_ref() {
             let encoded = base64::engine::general_purpose::STANDARD.encode(key);
-            let _ = item.set_password(&encoded);
+            match item.set_password(&encoded) {
+                Ok(()) => {
+                    eprintln!("[auth][key] master key migrated_to=keyring");
+                    remove_master_key_file();
+                }
+                Err(error) => {
+                    eprintln!("[auth][key] keyring store failed, keep local fallback: {error}");
+                }
+            }
         }
         return Ok(key);
     }
@@ -87,10 +100,20 @@ pub fn get_or_create_master_key() -> Result<[u8; 32]> {
     rand::rngs::OsRng.fill_bytes(&mut key);
     let encoded = base64::engine::general_purpose::STANDARD.encode(key);
     if let Some(item) = entry.as_ref() {
-        let _ = item.set_password(&encoded);
+        match item.set_password(&encoded) {
+            Ok(()) => {
+                eprintln!("[auth][key] master key source=new_generated_keyring");
+                remove_master_key_file();
+                return Ok(key);
+            }
+            Err(error) => {
+                eprintln!("[auth][key] keyring unavailable, fallback to local file: {error}");
+            }
+        }
     }
+
     write_master_key_to_file(&key);
-    eprintln!("[auth][key] master key source=new_generated");
+    eprintln!("[auth][key] master key source=new_generated_local_file_fallback");
     Ok(key)
 }
 

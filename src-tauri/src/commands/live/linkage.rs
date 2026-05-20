@@ -52,7 +52,35 @@ pub(crate) fn empty_command_template_context() -> CommandTemplateContext {
     }
 }
 
-pub(crate) fn apply_command_template(raw: &str, context: &CommandTemplateContext) -> String {
+fn is_safe_template_value(value: &str) -> bool {
+    value.chars().all(|ch| {
+        ch.is_ascii_alphanumeric()
+            || matches!(
+                ch,
+                '/' | '.' | ':' | '=' | '?' | '&' | '_' | '-' | '%' | '+' | '~' | ',' | '@'
+            )
+    })
+}
+
+pub(crate) fn apply_command_template(
+    raw: &str,
+    context: &CommandTemplateContext,
+) -> Result<String, String> {
+    let variables = [
+        ("server", context.server.as_str()),
+        ("stream_key", context.stream_key.as_str()),
+        ("stream_code", context.stream_code.as_str()),
+        ("stream_url", context.stream_url.as_str()),
+        ("protocol", context.protocol.as_str()),
+    ];
+    for (name, value) in variables {
+        if !is_safe_template_value(value) {
+            return Err(format!(
+                "Unsafe characters detected in command template variable: {name}"
+            ));
+        }
+    }
+
     let mut cmd = raw.to_string();
     let replacements = [
         ("{{server}}", context.server.as_str()),
@@ -74,7 +102,7 @@ pub(crate) fn apply_command_template(raw: &str, context: &CommandTemplateContext
     for (from, to) in replacements {
         cmd = cmd.replace(from, to);
     }
-    cmd
+    Ok(cmd)
 }
 
 pub(crate) async fn spawn_shell_command(raw_command: &str) -> Result<(), String> {
@@ -299,4 +327,67 @@ pub(crate) async fn obs_ws_probe(url: &str, password: &str) -> Result<(), String
     let req_id = obs_send_request(&mut write, "GetStreamStatus", json!({})).await?;
     obs_wait_request_response(&mut read, &req_id, "GetStreamStatus").await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        apply_command_template, build_command_template_context, CommandTemplateContext,
+        StreamEndpoint,
+    };
+    use std::collections::BTreeMap;
+
+    fn demo_context() -> CommandTemplateContext {
+        CommandTemplateContext {
+            server: "rtmp://example.com/live".to_string(),
+            stream_key: "key_abc-123".to_string(),
+            stream_code: "/live/key_abc-123".to_string(),
+            stream_url: "rtmp://example.com/live/key_abc-123".to_string(),
+            protocol: "rtmp".to_string(),
+        }
+    }
+
+    #[test]
+    fn apply_command_template_replaces_placeholders() {
+        let context = demo_context();
+        let output = apply_command_template(
+            "ffmpeg -re -i in.mp4 -f flv {stream_url}",
+            &context,
+        )
+        .expect("template should be valid");
+        assert_eq!(
+            output,
+            "ffmpeg -re -i in.mp4 -f flv rtmp://example.com/live/key_abc-123"
+        );
+    }
+
+    #[test]
+    fn apply_command_template_rejects_unsafe_value() {
+        let mut context = demo_context();
+        context.stream_key = "abc;rm -rf /".to_string();
+        let err = apply_command_template("{stream_key}", &context)
+            .expect_err("unsafe template variable must be rejected");
+        assert!(err.contains("stream_key"));
+    }
+
+    #[test]
+    fn build_command_template_context_uses_query_key_fallback() {
+        let mut query = BTreeMap::new();
+        query.insert("key".to_string(), "fallback_key".to_string());
+        let endpoint = StreamEndpoint {
+            addr: "rtmp://localhost/live".to_string(),
+            code: "/live/abc".to_string(),
+            full_url: "rtmp://localhost/live/abc".to_string(),
+            protocol: "rtmp".to_string(),
+            provider: String::new(),
+            new_link: String::new(),
+            stream_name: String::new(),
+            stream_key: String::new(),
+            schedule: String::new(),
+            pflag: String::new(),
+            query,
+        };
+        let context = build_command_template_context(&endpoint);
+        assert_eq!(context.stream_key, "fallback_key");
+    }
 }

@@ -137,7 +137,7 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
             }
         }
         "command" => {
-            let command = apply_command_template(&start_command_template, &primary_context);
+            let command = apply_command_template(&start_command_template, &primary_context)?;
             spawn_shell_command(&command).await
         }
         _ => Ok(()),
@@ -357,7 +357,7 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
                 }
             }
             "command" => {
-                let command = apply_command_template(&stop_command_template, &empty_context);
+                let command = apply_command_template(&stop_command_template, &empty_context)?;
                 spawn_shell_command(&command).await
             }
             _ => Ok(()),

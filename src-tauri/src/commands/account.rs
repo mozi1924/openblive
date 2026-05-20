@@ -980,8 +980,20 @@ pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResul
 #[tauri::command]
 pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
+    if !req.uid.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("i18n.account.error.account_not_found".into());
+    }
+    if !runtime.config.users.contains_key(&req.uid) {
+        return Err("i18n.account.error.account_not_found".into());
+    }
+
     runtime.config.users.remove(&req.uid);
-    delete_avatar_cache(&state.config_path, &req.uid);
+    if let Err(error) = delete_avatar_cache(&state.config_path, &req.uid) {
+        eprintln!(
+            "[auth][logout] delete avatar cache failed uid={}: {}",
+            req.uid, error
+        );
+    }
     if runtime.config.current_uid.as_deref() == Some(&req.uid) {
         if let Some(task) = runtime.danmu_task.take() {
             task.abort();

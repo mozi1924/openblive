@@ -26,6 +26,8 @@ struct AppSettingsFile {
     #[serde(default)]
     obs_ws_password: String,
     #[serde(default)]
+    obs_ws_password_enc: String,
+    #[serde(default)]
     obs_ws_auto_start_on_live: bool,
     #[serde(default)]
     obs_ws_auto_stop_on_live_end: bool,
@@ -282,7 +284,22 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
         cfg.live_control_mode = app_file.live_control_mode;
         cfg.obs_ws_enabled = app_file.obs_ws_enabled;
         cfg.obs_ws_url = app_file.obs_ws_url;
-        cfg.obs_ws_password = app_file.obs_ws_password;
+        cfg.obs_ws_password = if !app_file.obs_ws_password_enc.trim().is_empty() {
+            match decrypt_text(&app_file.obs_ws_password_enc, key) {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("[auth][config] decrypt obs_ws_password failed: {error}");
+                    String::new()
+                }
+            }
+        } else if app_file.obs_ws_password.trim().is_empty() {
+            String::new()
+        } else {
+            match decrypt_text(&app_file.obs_ws_password, key) {
+                Ok(value) => value,
+                Err(_) => app_file.obs_ws_password,
+            }
+        };
         cfg.obs_ws_auto_start_on_live = app_file.obs_ws_auto_start_on_live;
         cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
         cfg.on_live_start_command = app_file.on_live_start_command;
@@ -397,7 +414,18 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     app_file.live_control_mode = cfg.live_control_mode.clone();
     app_file.obs_ws_enabled = cfg.obs_ws_enabled;
     app_file.obs_ws_url = cfg.obs_ws_url.clone();
-    app_file.obs_ws_password = cfg.obs_ws_password.clone();
+    app_file.obs_ws_password = String::new();
+    app_file.obs_ws_password_enc = if cfg.obs_ws_password.trim().is_empty() {
+        String::new()
+    } else {
+        match encrypt_text(&cfg.obs_ws_password, key) {
+            Ok(enc) => enc,
+            Err(error) => {
+                eprintln!("[auth][config] encrypt obs_ws_password failed: {error}");
+                String::new()
+            }
+        }
+    };
     app_file.obs_ws_auto_start_on_live = cfg.obs_ws_auto_start_on_live;
     app_file.obs_ws_auto_stop_on_live_end = cfg.obs_ws_auto_stop_on_live_end;
     app_file.on_live_start_command = cfg.on_live_start_command.clone();
@@ -485,4 +513,82 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     write_json(&app_config_path(path), &app_file);
     write_json(&account_config_path(path), &account_file);
     write_json(&live_cache_config_path(path), &live_file);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{app_config_path, load_config, save_config};
+    use crate::models::PersistConfig;
+    use serde_json::Value;
+    use std::path::{Path, PathBuf};
+
+    fn test_key() -> [u8; 32] {
+        [42u8; 32]
+    }
+
+    fn temp_config_path(name: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        dir.push(format!("openblive-config-test-{name}-{}-{now}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        dir.join("config.json")
+    }
+
+    fn cleanup(config_path: &Path) {
+        let parent = config_path.parent().unwrap_or_else(|| Path::new("."));
+        let _ = std::fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn save_and_load_obs_password_uses_encrypted_field() {
+        let config_path = temp_config_path("obs_encrypt_roundtrip");
+        let mut cfg = PersistConfig::default();
+        cfg.obs_ws_password = "super-secret-password".to_string();
+
+        save_config(&config_path, &cfg, &test_key());
+
+        let app_path = app_config_path(&config_path);
+        let raw = std::fs::read_to_string(&app_path).expect("app.json should exist");
+        let json: Value = serde_json::from_str(&raw).expect("app.json should be valid json");
+
+        assert_eq!(
+            json["obs_ws_password"].as_str().unwrap_or(""),
+            "",
+            "plaintext obs_ws_password should not be persisted"
+        );
+        let encrypted = json["obs_ws_password_enc"].as_str().unwrap_or("");
+        assert!(
+            !encrypted.is_empty(),
+            "encrypted obs_ws_password_enc should be written"
+        );
+        assert_ne!(encrypted, "super-secret-password");
+
+        let loaded = load_config(&config_path, &test_key());
+        assert_eq!(loaded.obs_ws_password, "super-secret-password");
+
+        cleanup(&config_path);
+    }
+
+    #[test]
+    fn load_config_keeps_plaintext_obs_password_for_legacy_file() {
+        let config_path = temp_config_path("obs_plaintext_legacy");
+        let app_path = app_config_path(&config_path);
+        let parent = app_path.parent().unwrap_or_else(|| Path::new("."));
+        let _ = std::fs::create_dir_all(parent);
+        let _ = std::fs::write(
+            &app_path,
+            r#"{
+              "obs_ws_password": "legacy-plain-password",
+              "obs_ws_url": "ws://127.0.0.1:4455"
+            }"#,
+        );
+
+        let loaded = load_config(&config_path, &test_key());
+        assert_eq!(loaded.obs_ws_password, "legacy-plain-password");
+
+        cleanup(&config_path);
+    }
 }
