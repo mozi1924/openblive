@@ -277,7 +277,7 @@ export function DanmuTab({
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full overflow-hidden max-w-5xl mx-auto w-full glass-panel rounded-3xl shadow-2xl bg-[#070a0f]/60 backdrop-blur-xl border border-white/5">
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-[#070a0f]">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 bg-[#090d16]/80 px-6 py-4 gap-4">
         <div className="flex items-center space-x-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-bili-blue/10 border border-bili-blue/20">
