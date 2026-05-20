@@ -9,6 +9,8 @@ fn normalize_face_url(face: &str) -> String {
     let trimmed = face.trim();
     if trimmed.starts_with("//") {
         format!("https:{trimmed}")
+    } else if let Some(stripped) = trimmed.strip_prefix("http://") {
+        format!("https://{stripped}")
     } else {
         trimmed.to_string()
     }

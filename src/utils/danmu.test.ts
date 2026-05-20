@@ -3,8 +3,9 @@ import {
   createLiveEmoticonIndex,
   createSelfDanmuMessage,
   normalizeEmoticonText,
+  upsertIncomingDanmuMessage,
 } from "./danmu";
-import type { LiveEmoticonPackage } from "../types/studio";
+import type { DanmuMsg, LiveEmoticonPackage } from "../types/studio";
 
 const emoticonPackages: LiveEmoticonPackage[] = [
   {
@@ -37,8 +38,10 @@ describe("danmu emoticon helpers", () => {
       "白花300块[热]",
       "主播",
       createLiveEmoticonIndex(emoticonPackages),
+      { sender_face: "http://i0.hdslb.com/bfs/face/test.jpg" },
     );
 
+    expect(message.sender_face).toBe("https://i0.hdslb.com/bfs/face/test.jpg");
     expect(message.segments).toEqual([
       { type: "text", text: "白花300块" },
       {
@@ -55,5 +58,25 @@ describe("danmu emoticon helpers", () => {
         },
       },
     ]);
+  });
+
+  it("replaces optimistic self danmu when websocket echo arrives", () => {
+    const optimistic = createSelfDanmuMessage("1", "主播", undefined, {
+      sender_uid: 42,
+      sender_role: "anchor",
+    });
+    const incoming: DanmuMsg = {
+      id: "server-1",
+      type: "danmu",
+      time: "12:00:01",
+      sender: "主播",
+      sender_uid: 42,
+      sender_role: "viewer",
+      content: "1",
+    };
+
+    const result = upsertIncomingDanmuMessage([optimistic], incoming);
+
+    expect(result).toEqual([incoming]);
   });
 });

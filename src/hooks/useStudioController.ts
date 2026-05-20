@@ -14,6 +14,7 @@ import type {
 import {
   createLiveEmoticonIndex,
   createSelfDanmuMessage,
+  upsertIncomingDanmuMessage,
 } from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
@@ -1151,6 +1152,13 @@ export function useStudioController() {
           text,
           currentUser?.uname || t(localeSetting, "ui.ctrl.me"),
           liveEmoticonMap,
+          currentUser?.uid
+            ? {
+                sender_uid: Number(currentUser.uid),
+                sender_role: "anchor",
+                sender_face: currentUser.face,
+              }
+            : undefined,
         ),
         ...prev,
       ]);
@@ -1159,7 +1167,7 @@ export function useStudioController() {
     }
 
     setDanmuText("");
-  }, [append, currentUser?.uname, danmuText, liveEmoticonMap, localeSetting]);
+  }, [append, currentUser?.uid, currentUser?.uname, danmuText, liveEmoticonMap, localeSetting]);
 
   const loadLiveEmoticons = useCallback(async () => {
     if (!activeUidRef.current || !session?.room_id) {
@@ -1335,12 +1343,10 @@ export function useStudioController() {
         (!message.segments || message.segments.length === 0)
           ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
           : null;
-      setDanmus((prev) => [
-        withFallbackSegments
-          ? { ...withFallbackSegments, id: message.id, type: message.type, time: message.time }
-          : message,
-        ...prev,
-      ]);
+      const resolvedMessage = withFallbackSegments
+        ? { ...message, segments: withFallbackSegments.segments }
+        : message;
+      setDanmus((prev) => upsertIncomingDanmuMessage(prev, resolvedMessage));
       append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
     });
 

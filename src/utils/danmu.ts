@@ -127,11 +127,61 @@ export const createSelfDanmuMessage = (
   content: string,
   sender: string,
   emoticonMap?: Map<string, DanmuEmoticon>,
-): DanmuMsg => ({
-  id: createMessageId(),
-  type: "danmu",
-  time: getNow(),
-  sender,
-  content,
-  segments: emoticonMap ? buildSegments(content, emoticonMap) : undefined,
-});
+  senderMeta?: Pick<
+    DanmuMsg,
+    | "sender_uid"
+    | "sender_role"
+    | "sender_name_color"
+    | "sender_guard_level"
+    | "sender_face"
+  >,
+): DanmuMsg => {
+  const normalizedSenderMeta = senderMeta
+    ? {
+        ...senderMeta,
+        sender_face: senderMeta.sender_face ? normalizeAssetUrl(senderMeta.sender_face) : undefined,
+      }
+    : undefined;
+
+  return {
+    id: createMessageId(),
+    type: "danmu",
+    time: getNow(),
+    created_at_ms: Date.now(),
+    sender,
+    content,
+    optimistic: true,
+    ...normalizedSenderMeta,
+    segments: emoticonMap ? buildSegments(content, emoticonMap) : undefined,
+  };
+};
+
+const isSameSender = (left: DanmuMsg, right: DanmuMsg) => {
+  if (typeof left.sender_uid === "number" && typeof right.sender_uid === "number") {
+    return left.sender_uid === right.sender_uid;
+  }
+  return left.sender === right.sender;
+};
+
+export const upsertIncomingDanmuMessage = (
+  prev: DanmuMsg[],
+  incoming: DanmuMsg,
+): DanmuMsg[] => {
+  if (incoming.type !== "danmu") {
+    return [incoming, ...prev];
+  }
+
+  const optimisticIndex = prev.findIndex(
+    (message) =>
+      message.type === "danmu" &&
+      message.optimistic &&
+      isSameSender(message, incoming) &&
+      message.content === incoming.content,
+  );
+
+  if (optimisticIndex === -1) {
+    return [incoming, ...prev];
+  }
+
+  return prev.map((message, index) => (index === optimisticIndex ? incoming : message));
+};

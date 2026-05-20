@@ -186,8 +186,20 @@ export type DanmuMsg = {
   id: string;
   type: "danmu" | "gift" | "guard" | "system";
   time: string;
+  created_at_ms?: number;
   sender: string;
   content: string;
+  sender_uid?: number;
+  sender_role?: "viewer" | "anchor" | "admin" | "guard";
+  sender_name_color?: string;
+  sender_guard_level?: number;
+  sender_face?: string;
+  gift_name?: string;
+  gift_count?: number;
+  gift_coin_type?: string;
+  gift_unit_price?: number;
+  gift_total_coin?: number;
+  optimistic?: boolean;
   segments?: DanmuContentSegment[];
 };
 
