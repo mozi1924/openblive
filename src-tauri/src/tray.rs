@@ -60,10 +60,10 @@ fn current_live_status_label(app: &AppHandle) -> String {
     let Ok(runtime) = state.runtime.try_lock() else {
         return crate::i18n::tr("zh-CN", "tray.live.loading");
     };
-    if runtime.session.is_live {
-        crate::i18n::tr_config(&runtime.config, "tray.live.on")
-    } else {
-        crate::i18n::tr_config(&runtime.config, "tray.live.off")
+    match runtime.session.live_status.unwrap_or(0) {
+        1 => crate::i18n::tr_config(&runtime.config, "tray.live.on"),
+        2 => crate::i18n::tr_config(&runtime.config, "tray.live.round"),
+        _ => crate::i18n::tr_config(&runtime.config, "tray.live.off"),
     }
 }
 

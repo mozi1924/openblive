@@ -108,6 +108,7 @@ export function useStudioController() {
   const currentUserRef = useRef<User | null>(null);
   const parentRef = useRef("");
   const childRef = useRef("");
+  const syncStatusCacheHintRef = useRef("");
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   const liveEmoticonMap = useMemo(
@@ -399,12 +400,23 @@ export function useStudioController() {
     const res = await studioApi
       .syncLiveStatus()
       .catch(() => studioApi.getSession());
-    setSession(res.data || null);
-    if (!res.data?.is_live) {
+    const nextSession = res.data || null;
+    setSession(nextSession);
+    const liveStatus = nextSession?.live_status ?? (nextSession?.is_live ? 1 : 0);
+    if (liveStatus !== 1) {
       setRtmp(null);
     }
+    if (nextSession?.from_cache) {
+      const errorCode = nextSession.error_code || "SYNC_FAILED";
+      if (syncStatusCacheHintRef.current !== errorCode) {
+        append(tf(localeSetting, "ui.ctrl.sync_status_cache_hint", { code: errorCode }));
+        syncStatusCacheHintRef.current = errorCode;
+      }
+    } else {
+      syncStatusCacheHintRef.current = "";
+    }
     await syncTrayMenu();
-  }, [syncTrayMenu]);
+  }, [append, localeSetting, syncTrayMenu]);
 
   const loadSavedUser = useCallback(async () => {
     const res = await studioApi.loadSavedConfig();
@@ -1060,13 +1072,22 @@ export function useStudioController() {
     if (requestUid !== activeUidRef.current) {
       return;
     }
+    const sessionConsistent = res.data?.session_consistent ?? true;
     append(
       res.code === 0
-        ? t(localeSetting, "ui.ctrl.stop_live_ok")
+        ? sessionConsistent
+          ? t(localeSetting, "ui.ctrl.stop_live_ok")
+          : t(localeSetting, "ui.ctrl.stop_live_session_mismatch")
         : tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }),
     );
-    if (res.code === 0) {
+    if (res.code === 0 && sessionConsistent) {
       setDanmuListening(false);
+      setRtmp(null);
+    }
+    if (res.code === 0) {
+      await refreshSession();
+      await loadLinkageStatus();
+      return;
     }
     setRtmp(null);
     await refreshSession();

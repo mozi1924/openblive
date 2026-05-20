@@ -11,9 +11,11 @@ use crate::models::{
 use crate::response::wrap_ok;
 use crate::state::{AppState, RuntimeState};
 use futures_util::{SinkExt, StreamExt};
+use rand::Rng;
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
-use tauri::{AppHandle, State};
+use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
 use tokio_tungstenite::tungstenite::Message;
 
 mod common;
@@ -32,6 +34,18 @@ use stream::{collect_stream_endpoints, select_primary_endpoint};
 
 const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
 const RECENT_AREAS_LIMIT: usize = 6;
+const LIVE_STATUS_OFFLINE: i64 = 0;
+const LIVE_STATUS_LIVE: i64 = 1;
+const LIVE_STATUS_ROUND: i64 = 2;
+const DANMU_RECONNECT_BASE_MS: u64 = 500;
+const DANMU_RECONNECT_MAX_MS: u64 = 30_000;
+const DANMU_RECONNECT_JITTER_MS: u64 = 500;
+
+#[derive(Clone)]
+struct DanmuHost {
+    host: String,
+    port: u64,
+}
 
 fn split_tags(raw: &str) -> Vec<String> {
     raw.split([',', '，'])
@@ -181,18 +195,101 @@ fn sanitized_live_client_version(version: &str, build: u64) -> (String, u64) {
     (normalized_version, normalized_build)
 }
 
+fn normalize_live_status(status: i64) -> i64 {
+    match status {
+        LIVE_STATUS_LIVE => LIVE_STATUS_LIVE,
+        LIVE_STATUS_ROUND => LIVE_STATUS_ROUND,
+        _ => LIVE_STATUS_OFFLINE,
+    }
+}
+
 fn room_live_state(status: i64) -> bool {
-    status == 1
+    matches!(
+        normalize_live_status(status),
+        LIVE_STATUS_LIVE | LIVE_STATUS_ROUND
+    )
+}
+
+fn normalize_session_token(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_string())
+}
+
+fn apply_live_session_identity(
+    session: &mut crate::models::SessionState,
+    live_key: Option<&str>,
+    sub_session_key: Option<&str>,
+) {
+    session.live_key = normalize_session_token(live_key);
+    session.sub_session_key = normalize_session_token(sub_session_key);
+}
+
+fn clear_live_session_identity(session: &mut crate::models::SessionState) {
+    session.live_key = None;
+    session.sub_session_key = None;
+}
+
+fn mark_session_sync_state(
+    session: &mut crate::models::SessionState,
+    from_cache: bool,
+    error_code: Option<&str>,
+) {
+    session.from_cache = from_cache;
+    session.last_sync_at = Some(current_timestamp());
+    session.error_code = error_code.map(|value| value.to_string());
+}
+
+fn extract_danmu_hosts(info: &serde_json::Value) -> Vec<DanmuHost> {
+    let default_host = endpoints::danmu_default_host();
+    let default_port = endpoints::danmu_default_wss_port();
+    let mut hosts = info["data"]["host_list"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|item| {
+                    let host = item["host"].as_str().unwrap_or("").trim();
+                    if host.is_empty() {
+                        return None;
+                    }
+                    Some(DanmuHost {
+                        host: host.to_string(),
+                        port: item["wss_port"].as_u64().unwrap_or(default_port),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if hosts.is_empty() {
+        hosts.push(DanmuHost {
+            host: default_host,
+            port: default_port,
+        });
+    }
+    hosts
+}
+
+fn danmu_reconnect_delay(attempt: u32) -> Duration {
+    let exp = attempt.min(8);
+    let scale = 2u64.saturating_pow(exp);
+    let base = DANMU_RECONNECT_BASE_MS.saturating_mul(scale);
+    let capped = base.min(DANMU_RECONNECT_MAX_MS);
+    let jitter = rand::thread_rng().gen_range(0..=DANMU_RECONNECT_JITTER_MS);
+    Duration::from_millis(capped.saturating_add(jitter))
 }
 
 fn apply_room_status_to_session(
     session: &mut crate::models::SessionState,
     room_info: &serde_json::Value,
 ) {
-    let live_status = room_info["live_status"].as_i64().unwrap_or(0);
+    let live_status = normalize_live_status(room_info["live_status"].as_i64().unwrap_or(0));
     session.live_status = Some(live_status);
     session.is_live = room_live_state(live_status);
     session.live_time = room_info["live_time"].as_str().unwrap_or("").to_string();
+    if !session.is_live {
+        clear_live_session_identity(session);
+    }
 
     if let Some(room_id) = room_info["room_id"].as_i64() {
         session.room_id = room_id.to_string();
@@ -325,34 +422,50 @@ pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(Stri
 
 #[tauri::command]
 pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
-    let (uid, room_id, cookie, fallback_session) = {
-        let runtime = state.runtime.lock().await;
-        let fallback = runtime.session.clone();
+    let (uid, room_id, cookie) = {
+        let mut runtime = state.runtime.lock().await;
         let Some(uid) = runtime.config.current_uid.clone() else {
-            return Ok(wrap_ok(serde_json::to_value(fallback).unwrap()));
+            mark_session_sync_state(&mut runtime.session, true, Some("NO_ACTIVE_USER"));
+            return Ok(wrap_ok(
+                serde_json::to_value(runtime.session.clone()).unwrap(),
+            ));
         };
         let Some(user) = runtime.config.users.get(&uid) else {
-            return Ok(wrap_ok(serde_json::to_value(fallback).unwrap()));
+            mark_session_sync_state(&mut runtime.session, true, Some("ACTIVE_USER_MISSING"));
+            return Ok(wrap_ok(
+                serde_json::to_value(runtime.session.clone()).unwrap(),
+            ));
         };
         let room_id = if user.room_id.trim().is_empty() {
             runtime.session.room_id.clone()
         } else {
             user.room_id.clone()
         };
-        (uid, room_id, user.cookie.clone(), fallback)
+        (uid, room_id, user.cookie.clone())
     };
 
     if room_id.trim().is_empty() {
-        return Ok(wrap_ok(serde_json::to_value(fallback_session).unwrap()));
+        let mut runtime = state.runtime.lock().await;
+        mark_session_sync_state(&mut runtime.session, true, Some("ROOM_ID_MISSING"));
+        return Ok(wrap_ok(
+            serde_json::to_value(runtime.session.clone()).unwrap(),
+        ));
     }
 
     let room_info = match fetch_room_info_by_room_id(&state, &room_id, Some(&cookie)).await {
         Ok(data) => data,
-        Err(_) => return Ok(wrap_ok(serde_json::to_value(fallback_session).unwrap())),
+        Err(_) => {
+            let mut runtime = state.runtime.lock().await;
+            mark_session_sync_state(&mut runtime.session, true, Some("FETCH_ROOM_INFO_FAILED"));
+            return Ok(wrap_ok(
+                serde_json::to_value(runtime.session.clone()).unwrap(),
+            ));
+        }
     };
 
     let mut runtime = state.runtime.lock().await;
     apply_room_status_to_session(&mut runtime.session, &room_info);
+    mark_session_sync_state(&mut runtime.session, false, None);
     if let Some(room_id_long) = room_info["room_id"].as_i64() {
         let room_id_text = room_id_long.to_string();
         runtime.session.room_id = room_id_text.clone();
@@ -944,19 +1057,28 @@ async fn start_live_inner(state: &AppState) -> CmdResult {
         .map(build_command_template_context)
         .unwrap_or_else(empty_command_template_context);
 
-    let (live_control_mode, obs_ws_url, obs_ws_password, start_command_template) = {
+    let (
+        live_control_mode,
+        obs_ws_url,
+        obs_ws_password,
+        start_command_template,
+        obs_ws_auto_start_on_live,
+    ) = {
         let runtime = state.runtime.lock().await;
         (
             normalize_live_control_mode(&runtime.config.live_control_mode).to_string(),
             runtime.config.obs_ws_url.clone(),
             runtime.config.obs_ws_password.clone(),
             runtime.config.on_live_start_command.clone(),
+            runtime.config.obs_ws_auto_start_on_live,
         )
     };
 
     let linkage_result = match live_control_mode.as_str() {
         "obs_ws" => {
-            if primary_context.server.trim().is_empty()
+            if !obs_ws_auto_start_on_live {
+                Ok(())
+            } else if primary_context.server.trim().is_empty()
                 || primary_context.stream_key.trim().is_empty()
             {
                 Err("i18n.live.error.obs_stream_context_missing".to_string())
@@ -990,8 +1112,13 @@ async fn start_live_inner(state: &AppState) -> CmdResult {
         ));
     }
 
+    let live_key = stream_data["live_key"].as_str();
+    let sub_session_key = stream_data["sub_session_key"].as_str();
+
     let mut runtime = state.runtime.lock().await;
     runtime.session.is_live = true;
+    runtime.session.live_status = Some(LIVE_STATUS_LIVE);
+    apply_live_session_identity(&mut runtime.session, live_key, sub_session_key);
     let current_area = if runtime.session.current_area_names.len() >= 2 {
         Some((
             runtime.session.current_area_names[0].clone(),
@@ -1037,9 +1164,16 @@ async fn start_live_inner(state: &AppState) -> CmdResult {
 }
 
 async fn stop_live_inner(state: &AppState) -> CmdResult {
-    let (_uid, room_id, csrf, cookie) = {
+    let (room_id, csrf, cookie, expected_live_key, expected_sub_session_key) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        let (_, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (
+            room_id,
+            csrf,
+            cookie,
+            runtime.session.live_key.clone(),
+            runtime.session.sub_session_key.clone(),
+        )
     };
     if room_id.is_empty() {
         return Err("i18n.live.error.room_id_missing".into());
@@ -1067,18 +1201,31 @@ async fn stop_live_inner(state: &AppState) -> CmdResult {
         .map_err(|error| error.to_string())?;
     let code = value["code"].as_i64().unwrap_or(-1);
     if code == 0 {
-        let (live_control_mode, obs_ws_url, obs_ws_password, stop_command_template) = {
+        let (
+            live_control_mode,
+            obs_ws_url,
+            obs_ws_password,
+            stop_command_template,
+            obs_ws_auto_stop_on_live_end,
+        ) = {
             let runtime = state.runtime.lock().await;
             (
                 normalize_live_control_mode(&runtime.config.live_control_mode).to_string(),
                 runtime.config.obs_ws_url.clone(),
                 runtime.config.obs_ws_password.clone(),
                 runtime.config.on_live_stop_command.clone(),
+                runtime.config.obs_ws_auto_stop_on_live_end,
             )
         };
         let empty_context = empty_command_template_context();
         let linkage_result = match live_control_mode.as_str() {
-            "obs_ws" => obs_ws_stop_stream(&obs_ws_url, &obs_ws_password).await,
+            "obs_ws" => {
+                if obs_ws_auto_stop_on_live_end {
+                    obs_ws_stop_stream(&obs_ws_url, &obs_ws_password).await
+                } else {
+                    Ok(())
+                }
+            }
             "command" => {
                 let command = apply_command_template(&stop_command_template, &empty_context);
                 spawn_shell_command(&command).await
@@ -1090,14 +1237,26 @@ async fn stop_live_inner(state: &AppState) -> CmdResult {
         }
 
         let mut runtime = state.runtime.lock().await;
+        let current_live_key = runtime.session.live_key.clone();
+        let current_sub_session_key = runtime.session.sub_session_key.clone();
+        let same_session = current_live_key == expected_live_key
+            && current_sub_session_key == expected_sub_session_key;
+        if !same_session {
+            eprintln!(
+                "[live][stop] session identity changed during stop, skip local session override"
+            );
+            return Ok(wrap_ok(json!({ "session_consistent": false })));
+        }
         runtime.session.is_live = false;
+        runtime.session.live_status = Some(LIVE_STATUS_OFFLINE);
+        clear_live_session_identity(&mut runtime.session);
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
                 clear_user_auth_flags(user);
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
-        Ok(wrap_ok(json!({})))
+        Ok(wrap_ok(json!({ "session_consistent": true })))
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
@@ -1152,6 +1311,17 @@ pub async fn stop_live_flow_inner(state: &AppState) -> CmdResult {
     if code != 0 {
         return Ok(stop_result);
     }
+    let session_consistent = stop_result["data"]["session_consistent"]
+        .as_bool()
+        .unwrap_or(true);
+    if !session_consistent {
+        return Ok(wrap_ok(json!({
+            "live_stopped": false,
+            "danmu_monitor_stopped": false,
+            "danmu_monitor_msg": "",
+            "session_consistent": false
+        })));
+    }
 
     let danmu_result = stop_danmu_monitor_inner(state)
         .await
@@ -1166,6 +1336,7 @@ pub async fn stop_live_flow_inner(state: &AppState) -> CmdResult {
         "live_stopped": true,
         "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
         "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
+        "session_consistent": true
     })))
 }
 
@@ -1310,6 +1481,14 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
 
 async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
+    if runtime
+        .danmu_task
+        .as_ref()
+        .map(|task| task.is_finished())
+        .unwrap_or(false)
+    {
+        runtime.danmu_task = None;
+    }
     if runtime.danmu_task.is_some() {
         return Ok(json!({
             "started": false,
@@ -1326,66 +1505,145 @@ async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState) -> CmdResu
 
     let app_handle = app.clone();
     runtime.danmu_task = Some(tokio::spawn(async move {
-        if let Ok(info) = get_danmu_info(&client, &room_id).await {
-            let token = info["data"]["token"].as_str().unwrap_or("");
-            let default_danmu_host = endpoints::danmu_default_host();
-            let host = info["data"]["host_list"][0]["host"]
-                .as_str()
-                .unwrap_or(default_danmu_host.as_str());
-            let port = info["data"]["host_list"][0]["wss_port"]
-                .as_u64()
-                .unwrap_or(endpoints::danmu_default_wss_port());
-
-            if let Ok((ws, _)) =
-                tokio_tungstenite::connect_async(endpoints::danmu_wss(host, port)).await
-            {
-                let (mut write, mut read) = ws.split();
-                let auth = json!({
-                    "uid": uid as i64,
-                    "roomid": room_id.parse::<u64>().unwrap_or(0),
-                    "protover": 3,
-                    "platform": "web",
-                    "type": 2,
-                    "key": token
-                })
-                .to_string();
-                let mut packet = vec![];
-                packet.extend_from_slice(&((16 + auth.len()) as u32).to_be_bytes());
-                packet.extend_from_slice(&(16u16).to_be_bytes());
-                packet.extend_from_slice(&(1u16).to_be_bytes());
-                packet.extend_from_slice(&(7u32).to_be_bytes());
-                packet.extend_from_slice(&(1u32).to_be_bytes());
-                packet.extend_from_slice(auth.as_bytes());
-                let _ = write.send(Message::Binary(packet.into())).await;
-
-                let heartbeat = tokio::spawn(async move {
-                    loop {
-                        let mut heartbeat_packet = vec![];
-                        heartbeat_packet.extend_from_slice(&(16u32).to_be_bytes());
-                        heartbeat_packet.extend_from_slice(&(16u16).to_be_bytes());
-                        heartbeat_packet.extend_from_slice(&(1u16).to_be_bytes());
-                        heartbeat_packet.extend_from_slice(&(2u32).to_be_bytes());
-                        heartbeat_packet.extend_from_slice(&(1u32).to_be_bytes());
-                        if write
-                            .send(Message::Binary(heartbeat_packet.into()))
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                    }
-                });
-
-                while let Some(Ok(message)) = read.next().await {
-                    if let Message::Binary(data) = message {
-                        decode_and_emit(&app_handle, &data);
-                    }
+        let mut attempt: u32 = 0;
+        let mut host_cursor: usize = 0;
+        loop {
+            let info = match get_danmu_info(&client, &room_id).await {
+                Ok(value) => value,
+                Err(error) => {
+                    eprintln!("[danmu] get_danmu_info failed: {error}");
+                    let delay = danmu_reconnect_delay(attempt);
+                    attempt = attempt.saturating_add(1);
+                    tokio::time::sleep(delay).await;
+                    continue;
                 }
-                heartbeat.abort();
+            };
+            let token = info["data"]["token"].as_str().unwrap_or("").to_string();
+            if token.trim().is_empty() {
+                eprintln!("[danmu] missing token for room_id={room_id}");
+                let delay = danmu_reconnect_delay(attempt);
+                attempt = attempt.saturating_add(1);
+                tokio::time::sleep(delay).await;
+                continue;
+            }
+            let hosts = extract_danmu_hosts(&info);
+            let host = hosts[host_cursor % hosts.len()].clone();
+            host_cursor = (host_cursor + 1) % hosts.len();
+            let ws_url = endpoints::danmu_wss(&host.host, host.port);
+            match tokio_tungstenite::connect_async(ws_url).await {
+                Ok((ws, _)) => {
+                    let (mut write, mut read) = ws.split();
+                    let auth = json!({
+                        "uid": uid as i64,
+                        "roomid": room_id.parse::<u64>().unwrap_or(0),
+                        "protover": 3,
+                        "platform": "web",
+                        "type": 2,
+                        "key": token
+                    })
+                    .to_string();
+                    let mut auth_packet = vec![];
+                    auth_packet.extend_from_slice(&((16 + auth.len()) as u32).to_be_bytes());
+                    auth_packet.extend_from_slice(&(16u16).to_be_bytes());
+                    auth_packet.extend_from_slice(&(1u16).to_be_bytes());
+                    auth_packet.extend_from_slice(&(7u32).to_be_bytes());
+                    auth_packet.extend_from_slice(&(1u32).to_be_bytes());
+                    auth_packet.extend_from_slice(auth.as_bytes());
+                    if write
+                        .send(Message::Binary(auth_packet.into()))
+                        .await
+                        .is_err()
+                    {
+                        let delay = danmu_reconnect_delay(attempt);
+                        attempt = attempt.saturating_add(1);
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
+
+                    let heartbeat = tokio::spawn(async move {
+                        loop {
+                            let mut heartbeat_packet = vec![];
+                            heartbeat_packet.extend_from_slice(&(16u32).to_be_bytes());
+                            heartbeat_packet.extend_from_slice(&(16u16).to_be_bytes());
+                            heartbeat_packet.extend_from_slice(&(1u16).to_be_bytes());
+                            heartbeat_packet.extend_from_slice(&(2u32).to_be_bytes());
+                            heartbeat_packet.extend_from_slice(&(1u32).to_be_bytes());
+                            if write
+                                .send(Message::Binary(heartbeat_packet.into()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                            tokio::time::sleep(Duration::from_secs(30)).await;
+                        }
+                    });
+
+                    let mut reenter_delay_secs: Option<u64> = None;
+                    while let Some(message) = read.next().await {
+                        match message {
+                            Ok(Message::Binary(data)) => {
+                                if let Some(delay_secs) = decode_and_emit(&app_handle, &data) {
+                                    reenter_delay_secs = Some(delay_secs);
+                                    eprintln!(
+                                        "[danmu] received REENTER_LIVE_ROOM, reconnect in {}s",
+                                        delay_secs
+                                    );
+                                    break;
+                                }
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                eprintln!(
+                                    "[danmu] read failed on {}:{}: {error}",
+                                    host.host, host.port
+                                );
+                                break;
+                            }
+                        }
+                    }
+                    heartbeat.abort();
+                    if let Some(delay_secs) = reenter_delay_secs {
+                        attempt = 0;
+                        if delay_secs > 0 {
+                            tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+                        }
+                        continue;
+                    }
+                    let delay = danmu_reconnect_delay(attempt);
+                    attempt = attempt.saturating_add(1);
+                    tokio::time::sleep(delay).await;
+                }
+                Err(error) => {
+                    eprintln!(
+                        "[danmu] connect failed on {}:{}: {error}",
+                        host.host, host.port
+                    );
+                    let delay = danmu_reconnect_delay(attempt);
+                    attempt = attempt.saturating_add(1);
+                    tokio::time::sleep(delay).await;
+                }
             }
         }
     }));
+
+    let cleanup_app = app.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let state = cleanup_app.state::<AppState>();
+            let mut runtime = state.runtime.lock().await;
+            let status = runtime.danmu_task.as_ref().map(|task| task.is_finished());
+            match status {
+                Some(true) => {
+                    runtime.danmu_task = None;
+                    break;
+                }
+                Some(false) => {}
+                None => break,
+            }
+        }
+    });
 
     Ok(json!({
         "started": true,

@@ -49,6 +49,11 @@ export type Session = {
   live_time?: string;
   current_area_id?: number;
   current_area_names?: string[];
+  live_key?: string;
+  sub_session_key?: string;
+  from_cache?: boolean;
+  last_sync_at?: number;
+  error_code?: string;
 };
 
 export type User = {
@@ -132,6 +137,7 @@ export type LiveFlowResp = {
   danmu_monitor_msg?: string;
   live_stopped?: boolean;
   danmu_monitor_stopped?: boolean;
+  session_consistent?: boolean;
   recent_areas?: RecentArea[];
 };
 

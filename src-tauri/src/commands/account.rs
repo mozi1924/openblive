@@ -700,6 +700,11 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     runtime.session.is_live = false;
     runtime.session.live_status = None;
     runtime.session.live_time.clear();
+    runtime.session.live_key = None;
+    runtime.session.sub_session_key = None;
+    runtime.session.from_cache = false;
+    runtime.session.last_sync_at = None;
+    runtime.session.error_code = None;
     save_config(&state.config_path, &runtime.config, &state.master_key);
     let response_user = to_response_user(&state.config_path, &user);
     Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))

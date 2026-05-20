@@ -36,6 +36,16 @@ pub struct SessionState {
     pub current_area_names: Vec<String>,
     #[serde(default)]
     pub current_tags: Vec<String>,
+    #[serde(default)]
+    pub live_key: Option<String>,
+    #[serde(default)]
+    pub sub_session_key: Option<String>,
+    #[serde(default)]
+    pub from_cache: bool,
+    #[serde(default)]
+    pub last_sync_at: Option<i64>,
+    #[serde(default)]
+    pub error_code: Option<String>,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
