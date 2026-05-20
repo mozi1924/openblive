@@ -258,3 +258,21 @@ export type AppLogEvent = {
   line: string;
   logs?: string[];
 };
+
+export type StudioStateEvent = {
+  kind: string;
+  source: string;
+  at: number;
+  data?: {
+    session?: Session;
+    danmu_running?: boolean;
+    obs_ws_connected?: boolean;
+    obs_ws_last_error?: string;
+    obs_ws_last_checked_at?: number;
+    action?: "start" | "stop";
+    ok?: boolean;
+    code?: number;
+    session_consistent?: boolean;
+    [key: string]: unknown;
+  };
+};

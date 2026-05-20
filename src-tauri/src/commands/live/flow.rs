@@ -20,6 +20,7 @@ use crate::constants::CmdResult;
 use crate::endpoints;
 use crate::response::wrap_ok;
 use crate::state::AppState;
+use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
 use serde_json::json;
 use std::collections::BTreeMap;
 use tauri::AppHandle;
@@ -168,6 +169,8 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
     runtime.session.is_live = true;
     runtime.session.live_status = Some(LIVE_STATUS_LIVE);
     apply_live_session_identity(&mut runtime.session, live_key, sub_session_key);
+    let session_live_key = runtime.session.live_key.clone();
+    let session_sub_session_key = runtime.session.sub_session_key.clone();
     let current_area = if runtime.session.current_area_names.len() >= 2 {
         Some((
             runtime.session.current_area_names[0].clone(),
@@ -179,6 +182,8 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
     if let Some(uid) = runtime.config.current_uid.clone() {
         if let Some(user) = runtime.config.users.get_mut(&uid) {
             clear_user_auth_flags(user);
+            user.live_key = session_live_key;
+            user.sub_session_key = session_sub_session_key;
             if let Some((parent, child)) = current_area {
                 push_recent_area(user, &parent, &child);
             } else if user.last_area_name.len() >= 2 {
@@ -285,11 +290,23 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
             eprintln!("[live][stop] linkage failed: {error}");
         }
 
+        let response_sub_session_key = value["data"]["sub_session_key"]
+            .as_str()
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(|item| item.to_string());
+
         let mut runtime = state.runtime.lock().await;
         let current_live_key = runtime.session.live_key.clone();
         let current_sub_session_key = runtime.session.sub_session_key.clone();
+        let response_session_consistent =
+            match (&expected_sub_session_key, &response_sub_session_key) {
+                (Some(expected), Some(actual)) => expected == actual,
+                _ => true,
+            };
         let same_session = current_live_key == expected_live_key
-            && current_sub_session_key == expected_sub_session_key;
+            && current_sub_session_key == expected_sub_session_key
+            && response_session_consistent;
         if !same_session {
             eprintln!(
                 "[live][stop] session identity changed during stop, skip local session override"
@@ -302,6 +319,8 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
                 clear_user_auth_flags(user);
+                user.live_key = None;
+                user.sub_session_key = None;
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -323,6 +342,16 @@ pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResu
     let start_result = start_live_inner(state).await?;
     let code = start_result["code"].as_i64().unwrap_or(-1);
     if code != 0 {
+        emit_studio_state_event(
+            app,
+            "live.flow",
+            "start_live_flow_inner",
+            json!({
+                "action": "start",
+                "ok": false,
+                "code": code
+            }),
+        );
         return Ok(start_result);
     }
 
@@ -346,30 +375,66 @@ pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResu
             .unwrap_or_default()
     };
 
-    Ok(wrap_ok(json!({
+    let response = wrap_ok(json!({
         "stream_info": start_result["data"].clone(),
         "danmu_monitor_started": danmu_result["started"].as_bool().unwrap_or(false),
         "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
         "recent_areas": recent_areas,
-    })))
+    }));
+    emit_studio_state_event(
+        app,
+        "live.flow",
+        "start_live_flow_inner",
+        json!({
+            "action": "start",
+            "ok": true,
+            "code": 0,
+            "danmu_monitor_started": danmu_result["started"].as_bool().unwrap_or(false),
+        }),
+    );
+    emit_runtime_snapshot(app, state, "start_live_flow_inner").await;
+    Ok(response)
 }
 
-pub async fn stop_live_flow_inner(state: &AppState) -> CmdResult {
+pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResult {
     let stop_result = stop_live_inner(state).await?;
     let code = stop_result["code"].as_i64().unwrap_or(-1);
     if code != 0 {
+        emit_studio_state_event(
+            app,
+            "live.flow",
+            "stop_live_flow_inner",
+            json!({
+                "action": "stop",
+                "ok": false,
+                "code": code
+            }),
+        );
         return Ok(stop_result);
     }
     let session_consistent = stop_result["data"]["session_consistent"]
         .as_bool()
         .unwrap_or(true);
     if !session_consistent {
-        return Ok(wrap_ok(json!({
+        let response = wrap_ok(json!({
             "live_stopped": false,
             "danmu_monitor_stopped": false,
             "danmu_monitor_msg": "",
             "session_consistent": false
-        })));
+        }));
+        emit_studio_state_event(
+            app,
+            "live.flow",
+            "stop_live_flow_inner",
+            json!({
+                "action": "stop",
+                "ok": true,
+                "code": 0,
+                "session_consistent": false
+            }),
+        );
+        emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;
+        return Ok(response);
     }
 
     let danmu_result = stop_danmu_monitor_inner(state)
@@ -381,10 +446,24 @@ pub async fn stop_live_flow_inner(state: &AppState) -> CmdResult {
             })
         });
 
-    Ok(wrap_ok(json!({
+    let response = wrap_ok(json!({
         "live_stopped": true,
         "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
         "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
         "session_consistent": true
-    })))
+    }));
+    emit_studio_state_event(
+        app,
+        "live.flow",
+        "stop_live_flow_inner",
+        json!({
+            "action": "stop",
+            "ok": true,
+            "code": 0,
+            "session_consistent": true,
+            "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
+        }),
+    );
+    emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;
+    Ok(response)
 }

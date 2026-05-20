@@ -679,6 +679,8 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         last_tags: old.last_tags,
         recent_areas: old.recent_areas,
         live_profile_state: old.live_profile_state,
+        live_key: None,
+        sub_session_key: None,
         login_invalid: false,
         auth_fail_count: 0,
         last_auth_fail_at: 0,

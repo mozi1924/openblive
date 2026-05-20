@@ -6,6 +6,7 @@ use crate::endpoints;
 use crate::models::{DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq};
 use crate::response::wrap_ok;
 use crate::state::AppState;
+use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
 use serde_json::json;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, State};
@@ -40,8 +41,12 @@ use profile_sync::{
 use session::resolve_current_auth_context;
 
 #[tauri::command]
-pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
-    sync_live_status_inner(state).await
+pub async fn sync_live_status(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    let result = sync_live_status_inner(state.clone()).await;
+    if result.is_ok() {
+        emit_runtime_snapshot(&app, &state, "command.sync_live_status").await;
+    }
+    result
 }
 
 #[tauri::command]
@@ -75,13 +80,46 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
 }
 
 #[tauri::command]
-pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
-    start_live_inner(&state).await
+pub async fn start_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    let result = start_live_inner(&state).await;
+    if let Ok(payload) = &result {
+        emit_studio_state_event(
+            &app,
+            "live.flow",
+            "command.start_live",
+            json!({
+                "action": "start",
+                "ok": payload["code"].as_i64().unwrap_or(-1) == 0,
+                "code": payload["code"].as_i64().unwrap_or(-1),
+            }),
+        );
+    }
+    if result.is_ok() {
+        emit_runtime_snapshot(&app, &state, "command.start_live").await;
+    }
+    result
 }
 
 #[tauri::command]
-pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
-    stop_live_inner(&state).await
+pub async fn stop_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    let result = stop_live_inner(&state).await;
+    if let Ok(payload) = &result {
+        emit_studio_state_event(
+            &app,
+            "live.flow",
+            "command.stop_live",
+            json!({
+                "action": "stop",
+                "ok": payload["code"].as_i64().unwrap_or(-1) == 0,
+                "code": payload["code"].as_i64().unwrap_or(-1),
+                "session_consistent": payload["data"]["session_consistent"].as_bool().unwrap_or(true),
+            }),
+        );
+    }
+    if result.is_ok() {
+        emit_runtime_snapshot(&app, &state, "command.stop_live").await;
+    }
+    result
 }
 
 #[tauri::command]
@@ -90,8 +128,8 @@ pub async fn start_live_flow(app: AppHandle, state: State<'_, AppState>) -> CmdR
 }
 
 #[tauri::command]
-pub async fn stop_live_flow(state: State<'_, AppState>) -> CmdResult {
-    stop_live_flow_inner(&state).await
+pub async fn stop_live_flow(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    stop_live_flow_inner(&app, &state).await
 }
 
 #[tauri::command]
@@ -216,14 +254,35 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
 #[tauri::command]
 pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     let payload = start_danmu_monitor_inner(&app, &state).await?;
+    emit_studio_state_event(
+        &app,
+        "danmu.monitor",
+        "command.start_danmu_monitor",
+        json!({
+            "running": payload["started"].as_bool().unwrap_or(false),
+            "msg": payload["msg"].as_str().unwrap_or(""),
+        }),
+    );
+    emit_runtime_snapshot(&app, &state, "command.start_danmu_monitor").await;
     Ok(wrap_ok(json!({
         "msg": payload["msg"].as_str().unwrap_or("i18n.live.danmu_monitor_started")
     })))
 }
 
 #[tauri::command]
-pub async fn stop_danmu_monitor(state: State<'_, AppState>) -> CmdResult {
+pub async fn stop_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     let payload = stop_danmu_monitor_inner(&state).await?;
+    emit_studio_state_event(
+        &app,
+        "danmu.monitor",
+        "command.stop_danmu_monitor",
+        json!({
+            "running": false,
+            "stopped": payload["stopped"].as_bool().unwrap_or(false),
+            "msg": payload["msg"].as_str().unwrap_or(""),
+        }),
+    );
+    emit_runtime_snapshot(&app, &state, "command.stop_danmu_monitor").await;
     Ok(wrap_ok(json!({
         "msg": payload["msg"].as_str().unwrap_or("i18n.live.danmu_monitor_stopped")
     })))

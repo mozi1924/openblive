@@ -12,6 +12,7 @@ mod i18n;
 mod models;
 mod response;
 mod state;
+mod state_event;
 mod tray;
 
 use commands::{

@@ -78,12 +78,32 @@ pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     apply_room_status_to_session(&mut runtime.session, &room_info);
     mark_session_sync_state(&mut runtime.session, false, None);
+    let mut need_save = false;
+    if !runtime.session.is_live {
+        if let Some(uid_key) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid_key) {
+                if user.live_key.is_some() || user.sub_session_key.is_some() {
+                    user.live_key = None;
+                    user.sub_session_key = None;
+                    need_save = true;
+                }
+            }
+        }
+    }
     if let Some(room_id_long) = room_info["room_id"].as_i64() {
         let room_id_text = room_id_long.to_string();
-        runtime.session.room_id = room_id_text.clone();
-        if let Some(user) = runtime.config.users.get_mut(&uid) {
-            user.room_id = room_id_text;
+        if runtime.session.room_id != room_id_text {
+            runtime.session.room_id = room_id_text.clone();
+            need_save = true;
         }
+        if let Some(user) = runtime.config.users.get_mut(&uid) {
+            if user.room_id != room_id_text {
+                user.room_id = room_id_text;
+                need_save = true;
+            }
+        }
+    }
+    if need_save {
         save_config(&state.config_path, &runtime.config, &state.master_key);
     }
 
@@ -168,6 +188,12 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
             apply_room_area_to_session(&mut runtime.session, &data);
             if !room_id.is_empty() {
                 runtime.session.room_id = room_id;
+            }
+            if !runtime.session.is_live {
+                if let Some(current) = runtime.config.users.get_mut(&uid) {
+                    current.live_key = None;
+                    current.sub_session_key = None;
+                }
             }
             save_config(&state.config_path, &runtime.config, &state.master_key);
 

@@ -109,6 +109,7 @@ export function useStudioController() {
   const parentRef = useRef("");
   const childRef = useRef("");
   const syncStatusCacheHintRef = useRef("");
+  const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   const liveEmoticonMap = useMemo(
@@ -987,6 +988,7 @@ export function useStudioController() {
       return;
     }
 
+    pendingLiveFlowHintSkipRef.current = "start";
     const res = await studioApi.startLiveFlow();
     if (requestUid !== activeUidRef.current) {
       return;
@@ -1068,6 +1070,7 @@ export function useStudioController() {
     if (!confirmed) {
       return;
     }
+    pendingLiveFlowHintSkipRef.current = "stop";
     const res = await studioApi.stopLiveFlow();
     if (requestUid !== activeUidRef.current) {
       return;
@@ -1322,6 +1325,69 @@ export function useStudioController() {
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [append, liveEmoticonMap, localeSetting]);
+
+  useEffect(() => {
+    let active = true;
+
+    const unlistenPromise = studioApi.listenStudioState((event) => {
+      if (!active) {
+        return;
+      }
+
+      switch (event.kind) {
+        case "runtime.snapshot": {
+          const nextSession = event.data?.session;
+          if (nextSession) {
+            setSession(nextSession);
+            const liveStatus = nextSession.live_status ?? (nextSession.is_live ? 1 : 0);
+            if (liveStatus !== 1) {
+              setRtmp(null);
+            }
+          }
+          if (typeof event.data?.danmu_running === "boolean") {
+            setDanmuListening(event.data.danmu_running);
+          }
+          void syncTrayMenu();
+          break;
+        }
+        case "live.flow": {
+          const action = event.data?.action;
+          if (action !== "start" && action !== "stop") {
+            break;
+          }
+          if (pendingLiveFlowHintSkipRef.current === action) {
+            pendingLiveFlowHintSkipRef.current = null;
+            break;
+          }
+          const ok = event.data?.ok !== false;
+          if (!ok) {
+            const code = String(event.data?.code ?? "UNKNOWN");
+            if (action === "start") {
+              append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: code }));
+            } else {
+              append(tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: code }));
+            }
+            break;
+          }
+          if (action === "start") {
+            append(t(localeSetting, "ui.ctrl.tray_start"));
+          } else if (event.data?.session_consistent === false) {
+            append(t(localeSetting, "ui.ctrl.stop_live_session_mismatch"));
+          } else {
+            append(t(localeSetting, "ui.ctrl.tray_stop"));
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [append, localeSetting, syncTrayMenu]);
 
   useEffect(() => {
     let active = true;

@@ -156,6 +156,10 @@ pub struct UserRecord {
     #[serde(default)]
     pub live_profile_state: LiveProfileState,
     #[serde(default)]
+    pub live_key: Option<String>,
+    #[serde(default)]
+    pub sub_session_key: Option<String>,
+    #[serde(default)]
     pub login_invalid: bool,
     #[serde(default)]
     pub auth_fail_count: u32,

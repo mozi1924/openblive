@@ -12,6 +12,7 @@ import type {
   LiveRoomProfile,
   Resp,
   Session,
+  StudioStateEvent,
   StreamInfo,
   UpdateAreaResp,
   UpdateTagsResp,
@@ -86,4 +87,6 @@ export const studioApi = {
     listen<DanmuMsg>("danmu-message", (event) => handler(event.payload)),
   listenAppLog: (handler: (payload: AppLogEvent) => void) =>
     listen<AppLogEvent>("app-log", (event) => handler(event.payload)),
+  listenStudioState: (handler: (payload: StudioStateEvent) => void) =>
+    listen<StudioStateEvent>("studio-state", (event) => handler(event.payload)),
 };

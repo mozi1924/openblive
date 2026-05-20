@@ -3,6 +3,7 @@ use crate::constants::CmdResult;
 use crate::danmu::decode_and_emit;
 use crate::endpoints;
 use crate::state::AppState;
+use crate::state_event::emit_studio_state_event;
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde_json::json;
@@ -164,6 +165,16 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
                             Ok(Message::Binary(data)) => {
                                 if let Some(delay_secs) = decode_and_emit(&app_handle, &data) {
                                     reenter_delay_secs = Some(delay_secs);
+                                    emit_studio_state_event(
+                                        &app_handle,
+                                        "danmu.reenter",
+                                        "danmu.monitor",
+                                        json!({
+                                            "delay_secs": delay_secs,
+                                            "host": host.host,
+                                            "port": host.port,
+                                        }),
+                                    );
                                     eprintln!(
                                         "[danmu] received REENTER_LIVE_ROOM, reconnect in {}s",
                                         delay_secs

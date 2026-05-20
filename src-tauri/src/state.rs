@@ -43,4 +43,6 @@ pub fn restore_session_from_current(runtime: &mut RuntimeState, client: &BiliCli
     runtime.session.current_area_id = user.last_area_id.parse::<u64>().ok();
     runtime.session.current_area_names = user.last_area_name.clone();
     runtime.session.current_tags = user.last_tags.clone();
+    runtime.session.live_key = user.live_key.clone();
+    runtime.session.sub_session_key = user.sub_session_key.clone();
 }

@@ -292,7 +292,8 @@ pub fn on_tray_menu_event(app: &AppHandle, event: &MenuEvent) {
             let app_handle = app.clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
-                if let Err(error) = crate::commands::stop_live_flow_inner(&state).await {
+                if let Err(error) = crate::commands::stop_live_flow_inner(&app_handle, &state).await
+                {
                     eprintln!("[tray] stop live flow failed: {error}");
                 } else {
                     eprintln!("[tray] stop live flow success");
