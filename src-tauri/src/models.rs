@@ -105,6 +105,12 @@ pub struct LiveProfileState {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+pub struct RecentArea {
+    pub parent: String,
+    pub child: String,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct UserRecord {
     pub uid: String,
     pub uname: String,
@@ -135,6 +141,8 @@ pub struct UserRecord {
     pub last_area_name: Vec<String>,
     #[serde(default)]
     pub last_tags: Vec<String>,
+    #[serde(default)]
+    pub recent_areas: Vec<RecentArea>,
     #[serde(default)]
     pub live_profile_state: LiveProfileState,
     #[serde(default)]
@@ -351,4 +359,9 @@ pub struct UidReq {
 pub struct AppConfigReq {
     pub key: String,
     pub value: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+pub struct AppConfigsReq {
+    pub values: HashMap<String, serde_json::Value>,
 }

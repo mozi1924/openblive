@@ -3,14 +3,14 @@ import { listen } from "@tauri-apps/api/event";
 import type {
   AccountList,
   AppConfig,
-  DanmuEventPayload,
+  DanmuMsg,
   LinkageStatus,
+  LiveFlowResp,
   LiveEmoticonPackage,
   LiveRoomProfile,
   Resp,
   Session,
   StreamInfo,
-  TrayActionPayload,
   UpdateAreaResp,
   UpdateTagsResp,
   UpdateTitleResp,
@@ -28,6 +28,8 @@ export const studioApi = {
   getLinkageStatus: () => invokeCommand<LinkageStatus>("get_linkage_status"),
   setAppConfig: (key: string, value: unknown) =>
     invokeCommand("set_app_config", { req: { key, value } }),
+  setAppConfigs: (values: Record<string, unknown>) =>
+    invokeCommand("set_app_configs", { req: { values } }),
   refreshTrayMenu: () => invokeCommand("refresh_tray_menu"),
   revealMainWindow: () => invokeCommand("reveal_main_window"),
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
@@ -63,13 +65,13 @@ export const studioApi = {
       { req: { tags } },
     ),
   startLive: () => invokeCommand<StreamInfo>("start_live"),
+  startLiveFlow: () => invokeCommand<LiveFlowResp>("start_live_flow"),
   stopLive: () => invokeCommand("stop_live"),
+  stopLiveFlow: () => invokeCommand<LiveFlowResp>("stop_live_flow"),
   startDanmuMonitor: () => invokeCommand("start_danmu_monitor"),
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
   getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
-  listenDanmuEvent: (handler: (payload: DanmuEventPayload) => void) =>
-    listen<DanmuEventPayload>("danmu-event", (event) => handler(event.payload)),
-  listenTrayAction: (handler: (payload: TrayActionPayload) => void) =>
-    listen<TrayActionPayload>("tray-action", (event) => handler(event.payload)),
+  listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
+    listen<DanmuMsg>("danmu-message", (event) => handler(event.payload)),
 };

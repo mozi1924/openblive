@@ -14,7 +14,6 @@ import type {
 import {
   createLiveEmoticonIndex,
   createSelfDanmuMessage,
-  parseDanmuEvent,
 } from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { resolveQrPayload } from "../utils/qrcode";
@@ -23,18 +22,14 @@ import {
   buildSectionStatus,
   defaultProfileState,
   isValidUser,
-  loadRecentAreasFromStorage,
   normalizeProfileState,
   normalizeTags,
-  pushRecentAreaToStorage,
   splitTagInput,
   StartLiveSource,
   tagsToKey,
   unsavedLabelMap,
   type RecentArea,
 } from "./studio/controllerHelpers";
-
-const ACCOUNT_PROFILE_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 type ConfirmModalTone = "primary" | "danger";
 
@@ -95,11 +90,9 @@ export function useStudioController() {
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
   const headerDragRef = useRef<HTMLElement>(null);
-  const expiredAccountNoticeRef = useRef<Set<string>>(new Set());
   const loginPollBusyRef = useRef(false);
   const loginStatusCodeRef = useRef<number | null>(null);
   const qrcodeRefreshBusyRef = useRef(false);
-  const startupCookieRefreshDoneRef = useRef(false);
   const confirmResolverRef = useRef<((accepted: boolean) => void) | null>(null);
   const titleDirtyRef = useRef(false);
   const areaDirtyRef = useRef(false);
@@ -226,17 +219,6 @@ export function useStudioController() {
     childRef.current = child;
   }, [child, parent]);
 
-  const loadRecentAreasForUid = useCallback((uid: string | null) => {
-    setRecentAreas(loadRecentAreasFromStorage(uid));
-  }, []);
-
-  const pushRecentArea = useCallback((uid: string | null, area: RecentArea) => {
-    const next = pushRecentAreaToStorage(uid, area);
-    if (next.length > 0) {
-      setRecentAreas(next);
-    }
-  }, []);
-
   const syncTrayMenu = useCallback(async () => {
     await studioApi.refreshTrayMenu().catch(() => undefined);
   }, []);
@@ -356,9 +338,11 @@ export function useStudioController() {
         "livehime_build_override",
         "live_platform",
       ];
-      for (const key of writableKeys) {
-        await studioApi.setAppConfig(key, appConfig[key]);
-      }
+      const values = writableKeys.reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = appConfig[key];
+        return acc;
+      }, {});
+      await studioApi.setAppConfigs(values);
       append(t(localeSetting, "ui.settings.save.done"));
       await loadAppConfig();
       await loadLinkageStatus();
@@ -374,37 +358,6 @@ export function useStudioController() {
       setSavingConfig(false);
     }
   }, [appConfig, append, loadAppConfig, loadLinkageStatus, syncTrayMenu]);
-
-  const handleExpiredAccounts = useCallback(
-    (uids: string[]) => {
-      if (uids.length === 0) {
-        return;
-      }
-      const firstNotified: string[] = [];
-      for (const uid of uids) {
-        if (expiredAccountNoticeRef.current.has(uid)) {
-          continue;
-        }
-        expiredAccountNoticeRef.current.add(uid);
-        firstNotified.push(uid);
-      }
-      if (firstNotified.length === 0) {
-        return;
-      }
-
-      const text = tf(localeSetting, "ui.ctrl.alert.expired_accounts", {
-        uids: firstNotified.join(", "),
-      });
-      append(text);
-      void requestAlert({
-        title: t(localeSetting, "ui.account.login_invalid"),
-        description: text,
-        confirmText: t(localeSetting, "ui.confirm.ok"),
-        tone: "danger",
-      });
-    },
-    [append, localeSetting, requestAlert],
-  );
 
   const refreshSession = useCallback(async () => {
     const res = await studioApi
@@ -436,7 +389,7 @@ export function useStudioController() {
       setChild("");
       setTags([]);
       setTagInput("");
-      loadRecentAreasForUid(null);
+      setRecentAreas([]);
       await syncTrayMenu();
       return;
     }
@@ -455,9 +408,9 @@ export function useStudioController() {
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
     }
-    loadRecentAreasForUid(user.uid);
+    setRecentAreas(user.recent_areas || []);
     await syncTrayMenu();
-  }, [applyProfileState, applyUserDraftValues, loadRecentAreasForUid, localeSetting, syncTrayMenu]);
+  }, [applyProfileState, applyUserDraftValues, localeSetting, syncTrayMenu]);
 
   const loadAccounts = useCallback(async () => {
     const res = await studioApi.getAccountList();
@@ -467,57 +420,8 @@ export function useStudioController() {
       if (backendCurrentUid !== activeUidRef.current) {
         await loadSavedUser();
       }
-      const validUids = new Set(
-        (res.data.list || [])
-          .filter((user) => !user.login_invalid)
-          .map((user) => user.uid),
-      );
-      for (const uid of Array.from(expiredAccountNoticeRef.current)) {
-        if (validUids.has(uid)) {
-          expiredAccountNoticeRef.current.delete(uid);
-        }
-      }
     }
   }, [loadSavedUser]);
-
-  const refreshAccountProfilesWithFallback = useCallback(
-    async (source: "startup" | "periodic") => {
-      try {
-        const res = await studioApi.refreshAllAccountProfiles();
-        if (res.code !== 0 || !res.data) {
-          return;
-        }
-        handleExpiredAccounts(res.data.expired || []);
-        if (res.data.failed.length > 0) {
-          append(
-            tf(
-              localeSetting,
-              source === "startup"
-                ? "ui.ctrl.account_profile_refresh_partial_failed_start"
-                : "ui.ctrl.account_profile_refresh_partial_failed",
-              {
-                list: res.data.failed
-                  .map((msg) => resolveBackendMessage(msg, localeSetting))
-                  .join(" | "),
-              },
-            ),
-          );
-        }
-        await loadSavedUser();
-        await loadAccounts();
-      } catch {
-        append(
-          t(
-            localeSetting,
-            source === "startup"
-              ? "ui.ctrl.account_profile_refresh_start_failed"
-              : "ui.ctrl.account_profile_refresh_failed",
-          ),
-        );
-      }
-    },
-    [append, handleExpiredAccounts, loadAccounts, loadSavedUser, localeSetting],
-  );
 
   const refreshCurrentUser = useCallback(async () => {
     const requestUid = activeUidRef.current;
@@ -668,7 +572,7 @@ export function useStudioController() {
           forceArea: true,
           forceTags: true,
         });
-        loadRecentAreasForUid(res.data.uid);
+        setRecentAreas(res.data.recent_areas || []);
         append(tf(localeSetting, "ui.ctrl.login_success", { name: res.data.uname || t(localeSetting, "ui.ctrl.user_fallback") }));
         await refreshSession();
         await loadAccounts();
@@ -696,7 +600,7 @@ export function useStudioController() {
     } finally {
       loginPollBusyRef.current = false;
     }
-  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, loadRecentAreasForUid, qrcodeKey, refreshSession, syncLiveRoomProfile, localeSetting]);
+  }, [append, applyProfileState, applyUserDraftValues, loadAccounts, loadQrcode, qrcodeKey, refreshSession, syncLiveRoomProfile, localeSetting]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
@@ -719,7 +623,7 @@ export function useStudioController() {
             forceArea: true,
             forceTags: true,
           });
-          loadRecentAreasForUid(res.data.uid);
+          setRecentAreas(res.data.recent_areas || []);
           append(tf(localeSetting, "ui.ctrl.switched_account", { name: res.data.uname }));
           await refreshSession();
           await loadAccounts();
@@ -729,7 +633,7 @@ export function useStudioController() {
         append(tf(localeSetting, "ui.ctrl.switch_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
       }
     },
-    [append, applyProfileState, applyUserDraftValues, loadAccounts, loadRecentAreasForUid, refreshSession, syncLiveRoomProfile, localeSetting],
+    [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile, localeSetting],
   );
 
   const logout = useCallback(
@@ -989,20 +893,27 @@ export function useStudioController() {
       return;
     }
 
-    const res = await studioApi.startLive();
+    const res = await studioApi.startLiveFlow();
     if (requestUid !== activeUidRef.current) {
       return;
     }
     if (res.code === 0) {
-      setRtmp(res.data || null);
-      pushRecentArea(currentUser?.uid || null, { parent, child });
+      const flow = res.data;
+      setRtmp(flow?.stream_info || null);
+      setRecentAreas(flow?.recent_areas || []);
       append(t(localeSetting, "ui.ctrl.start_live_ok"));
-      const danmuRes = await studioApi.startDanmuMonitor();
-      if (danmuRes.code === 0) {
+      const danmuStarted = Boolean(flow?.danmu_monitor_started);
+      const danmuMsg = resolveBackendMessage(flow?.danmu_monitor_msg || "", localeSetting);
+      if (danmuStarted) {
         setDanmuListening(true);
         append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
       } else {
-        append(tf(localeSetting, "ui.ctrl.danmu_monitor_failed", { msg: resolveBackendMessage(danmuRes.msg, localeSetting) }));
+        if (flow?.danmu_monitor_msg === "i18n.live.danmu_monitor_already_running") {
+          setDanmuListening(true);
+          append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
+        } else if (danmuMsg) {
+          append(tf(localeSetting, "ui.ctrl.danmu_monitor_failed", { msg: danmuMsg }));
+        }
       }
       await refreshSession();
       await loadLinkageStatus();
@@ -1031,7 +942,7 @@ export function useStudioController() {
 
     append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     await loadLinkageStatus();
-  }, [append, child, currentUser?.uid, hasUnsavedChanges, loadLinkageStatus, localeSetting, parent, pushRecentArea, refreshSession, requestAlert, requestConfirm, resolveFaceQrImage, revealMainWindowForAction, unsavedItems]);
+  }, [append, hasUnsavedChanges, loadLinkageStatus, localeSetting, refreshSession, requestAlert, requestConfirm, resolveFaceQrImage, revealMainWindowForAction, unsavedItems]);
 
   const applyRecentArea = useCallback((nextParent: string, nextChild: string) => {
     if (!nextParent || !nextChild) {
@@ -1063,7 +974,7 @@ export function useStudioController() {
     if (!confirmed) {
       return;
     }
-    const res = await studioApi.stopLive();
+    const res = await studioApi.stopLiveFlow();
     if (requestUid !== activeUidRef.current) {
       return;
     }
@@ -1072,6 +983,9 @@ export function useStudioController() {
         ? t(localeSetting, "ui.ctrl.stop_live_ok")
         : tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }),
     );
+    if (res.code === 0) {
+      setDanmuListening(false);
+    }
     setRtmp(null);
     await refreshSession();
     await loadLinkageStatus();
@@ -1265,31 +1179,24 @@ export function useStudioController() {
   }, [pollLogin, qrcodeKey]);
 
   useEffect(() => {
-    if (!startupCookieRefreshDoneRef.current) {
-      startupCookieRefreshDoneRef.current = true;
-      void refreshAccountProfilesWithFallback("startup");
-    }
-
-    const timer = window.setInterval(() => {
-      void refreshAccountProfilesWithFallback("periodic");
-    }, ACCOUNT_PROFILE_REFRESH_INTERVAL_MS);
-
-    return () => window.clearInterval(timer);
-  }, [refreshAccountProfilesWithFallback]);
-
-  useEffect(() => {
     let active = true;
 
-    const unlistenPromise = studioApi.listenDanmuEvent((payload) => {
+    const unlistenPromise = studioApi.listenDanmuMessage((message) => {
       if (!active) {
         return;
       }
-
-      const parsed = parseDanmuEvent(payload, localeSetting, liveEmoticonMap);
-      if (parsed) {
-        setDanmus((prev) => [parsed, ...prev]);
-      }
-      append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: payload.cmd || "UNKNOWN" }));
+      const withFallbackSegments =
+        message.type === "danmu" &&
+        (!message.segments || message.segments.length === 0)
+          ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
+          : null;
+      setDanmus((prev) => [
+        withFallbackSegments
+          ? { ...withFallbackSegments, id: message.id, type: message.type, time: message.time }
+          : message,
+        ...prev,
+      ]);
+      append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
     });
 
     return () => {
@@ -1297,29 +1204,6 @@ export function useStudioController() {
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [append, liveEmoticonMap, localeSetting]);
-
-  useEffect(() => {
-    let active = true;
-
-    const unlistenPromise = studioApi.listenTrayAction((payload) => {
-      if (!active) {
-        return;
-      }
-      if (payload.action === "start_live") {
-        append(t(localeSetting, "ui.ctrl.tray_start"));
-        void startLive("tray");
-      }
-      if (payload.action === "stop_live") {
-        append(t(localeSetting, "ui.ctrl.tray_stop"));
-        void stopLive("tray");
-      }
-    });
-
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [append, startLive, stopLive, localeSetting]);
 
   return {
     state: {

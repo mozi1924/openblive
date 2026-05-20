@@ -17,17 +17,19 @@ mod tray;
 use commands::{
     get_account_list, get_app_config, get_linkage_status, get_live_emoticons, get_login_qrcode,
     get_partitions, get_session, get_version, load_saved_config, logout, poll_login_status,
-    refresh_all_account_cookies, refresh_all_account_profiles, refresh_current_user,
-    refresh_live_client_version, refresh_live_client_version_inner, refresh_tray_menu,
-    reveal_main_window, send_danmu, set_app_config, start_danmu_monitor, start_live,
-    stop_danmu_monitor, stop_live, switch_account, sync_live_room_profile, sync_live_status,
-    update_area, update_live_tags, update_title,
+    refresh_all_account_cookies, refresh_all_account_profiles, refresh_all_account_profiles_inner,
+    refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
+    refresh_tray_menu, reveal_main_window, send_danmu, set_app_config, set_app_configs,
+    start_danmu_monitor, start_live, start_live_flow, stop_danmu_monitor, stop_live,
+    stop_live_flow, switch_account, sync_live_room_profile, sync_live_status, update_area,
+    update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
 use state::{restore_session_from_current, AppState, RuntimeState};
 use tauri::Manager;
 use tokio::sync::Mutex;
+use tokio::time::Duration;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -62,6 +64,22 @@ pub fn run() {
                     eprintln!("refresh live client version on startup failed: {error}");
                 }
             });
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                commands::ensure_obs_ws_keepalive_task(app_handle.clone()).await;
+
+                let first_state = app_handle.state::<AppState>();
+                let first = refresh_all_account_profiles_inner(&first_state).await;
+                eprintln!("[auth][batch][profile] startup refresh: {}", first);
+
+                let mut ticker = tokio::time::interval(Duration::from_secs(15 * 60));
+                loop {
+                    ticker.tick().await;
+                    let state = app_handle.state::<AppState>();
+                    let result = refresh_all_account_profiles_inner(&state).await;
+                    eprintln!("[auth][batch][profile] periodic refresh: {}", result);
+                }
+            });
             if let Err(error) = tray::setup_tray(app) {
                 eprintln!("setup tray failed: {error}");
             }
@@ -94,7 +112,9 @@ pub fn run() {
             update_title,
             update_live_tags,
             start_live,
+            start_live_flow,
             stop_live,
+            stop_live_flow,
             start_danmu_monitor,
             stop_danmu_monitor,
             send_danmu,
@@ -103,6 +123,7 @@ pub fn run() {
             get_app_config,
             get_linkage_status,
             set_app_config,
+            set_app_configs,
             refresh_tray_menu,
             reveal_main_window,
             get_version

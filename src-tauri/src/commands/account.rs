@@ -661,6 +661,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         last_area_id: old.last_area_id,
         last_area_name: old.last_area_name,
         last_tags: old.last_tags,
+        recent_areas: old.recent_areas,
         live_profile_state: old.live_profile_state,
         login_invalid: false,
         auth_fail_count: 0,
@@ -890,6 +891,11 @@ async fn refresh_accounts_batch(state: &AppState, refresh_profile: bool) -> serd
     })
 }
 
+pub async fn refresh_all_account_profiles_inner(state: &AppState) -> serde_json::Value {
+    let _refresh_guard = state.auth_refresh_lock.lock().await;
+    refresh_accounts_batch(state, true).await
+}
+
 #[tauri::command]
 pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResult {
     let _refresh_guard = state.auth_refresh_lock.lock().await;
@@ -898,6 +904,5 @@ pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResul
 
 #[tauri::command]
 pub async fn refresh_all_account_profiles(state: State<'_, AppState>) -> CmdResult {
-    let _refresh_guard = state.auth_refresh_lock.lock().await;
-    Ok(wrap_ok(refresh_accounts_batch(&state, true).await))
+    Ok(wrap_ok(refresh_all_account_profiles_inner(&state).await))
 }

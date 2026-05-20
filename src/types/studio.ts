@@ -63,8 +63,14 @@ export type User = {
   last_title: string;
   last_area_name: string[];
   last_tags?: string[];
+  recent_areas?: RecentArea[];
   live_profile_state?: LiveProfileState;
   login_invalid?: boolean;
+};
+
+export type RecentArea = {
+  parent: string;
+  child: string;
 };
 
 export type TitleProfileState = {
@@ -118,6 +124,15 @@ export type StreamInfo = {
   need_face_auth?: boolean;
   service_source?: string;
   up_stream_extra?: Record<string, unknown>;
+};
+
+export type LiveFlowResp = {
+  stream_info?: StreamInfo | null;
+  danmu_monitor_started?: boolean;
+  danmu_monitor_msg?: string;
+  live_stopped?: boolean;
+  danmu_monitor_stopped?: boolean;
+  recent_areas?: RecentArea[];
 };
 
 export type StreamEndpoint = {
@@ -174,12 +189,6 @@ export type AccountList = {
   current_uid: string | null;
 };
 
-export type DanmuEventPayload = {
-  cmd?: string;
-  info?: unknown[];
-  data?: Record<string, unknown>;
-};
-
 export type DanmuEmoticon = {
   emoticon_id?: number;
   emoticon_unique?: string;
@@ -217,10 +226,6 @@ export type LiveEmoticonPackage = {
   pkg_name: string;
   pkg_descript: string;
   emoticons: LiveEmoticon[];
-};
-
-export type TrayActionPayload = {
-  action?: "start_live" | "stop_live";
 };
 
 export type LinkageStatus = {

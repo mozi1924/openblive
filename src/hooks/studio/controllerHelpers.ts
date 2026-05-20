@@ -15,14 +15,10 @@ export type RecentArea = { parent: string; child: string };
 export type StatusTone = "green" | "yellow" | "red";
 export type SectionStatus = { tone: StatusTone; label: string; detail: string };
 
-const RECENT_AREAS_LIMIT = 6;
-
 export const normalizeTags = (values: string[]) =>
   [...new Set(values.map((tag) => tag.trim()).filter(Boolean))];
 
 export const tagsToKey = (values: string[]) => normalizeTags(values).join(",");
-
-const recentAreasStorageKey = (uid: string) => `openblive.recent_areas.${uid}`;
 
 export const unsavedLabelMap = {
   title: "ui.stream.section.title",
@@ -136,71 +132,4 @@ export const buildSectionStatus = (
     };
   }
   return { tone: "green", label: t(locale, "ui.profile.synced"), detail: t(locale, "ui.profile.synced.desc") };
-};
-
-export const loadRecentAreasFromStorage = (uid: string | null): RecentArea[] => {
-  if (!uid) {
-    return [];
-  }
-  try {
-    const raw = window.localStorage.getItem(recentAreasStorageKey(uid));
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .filter(
-        (item): item is RecentArea =>
-          item &&
-          typeof item === "object" &&
-          typeof item.parent === "string" &&
-          typeof item.child === "string" &&
-          item.parent.length > 0 &&
-          item.child.length > 0,
-      )
-      .slice(0, RECENT_AREAS_LIMIT);
-  } catch {
-    return [];
-  }
-};
-
-export const pushRecentAreaToStorage = (
-  uid: string | null,
-  area: RecentArea,
-): RecentArea[] => {
-  if (!uid || !area.parent || !area.child) {
-    return [];
-  }
-
-  const key = recentAreasStorageKey(uid);
-  const current = (() => {
-    try {
-      const raw = window.localStorage.getItem(key);
-      if (!raw) {
-        return [] as RecentArea[];
-      }
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [] as RecentArea[];
-    }
-  })();
-
-  const deduped = current.filter(
-    (item) =>
-      !(
-        item &&
-        typeof item.parent === "string" &&
-        typeof item.child === "string" &&
-        item.parent === area.parent &&
-        item.child === area.child
-      ),
-  );
-
-  const next = [area, ...deduped].slice(0, RECENT_AREAS_LIMIT);
-  window.localStorage.setItem(key, JSON.stringify(next));
-  return next;
 };

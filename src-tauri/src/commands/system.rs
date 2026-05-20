@@ -1,9 +1,12 @@
 use crate::constants::CmdResult;
 use crate::endpoints;
 use crate::i18n::normalize_locale_setting;
-use crate::models::AppConfigReq;
+use crate::models::{AppConfigReq, AppConfigsReq};
 use crate::response::wrap_ok;
-use crate::{config::save_config, state::AppState};
+use crate::{
+    config::save_config,
+    state::{AppState, RuntimeState},
+};
 use serde_json::json;
 use tauri::{AppHandle, Manager, State};
 use tokio::time::Duration;
@@ -18,7 +21,95 @@ fn normalize_live_control_mode(mode: &str) -> &'static str {
     }
 }
 
-async fn ensure_obs_ws_keepalive_task(app: AppHandle) {
+fn apply_app_config_value(
+    runtime: &mut RuntimeState,
+    key: &str,
+    value: &serde_json::Value,
+) -> Result<(), String> {
+    match key {
+        "min_to_tray" => {
+            runtime.config.min_to_tray = value.as_bool().unwrap_or(true);
+        }
+        "hide_dock_on_minimize" => {
+            runtime.config.hide_dock_on_minimize = value.as_bool().unwrap_or(false);
+        }
+        "live_control_mode" => {
+            let mode = value.as_str().unwrap_or("none").trim();
+            runtime.config.live_control_mode = match mode {
+                "obs_ws" => "obs_ws".to_string(),
+                "command" => "command".to_string(),
+                _ => "none".to_string(),
+            };
+        }
+        "obs_ws_enabled" => {
+            runtime.config.obs_ws_enabled = value.as_bool().unwrap_or(false);
+        }
+        "obs_ws_url" => {
+            runtime.config.obs_ws_url = value.as_str().unwrap_or("").to_string();
+        }
+        "obs_ws_password" => {
+            runtime.config.obs_ws_password = value.as_str().unwrap_or("").to_string();
+        }
+        "obs_ws_auto_start_on_live" => {
+            runtime.config.obs_ws_auto_start_on_live = value.as_bool().unwrap_or(false);
+        }
+        "obs_ws_auto_stop_on_live_end" => {
+            runtime.config.obs_ws_auto_stop_on_live_end = value.as_bool().unwrap_or(false);
+        }
+        "on_live_start_command" => {
+            runtime.config.on_live_start_command = value.as_str().unwrap_or("").to_string();
+        }
+        "on_live_stop_command" => {
+            runtime.config.on_live_stop_command = value.as_str().unwrap_or("").to_string();
+        }
+        "locale" => {
+            runtime.config.locale =
+                normalize_locale_setting(value.as_str().unwrap_or("auto")).to_string();
+        }
+        "host_www" => {
+            runtime.config.host_www = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_api" => {
+            runtime.config.host_api = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_live_api" => {
+            runtime.config.host_live_api = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_passport" => {
+            runtime.config.host_passport = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_live_web" => {
+            runtime.config.host_live_web = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "cookie_domain" => {
+            runtime.config.cookie_domain = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "danmu_host" => {
+            runtime.config.danmu_host = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "app_key" => {
+            runtime.config.app_key = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "app_sec" => {
+            runtime.config.app_sec = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "livehime_version_override" => {
+            runtime.config.livehime_version_override =
+                value.as_str().unwrap_or("").trim().to_string();
+        }
+        "livehime_build_override" => {
+            runtime.config.livehime_build_override =
+                value.as_str().unwrap_or("").trim().to_string();
+        }
+        "live_platform" => {
+            runtime.config.live_platform = value.as_str().unwrap_or("").trim().to_string();
+        }
+        _ => return Err("i18n.system.error.unknown_config_key".into()),
+    }
+    Ok(())
+}
+
+pub(crate) async fn ensure_obs_ws_keepalive_task(app: AppHandle) {
     let should_spawn = {
         let app_state = app.state::<AppState>();
         let mut runtime = app_state.runtime.lock().await;
@@ -139,85 +230,26 @@ pub async fn set_app_config(
     state: State<'_, AppState>,
 ) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
-    match req.key.as_str() {
-        "min_to_tray" => {
-            runtime.config.min_to_tray = req.value.as_bool().unwrap_or(true);
-        }
-        "hide_dock_on_minimize" => {
-            runtime.config.hide_dock_on_minimize = req.value.as_bool().unwrap_or(false);
-        }
-        "live_control_mode" => {
-            let mode = req.value.as_str().unwrap_or("none").trim();
-            runtime.config.live_control_mode = match mode {
-                "obs_ws" => "obs_ws".to_string(),
-                "command" => "command".to_string(),
-                _ => "none".to_string(),
-            };
-        }
-        "obs_ws_enabled" => {
-            runtime.config.obs_ws_enabled = req.value.as_bool().unwrap_or(false);
-        }
-        "obs_ws_url" => {
-            runtime.config.obs_ws_url = req.value.as_str().unwrap_or("").to_string();
-        }
-        "obs_ws_password" => {
-            runtime.config.obs_ws_password = req.value.as_str().unwrap_or("").to_string();
-        }
-        "obs_ws_auto_start_on_live" => {
-            runtime.config.obs_ws_auto_start_on_live = req.value.as_bool().unwrap_or(false);
-        }
-        "obs_ws_auto_stop_on_live_end" => {
-            runtime.config.obs_ws_auto_stop_on_live_end = req.value.as_bool().unwrap_or(false);
-        }
-        "on_live_start_command" => {
-            runtime.config.on_live_start_command = req.value.as_str().unwrap_or("").to_string();
-        }
-        "on_live_stop_command" => {
-            runtime.config.on_live_stop_command = req.value.as_str().unwrap_or("").to_string();
-        }
-        "locale" => {
-            runtime.config.locale =
-                normalize_locale_setting(req.value.as_str().unwrap_or("auto")).to_string();
-        }
-        "host_www" => {
-            runtime.config.host_www = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "host_api" => {
-            runtime.config.host_api = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "host_live_api" => {
-            runtime.config.host_live_api = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "host_passport" => {
-            runtime.config.host_passport = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "host_live_web" => {
-            runtime.config.host_live_web = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "cookie_domain" => {
-            runtime.config.cookie_domain = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "danmu_host" => {
-            runtime.config.danmu_host = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "app_key" => {
-            runtime.config.app_key = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "app_sec" => {
-            runtime.config.app_sec = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "livehime_version_override" => {
-            runtime.config.livehime_version_override =
-                req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "livehime_build_override" => {
-            runtime.config.livehime_build_override =
-                req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        "live_platform" => {
-            runtime.config.live_platform = req.value.as_str().unwrap_or("").trim().to_string();
-        }
-        _ => return Err("i18n.system.error.unknown_config_key".into()),
+    apply_app_config_value(&mut runtime, req.key.as_str(), &req.value)?;
+    endpoints::set_runtime_overrides_from_config(&runtime.config);
+    runtime.config.obs_ws_enabled = runtime.config.live_control_mode == "obs_ws";
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+    drop(runtime);
+    ensure_obs_ws_keepalive_task(app.clone()).await;
+    crate::tray::sync_dock_visibility(&app);
+    crate::tray::refresh_tray_menu(&app);
+    Ok(wrap_ok(json!({})))
+}
+
+#[tauri::command]
+pub async fn set_app_configs(
+    app: AppHandle,
+    req: AppConfigsReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let mut runtime = state.runtime.lock().await;
+    for (key, value) in req.values.iter() {
+        apply_app_config_value(&mut runtime, key.as_str(), value)?;
     }
     endpoints::set_runtime_overrides_from_config(&runtime.config);
     runtime.config.obs_ws_enabled = runtime.config.live_control_mode == "obs_ws";

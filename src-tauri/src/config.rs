@@ -1,6 +1,6 @@
 use crate::crypto::{decrypt_text, encrypt_text};
 use crate::models::{
-    sync_live_profile_state_defaults, LiveProfileState, PersistConfig, UserRecord,
+    sync_live_profile_state_defaults, LiveProfileState, PersistConfig, RecentArea, UserRecord,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -105,6 +105,8 @@ struct LiveUserCacheFile {
     last_area_name: Vec<String>,
     #[serde(default)]
     last_tags: Vec<String>,
+    #[serde(default)]
+    recent_areas: Vec<RecentArea>,
     #[serde(default)]
     live_profile_state: LiveProfileState,
 }
@@ -345,6 +347,7 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
                 user.last_area_id = cache.last_area_id;
                 user.last_area_name = cache.last_area_name;
                 user.last_tags = cache.last_tags;
+                user.recent_areas = cache.recent_areas;
                 user.live_profile_state = cache.live_profile_state;
             }
         }
@@ -469,6 +472,7 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
                 last_area_id: user.last_area_id.clone(),
                 last_area_name: user.last_area_name.clone(),
                 last_tags: user.last_tags.clone(),
+                recent_areas: user.recent_areas.clone(),
                 live_profile_state: user.live_profile_state.clone(),
             },
         );

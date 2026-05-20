@@ -5,8 +5,8 @@ use crate::danmu::decode_and_emit;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
-    sync_live_profile_state_defaults, DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
-    UserRecord,
+    sync_live_profile_state_defaults, DanmuReq, RecentArea, UpdateAreaReq, UpdateTagsReq,
+    UpdateTitleReq, UserRecord,
 };
 use crate::response::wrap_ok;
 use crate::state::{AppState, RuntimeState};
@@ -31,6 +31,7 @@ use linkage::{
 use stream::{collect_stream_endpoints, select_primary_endpoint};
 
 const LIVE_CLIENT_VERSION_TTL_SECS: i64 = 6 * 60 * 60;
+const RECENT_AREAS_LIMIT: usize = 6;
 
 fn split_tags(raw: &str) -> Vec<String> {
     raw.split([',', '，'])
@@ -55,6 +56,27 @@ fn title_review_from_audit_status(status: Option<i64>) -> &'static str {
 
 fn same_tags(left: &[String], right: &[String]) -> bool {
     left == right
+}
+
+fn push_recent_area(user: &mut UserRecord, parent: &str, child: &str) {
+    let parent = parent.trim();
+    let child = child.trim();
+    if parent.is_empty() || child.is_empty() {
+        return;
+    }
+
+    user.recent_areas
+        .retain(|item| !(item.parent == parent && item.child == child));
+    user.recent_areas.insert(
+        0,
+        RecentArea {
+            parent: parent.to_string(),
+            child: child.to_string(),
+        },
+    );
+    if user.recent_areas.len() > RECENT_AREAS_LIMIT {
+        user.recent_areas.truncate(RECENT_AREAS_LIMIT);
+    }
 }
 
 fn apply_profile_state_from_remote(
@@ -840,8 +862,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
     })))
 }
 
-#[tauri::command]
-pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
+async fn start_live_inner(state: &AppState) -> CmdResult {
     let (room_id, csrf, cookie, area) = {
         let runtime = state.runtime.lock().await;
         let (_uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
@@ -971,9 +992,24 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
 
     let mut runtime = state.runtime.lock().await;
     runtime.session.is_live = true;
+    let current_area = if runtime.session.current_area_names.len() >= 2 {
+        Some((
+            runtime.session.current_area_names[0].clone(),
+            runtime.session.current_area_names[1].clone(),
+        ))
+    } else {
+        None
+    };
     if let Some(uid) = runtime.config.current_uid.clone() {
         if let Some(user) = runtime.config.users.get_mut(&uid) {
             clear_user_auth_flags(user);
+            if let Some((parent, child)) = current_area {
+                push_recent_area(user, &parent, &child);
+            } else if user.last_area_name.len() >= 2 {
+                let parent = user.last_area_name[0].clone();
+                let child = user.last_area_name[1].clone();
+                push_recent_area(user, &parent, &child);
+            }
         }
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -1000,8 +1036,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     })))
 }
 
-#[tauri::command]
-pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
+async fn stop_live_inner(state: &AppState) -> CmdResult {
     let (_uid, room_id, csrf, cookie) = {
         let runtime = state.runtime.lock().await;
         resolve_current_auth_context(&runtime)?
@@ -1074,6 +1109,84 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
         }
         Err(error_message(&value, "i18n.live.error.stop_live_failed"))
     }
+}
+
+pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResult {
+    let start_result = start_live_inner(state).await?;
+    let code = start_result["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        return Ok(start_result);
+    }
+
+    let danmu_result = start_danmu_monitor_inner(app, state)
+        .await
+        .unwrap_or_else(|error| {
+            json!({
+                "started": false,
+                "msg": format!("i18n.live.error.start_live_failed:{error}"),
+            })
+        });
+
+    let recent_areas = {
+        let runtime = state.runtime.lock().await;
+        runtime
+            .config
+            .current_uid
+            .as_ref()
+            .and_then(|uid| runtime.config.users.get(uid))
+            .map(|user| user.recent_areas.clone())
+            .unwrap_or_default()
+    };
+
+    Ok(wrap_ok(json!({
+        "stream_info": start_result["data"].clone(),
+        "danmu_monitor_started": danmu_result["started"].as_bool().unwrap_or(false),
+        "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
+        "recent_areas": recent_areas,
+    })))
+}
+
+pub async fn stop_live_flow_inner(state: &AppState) -> CmdResult {
+    let stop_result = stop_live_inner(state).await?;
+    let code = stop_result["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        return Ok(stop_result);
+    }
+
+    let danmu_result = stop_danmu_monitor_inner(state)
+        .await
+        .unwrap_or_else(|error| {
+            json!({
+                "stopped": false,
+                "msg": format!("i18n.live.error.stop_live_failed:{error}"),
+            })
+        });
+
+    Ok(wrap_ok(json!({
+        "live_stopped": true,
+        "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
+        "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
+    })))
+}
+
+#[tauri::command]
+pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
+    start_live_inner(&state).await
+}
+
+#[tauri::command]
+pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
+    stop_live_inner(&state).await
+}
+
+#[tauri::command]
+pub async fn start_live_flow(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    start_live_flow_inner(&app, &state).await
+}
+
+#[tauri::command]
+pub async fn stop_live_flow(state: State<'_, AppState>) -> CmdResult {
+    stop_live_flow_inner(&state).await
 }
 
 #[tauri::command]
@@ -1195,13 +1308,13 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
     }
 }
 
-#[tauri::command]
-pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if runtime.danmu_task.is_some() {
-        return Ok(wrap_ok(
-            json!({ "msg": "i18n.live.danmu_monitor_already_running" }),
-        ));
+        return Ok(json!({
+            "started": false,
+            "msg": "i18n.live.danmu_monitor_already_running"
+        }));
     }
 
     let room_id = runtime.session.room_id.clone();
@@ -1211,6 +1324,7 @@ pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> 
     }
     let client = state.client.clone();
 
+    let app_handle = app.clone();
     runtime.danmu_task = Some(tokio::spawn(async move {
         if let Ok(info) = get_danmu_info(&client, &room_id).await {
             let token = info["data"]["token"].as_str().unwrap_or("");
@@ -1265,7 +1379,7 @@ pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> 
 
                 while let Some(Ok(message)) = read.next().await {
                     if let Message::Binary(data) = message {
-                        decode_and_emit(&app, &data);
+                        decode_and_emit(&app_handle, &data);
                     }
                 }
                 heartbeat.abort();
@@ -1273,14 +1387,37 @@ pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> 
         }
     }));
 
-    Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_monitor_started" })))
+    Ok(json!({
+        "started": true,
+        "msg": "i18n.live.danmu_monitor_started"
+    }))
+}
+
+async fn stop_danmu_monitor_inner(state: &AppState) -> CmdResult {
+    let mut runtime = state.runtime.lock().await;
+    let mut stopped = false;
+    if let Some(task) = runtime.danmu_task.take() {
+        task.abort();
+        stopped = true;
+    }
+    Ok(json!({
+        "stopped": stopped,
+        "msg": "i18n.live.danmu_monitor_stopped"
+    }))
+}
+
+#[tauri::command]
+pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    let payload = start_danmu_monitor_inner(&app, &state).await?;
+    Ok(wrap_ok(json!({
+        "msg": payload["msg"].as_str().unwrap_or("i18n.live.danmu_monitor_started")
+    })))
 }
 
 #[tauri::command]
 pub async fn stop_danmu_monitor(state: State<'_, AppState>) -> CmdResult {
-    let mut runtime = state.runtime.lock().await;
-    if let Some(task) = runtime.danmu_task.take() {
-        task.abort();
-    }
-    Ok(wrap_ok(json!({ "msg": "i18n.live.danmu_monitor_stopped" })))
+    let payload = stop_danmu_monitor_inner(&state).await?;
+    Ok(wrap_ok(json!({
+        "msg": payload["msg"].as_str().unwrap_or("i18n.live.danmu_monitor_stopped")
+    })))
 }

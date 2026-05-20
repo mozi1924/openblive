@@ -1,10 +1,9 @@
 use crate::state::AppState;
-use serde::Serialize;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
-use tauri::{App, AppHandle, Emitter, Manager, Window, WindowEvent};
+use tauri::{App, AppHandle, Manager, Window, WindowEvent};
 
 const TRAY_ID: &str = "main-tray";
 const MENU_ACCOUNT_INFO: &str = "tray.account_info";
@@ -13,7 +12,6 @@ const MENU_TOGGLE_WINDOW: &str = "tray.toggle_window";
 const MENU_START_LIVE: &str = "tray.start_live";
 const MENU_STOP_LIVE: &str = "tray.stop_live";
 const MENU_QUIT: &str = "tray.quit";
-const EVENT_TRAY_ACTION: &str = "tray-action";
 
 #[cfg(not(target_os = "macos"))]
 const TRAY_BLACK: &[u8] = include_bytes!("../icons/tray_black.png");
@@ -36,11 +34,6 @@ fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
             tauri::image::Image::from_bytes(TRAY_BLACK).expect("failed to load black tray icon")
         }
     }
-}
-
-#[derive(Clone, Serialize)]
-struct TrayActionPayload<'a> {
-    action: &'a str,
 }
 
 fn current_account_label(app: &AppHandle) -> String {
@@ -151,11 +144,6 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &quit,
         ],
     )
-}
-
-fn emit_tray_action(app: &AppHandle, action: &'static str) {
-    let payload = TrayActionPayload { action };
-    let _ = app.emit(EVENT_TRAY_ACTION, payload);
 }
 
 pub fn has_tray(app: &AppHandle) -> bool {
@@ -280,8 +268,38 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
 pub fn on_tray_menu_event(app: &AppHandle, event: &MenuEvent) {
     match event.id().as_ref() {
         MENU_TOGGLE_WINDOW => toggle_main_window(app),
-        MENU_START_LIVE => emit_tray_action(app, "start_live"),
-        MENU_STOP_LIVE => emit_tray_action(app, "stop_live"),
+        MENU_START_LIVE => {
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                match crate::commands::start_live_flow_inner(&app_handle, &state).await {
+                    Ok(value) if value["code"].as_i64().unwrap_or(-1) == 0 => {
+                        eprintln!("[tray] start live flow success");
+                    }
+                    Ok(value) => {
+                        eprintln!("[tray] start live flow non-zero response: {}", value);
+                        reveal_main_window(&app_handle);
+                    }
+                    Err(error) => {
+                        eprintln!("[tray] start live flow failed: {error}");
+                        reveal_main_window(&app_handle);
+                    }
+                }
+                refresh_tray_menu(&app_handle);
+            });
+        }
+        MENU_STOP_LIVE => {
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<AppState>();
+                if let Err(error) = crate::commands::stop_live_flow_inner(&state).await {
+                    eprintln!("[tray] stop live flow failed: {error}");
+                } else {
+                    eprintln!("[tray] stop live flow success");
+                }
+                refresh_tray_menu(&app_handle);
+            });
+        }
         MENU_QUIT => app.exit(0),
         _ => {}
     }

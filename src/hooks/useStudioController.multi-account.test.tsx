@@ -11,11 +11,13 @@ const { mockStudioApi } = vi.hoisted(() => ({
     getAppConfig: vi.fn(),
     getLinkageStatus: vi.fn(),
     setAppConfig: vi.fn(),
+    setAppConfigs: vi.fn(),
     refreshTrayMenu: vi.fn(),
     revealMainWindow: vi.fn(),
     loadSavedConfig: vi.fn(),
     getAccountList: vi.fn(),
     refreshAllAccountCookies: vi.fn(),
+    refreshAllAccountProfiles: vi.fn(),
     refreshCurrentUser: vi.fn(),
     getLoginQrcode: vi.fn(),
     pollLoginStatus: vi.fn(),
@@ -28,13 +30,14 @@ const { mockStudioApi } = vi.hoisted(() => ({
     syncLiveRoomProfile: vi.fn(),
     updateLiveTags: vi.fn(),
     startLive: vi.fn(),
+    startLiveFlow: vi.fn(),
     stopLive: vi.fn(),
+    stopLiveFlow: vi.fn(),
     startDanmuMonitor: vi.fn(),
     stopDanmuMonitor: vi.fn(),
     sendDanmu: vi.fn(),
     getLiveEmoticons: vi.fn(),
-    listenDanmuEvent: vi.fn(),
-    listenTrayAction: vi.fn(),
+    listenDanmuMessage: vi.fn(),
   },
 }));
 
@@ -112,10 +115,9 @@ beforeEach(() => {
   );
   mockStudioApi.refreshTrayMenu.mockResolvedValue(ok({}));
   mockStudioApi.getPartitions.mockResolvedValue(ok({ 手游: ["王者荣耀", "永劫无间"] }));
-  mockStudioApi.listenDanmuEvent.mockResolvedValue(() => undefined);
-  mockStudioApi.listenTrayAction.mockResolvedValue(() => undefined);
+  mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
-  mockStudioApi.refreshAllAccountCookies.mockResolvedValue(
+  mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
     ok({ updated: 0, failed: [], expired: [] }),
   );
   mockStudioApi.startDanmuMonitor.mockResolvedValue(ok({}));
@@ -133,11 +135,26 @@ beforeEach(() => {
     }),
   );
   mockStudioApi.startLive.mockResolvedValue(ok(null));
+  mockStudioApi.startLiveFlow.mockResolvedValue(
+    ok({
+      stream_info: null,
+      danmu_monitor_started: true,
+      danmu_monitor_msg: "i18n.live.danmu_monitor_started",
+    }),
+  );
   mockStudioApi.stopLive.mockResolvedValue(ok({}));
+  mockStudioApi.stopLiveFlow.mockResolvedValue(
+    ok({
+      live_stopped: true,
+      danmu_monitor_stopped: true,
+      danmu_monitor_msg: "i18n.live.danmu_monitor_stopped",
+    }),
+  );
   mockStudioApi.refreshCurrentUser.mockResolvedValue(ok(makeUser("1", "A", "A-old")));
   mockStudioApi.getLoginQrcode.mockResolvedValue(ok({ url: "", qrcode_key: "" }));
   mockStudioApi.pollLoginStatus.mockResolvedValue({ code: 86101, msg: "pending" });
   mockStudioApi.setAppConfig.mockResolvedValue(ok({}));
+  mockStudioApi.setAppConfigs.mockResolvedValue(ok({}));
   mockStudioApi.revealMainWindow.mockResolvedValue(ok({}));
 });
 
@@ -152,7 +169,7 @@ describe("useStudioController multi-account regressions", () => {
     const titleReq = deferred<Resp<{ profile_state: ReturnType<typeof defaultProfileState> }>>();
     let backendCurrentUid = "1";
 
-    mockStudioApi.refreshAllAccountCookies.mockResolvedValue({
+    mockStudioApi.refreshAllAccountProfiles.mockResolvedValue({
       code: 1,
       msg: "skip",
     });
@@ -195,24 +212,19 @@ describe("useStudioController multi-account regressions", () => {
     expect(result.current.state.currentUser?.last_title).not.toBe("title-from-a");
   });
 
-  it("reloads current user even when cookie refresh reports updated=0", async () => {
+  it("hydrates current user from backend current_uid", async () => {
     const userA = makeUser("1", "A", "A-old");
     const userB = makeUser("2", "B", "B-old");
-    let backendCurrentUid = "1";
+    const backendCurrentUid = "2";
 
     mockStudioApi.loadSavedConfig.mockImplementation(async () =>
-      ok(backendCurrentUid === "1" ? userA : userB),
+      ok(userB),
     );
     mockStudioApi.getAccountList.mockImplementation(async () =>
       ok({ list: [userA, userB], current_uid: backendCurrentUid }),
     );
-    mockStudioApi.refreshAllAccountCookies.mockImplementation(async () => {
-      backendCurrentUid = "2";
-      return ok({ updated: 0, failed: [], expired: ["1"] });
-    });
 
     const { result } = renderHook(() => useStudioController());
-    await waitFor(() => expect(mockStudioApi.refreshAllAccountCookies).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("2"));
   });
 
@@ -221,7 +233,7 @@ describe("useStudioController multi-account regressions", () => {
     const userB = makeUser("2", "B", "B-old");
     let backendCurrentUid = "1";
 
-    mockStudioApi.refreshAllAccountCookies.mockResolvedValue({
+    mockStudioApi.refreshAllAccountProfiles.mockResolvedValue({
       code: 1,
       msg: "skip",
     });
