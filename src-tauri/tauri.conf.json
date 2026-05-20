@@ -17,6 +17,7 @@
         "width": 1050,
         "height": 720,
         "resizable": true,
+        "backgroundColor": "#07090e",
         "titleBarStyle": "Overlay"
       }
     ],
