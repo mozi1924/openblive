@@ -36,6 +36,10 @@ export const studioApi = {
     invokeCommand<{ updated: number; failed: string[]; expired: string[] }>(
       "refresh_all_account_cookies",
     ),
+  refreshAllAccountProfiles: () =>
+    invokeCommand<{ updated: number; failed: string[]; expired: string[] }>(
+      "refresh_all_account_profiles",
+    ),
   refreshCurrentUser: () => invokeCommand<User>("refresh_current_user"),
   getLoginQrcode: () =>
     invokeCommand<{ url: string; qrcode_key: string }>("get_login_qrcode"),

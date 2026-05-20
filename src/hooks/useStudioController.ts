@@ -34,6 +34,8 @@ import {
   type RecentArea,
 } from "./studio/controllerHelpers";
 
+const ACCOUNT_PROFILE_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+
 type ConfirmModalTone = "primary" | "danger";
 
 type ConfirmModalState = {
@@ -465,6 +467,45 @@ export function useStudioController() {
       }
     }
   }, [loadSavedUser]);
+
+  const refreshAccountProfilesWithFallback = useCallback(
+    async (source: "startup" | "periodic") => {
+      try {
+        const res = await studioApi.refreshAllAccountProfiles();
+        if (res.code !== 0 || !res.data) {
+          return;
+        }
+        handleExpiredAccounts(res.data.expired || []);
+        if (res.data.failed.length > 0) {
+          append(
+            tf(
+              localeSetting,
+              source === "startup"
+                ? "ui.ctrl.account_profile_refresh_partial_failed_start"
+                : "ui.ctrl.account_profile_refresh_partial_failed",
+              {
+                list: res.data.failed
+                  .map((msg) => resolveBackendMessage(msg, localeSetting))
+                  .join(" | "),
+              },
+            ),
+          );
+        }
+        await loadSavedUser();
+        await loadAccounts();
+      } catch {
+        append(
+          t(
+            localeSetting,
+            source === "startup"
+              ? "ui.ctrl.account_profile_refresh_start_failed"
+              : "ui.ctrl.account_profile_refresh_failed",
+          ),
+        );
+      }
+    },
+    [append, handleExpiredAccounts, loadAccounts, loadSavedUser, localeSetting],
+  );
 
   const refreshCurrentUser = useCallback(async () => {
     const requestUid = activeUidRef.current;
@@ -1214,58 +1255,15 @@ export function useStudioController() {
   useEffect(() => {
     if (!startupCookieRefreshDoneRef.current) {
       startupCookieRefreshDoneRef.current = true;
-      void studioApi
-        .refreshAllAccountCookies()
-        .then(async (res) => {
-          if (res.code !== 0 || !res.data) {
-            return;
-          }
-          handleExpiredAccounts(res.data.expired || []);
-          if (res.data.failed.length > 0) {
-            append(
-              tf(localeSetting, "ui.ctrl.cookie_refresh_partial_failed_start", {
-                list: res.data.failed
-                  .map((msg) => resolveBackendMessage(msg, localeSetting))
-                  .join(" | "),
-              }),
-            );
-          }
-          await loadSavedUser();
-          await loadAccounts();
-        })
-        .catch(() => {
-          append(t(localeSetting, "ui.ctrl.cookie_refresh_start_failed"));
-        });
+      void refreshAccountProfilesWithFallback("startup");
     }
 
     const timer = window.setInterval(() => {
-      void studioApi
-        .refreshAllAccountCookies()
-        .then(async (res) => {
-          if (res.code !== 0 || !res.data) {
-            return;
-          }
-
-          handleExpiredAccounts(res.data.expired || []);
-          if (res.data.failed.length > 0) {
-            append(
-              tf(localeSetting, "ui.ctrl.cookie_refresh_partial_failed", {
-                list: res.data.failed
-                  .map((msg) => resolveBackendMessage(msg, localeSetting))
-                  .join(" | "),
-              }),
-            );
-          }
-          await loadSavedUser();
-          await loadAccounts();
-        })
-        .catch(() => {
-          append(t(localeSetting, "ui.ctrl.cookie_refresh_failed"));
-        });
-    }, 15 * 60 * 1000);
+      void refreshAccountProfilesWithFallback("periodic");
+    }, ACCOUNT_PROFILE_REFRESH_INTERVAL_MS);
 
     return () => window.clearInterval(timer);
-  }, [append, handleExpiredAccounts, loadAccounts, loadSavedUser, localeSetting]);
+  }, [refreshAccountProfilesWithFallback]);
 
   useEffect(() => {
     let active = true;

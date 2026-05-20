@@ -829,9 +829,7 @@ pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
     Ok(wrap_ok(json!({})))
 }
 
-#[tauri::command]
-pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResult {
-    let _refresh_guard = state.auth_refresh_lock.lock().await;
+async fn refresh_accounts_batch(state: &AppState, refresh_profile: bool) -> serde_json::Value {
     let uids = {
         let runtime = state.runtime.lock().await;
         runtime.config.users.keys().cloned().collect::<Vec<_>>()
@@ -840,31 +838,29 @@ pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResul
     let mut updated = 0;
     let mut failed: Vec<String> = Vec::new();
     let mut expired: Vec<String> = Vec::new();
-    eprintln!(
-        "[auth][batch] begin refresh_all_account_cookies total={}",
-        uids.len()
-    );
+    let mode = if refresh_profile { "profile" } else { "cookie" };
+    eprintln!("[auth][batch][{mode}] begin total={}", uids.len());
     for uid in uids {
-        eprintln!("[auth][batch] checking uid={}", uid);
-        match refresh_cookie_for_uid(&uid, &state, false).await {
+        eprintln!("[auth][batch][{mode}] checking uid={}", uid);
+        match refresh_cookie_for_uid(&uid, state, refresh_profile).await {
             RefreshCookieResult::Updated(_) => {
                 updated += 1;
-                eprintln!("[auth][batch] uid={} updated", uid);
+                eprintln!("[auth][batch][{mode}] uid={} updated", uid);
             }
             RefreshCookieResult::Missing => {}
             RefreshCookieResult::Invalid(msg) => {
                 expired.push(uid.clone());
                 failed.push(format!("{uid}: {msg}"));
-                eprintln!("[auth][batch] uid={} invalid: {}", uid, msg);
+                eprintln!("[auth][batch][{mode}] uid={} invalid: {}", uid, msg);
             }
             RefreshCookieResult::Failed(error) => {
                 failed.push(format!("{uid}: {error}"));
-                eprintln!("[auth][batch] uid={} failed: {}", uid, error);
+                eprintln!("[auth][batch][{mode}] uid={} failed: {}", uid, error);
             }
         }
     }
     eprintln!(
-        "[auth][batch] done updated={}, expired={}, failed={}",
+        "[auth][batch][{mode}] done updated={}, expired={}, failed={}",
         updated,
         expired.len(),
         failed.len()
@@ -886,9 +882,21 @@ pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResul
         runtime.session = Default::default();
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
-    Ok(wrap_ok(json!({
+    json!({
         "updated": updated,
         "failed": failed,
         "expired": expired
-    })))
+    })
+}
+
+#[tauri::command]
+pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResult {
+    let _refresh_guard = state.auth_refresh_lock.lock().await;
+    Ok(wrap_ok(refresh_accounts_batch(&state, false).await))
+}
+
+#[tauri::command]
+pub async fn refresh_all_account_profiles(state: State<'_, AppState>) -> CmdResult {
+    let _refresh_guard = state.auth_refresh_lock.lock().await;
+    Ok(wrap_ok(refresh_accounts_batch(&state, true).await))
 }
