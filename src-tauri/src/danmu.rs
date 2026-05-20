@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 mod helpers;
 mod interact_word;
+mod parser_helpers;
 mod parsers;
 
 use helpers::normalize_asset_url;
