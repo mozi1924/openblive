@@ -27,8 +27,6 @@ type SettingsTabProps = {
   onChangeLocale: (locale: AppConfig["locale"]) => Promise<void>;
   onSaveConfig: () => Promise<void>;
   onGenerateHttpUserAgent: () => Promise<void>;
-  onShowDanmuOverlay: () => Promise<void>;
-  onHideDanmuOverlay: () => Promise<void>;
 };
 
 export function SettingsTab({
@@ -41,8 +39,6 @@ export function SettingsTab({
   onChangeLocale,
   onSaveConfig,
   onGenerateHttpUserAgent,
-  onShowDanmuOverlay,
-  onHideDanmuOverlay,
 }: SettingsTabProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const clearAdvancedConfig = () => {
@@ -277,24 +273,6 @@ export function SettingsTab({
             />
           </div>
 
-          {appConfig.danmu_overlay_enabled ? (
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => void onShowDanmuOverlay()}
-                className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 px-4 py-2 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue/15"
-              >
-                {t(locale, "ui.settings.overlay.show")}
-              </button>
-              <button
-                type="button"
-                onClick={() => void onHideDanmuOverlay()}
-                className="rounded-xl border border-white/8 bg-white/4 px-4 py-2 text-xs font-bold text-gray-200 transition-all hover:border-white/12 hover:bg-white/7"
-              >
-                {t(locale, "ui.settings.overlay.hide")}
-              </button>
-            </div>
-          ) : null}
         </section>
 
         {/* Linkage Mode Select */}
