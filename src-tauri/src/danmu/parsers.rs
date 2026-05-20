@@ -17,6 +17,20 @@ fn next_msg_id() -> String {
     )
 }
 
+fn parse_dm_interaction_detail(payload: &Value) -> Option<Value> {
+    let raw = payload
+        .get("data")
+        .and_then(|value| value.get("data"))
+        .or_else(|| payload.get("data"))
+        .or_else(|| payload.get("value"))?;
+
+    if raw.is_object() || raw.is_array() {
+        return Some(raw.clone());
+    }
+    raw.as_str()
+        .and_then(|value| serde_json::from_str::<Value>(value).ok())
+}
+
 pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
     let cmd = payload["cmd"].as_str().unwrap_or("UNKNOWN");
     let id = next_msg_id();
@@ -285,6 +299,63 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
                 "sender_name_color": sender_name_color,
                 "interact_type": interact_type,
                 "cmd": cmd,
+            })),
+            None,
+        );
+    }
+
+    if cmd == "DM_INTERACTION" {
+        let interaction_type = payload
+            .get("data")
+            .and_then(|value| value.get("type"))
+            .and_then(parse_i64)
+            .unwrap_or(0);
+        let detail = parse_dm_interaction_detail(payload).unwrap_or(Value::Null);
+        let vote_id = detail
+            .as_object()
+            .and_then(|value| value.get("vote_id"))
+            .and_then(parse_u64);
+        let vote_status = detail
+            .as_object()
+            .and_then(|value| value.get("status"))
+            .and_then(parse_i64);
+        let vote_question = detail
+            .as_object()
+            .and_then(|value| value.get("question"))
+            .and_then(parse_string)
+            .unwrap_or_default();
+        let interaction_kind = match interaction_type {
+            101 => "vote",
+            102 => "danmu",
+            103 => "follow",
+            104 => "gift",
+            105 => "share",
+            106 => "like",
+            _ => "unknown",
+        };
+        let content = if interaction_type == 101 {
+            if vote_question.is_empty() {
+                "i18n.live.event.interact.vote_updated".to_string()
+            } else {
+                format!("i18n.live.event.interact.vote_updated:{vote_question}")
+            }
+        } else {
+            format!("i18n.live.event.interact.received(type={interaction_type})")
+        };
+        return (
+            Some(json!({
+                "id": id,
+                "type": "interact",
+                "time": time,
+                "sender": "system",
+                "content": content,
+                "cmd": cmd,
+                "interaction_kind": interaction_kind,
+                "interaction_event_type": interaction_type,
+                "interaction_vote_id": vote_id,
+                "interaction_vote_status": vote_status,
+                "interaction_vote_question": vote_question,
+                "interaction_detail": detail,
             })),
             None,
         );
@@ -855,6 +926,7 @@ pub fn is_supported_cmd(cmd: &str) -> bool {
         || cmd == "GUARD_BUY"
         || cmd == "INTERACT_WORD"
         || cmd == "INTERACT_WORD_V2"
+        || cmd == "DM_INTERACTION"
         || cmd == "SUPER_CHAT_MESSAGE"
         || cmd == "SUPER_CHAT_MESSAGE_JPN"
         || cmd == "SUPER_CHAT_MESSAGE_DELETE"

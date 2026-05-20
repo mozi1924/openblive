@@ -3,7 +3,10 @@ use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
-use crate::models::{DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq};
+use crate::models::{
+    CreateLiveVoteReq, DanmuReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq,
+    UpdateTitleReq,
+};
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
@@ -247,6 +250,250 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
         Err(error_message(
             &value,
             "i18n.live.error.fetch_live_emoticons_failed",
+        ))
+    }
+}
+
+#[tauri::command]
+pub async fn get_live_vote_panel(state: State<'_, AppState>) -> CmdResult {
+    let (_uid, room_id, _csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-room/v1/dm/interaction/votePanel"),
+            &[("room_id", room_id)],
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let mut runtime = state.runtime.lock().await;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                clear_user_auth_flags(user);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        Ok(wrap_ok(value["data"].clone()))
+    } else {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "get_live_vote_panel code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        Err(error_message(
+            &value,
+            "i18n.live.error.fetch_live_vote_panel_failed",
+        ))
+    }
+}
+
+#[tauri::command]
+pub async fn get_live_vote_history(state: State<'_, AppState>) -> CmdResult {
+    let (_uid, room_id, _csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-room/v1/dm/interaction/voteHistory"),
+            &[("room_id", room_id)],
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let mut runtime = state.runtime.lock().await;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                clear_user_auth_flags(user);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        Ok(wrap_ok(value["data"].clone()))
+    } else {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "get_live_vote_history code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        Err(error_message(
+            &value,
+            "i18n.live.error.fetch_live_vote_history_failed",
+        ))
+    }
+}
+
+#[tauri::command]
+pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>) -> CmdResult {
+    if !(1..=9).contains(&req.duration) {
+        return Err("i18n.live.error.invalid_vote_duration".into());
+    }
+
+    let (room_id, csrf, cookie, live_key, sub_session_key) = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (
+            room_id,
+            csrf,
+            cookie,
+            runtime.session.live_key.clone(),
+            runtime.session.sub_session_key.clone(),
+        )
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let mut form = BTreeMap::new();
+    form.insert("room_id".into(), room_id);
+    form.insert("duration".into(), req.duration.to_string());
+    form.insert("question".into(), req.question);
+    form.insert("option_a".into(), req.option_a);
+    form.insert("option_b".into(), req.option_b);
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
+    if let Some(template_id) = req.template_id.filter(|value| *value > 0) {
+        form.insert("template_id".into(), template_id.to_string());
+    }
+    if let Some(value) = live_key.filter(|value| !value.trim().is_empty()) {
+        form.insert("live_key".into(), value);
+    }
+    if let Some(value) = sub_session_key.filter(|value| !value.trim().is_empty()) {
+        form.insert("sub_session_key".into(), value);
+    }
+
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-room/v1/dm/interaction/createVote"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let mut runtime = state.runtime.lock().await;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                clear_user_auth_flags(user);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        Ok(wrap_ok(json!({
+            "interaction_id": value["data"]["interaction_id"].as_u64().unwrap_or(0)
+        })))
+    } else {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("create_live_vote code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        Err(error_message(&value, "i18n.live.error.create_live_vote_failed"))
+    }
+}
+
+#[tauri::command]
+pub async fn terminate_live_vote(
+    req: TerminateLiveVoteReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let (_uid, room_id, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let mut form = BTreeMap::new();
+    form.insert("interaction_id".into(), req.interaction_id.to_string());
+    form.insert("room_id".into(), room_id);
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
+
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-room/v1/dm/interaction/terminateVote"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let mut runtime = state.runtime.lock().await;
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                clear_user_auth_flags(user);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        Ok(wrap_ok(json!(null)))
+    } else {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "terminate_live_vote code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        Err(error_message(
+            &value,
+            "i18n.live.error.terminate_live_vote_failed",
         ))
     }
 }

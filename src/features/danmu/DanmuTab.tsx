@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
+  BarChart3,
   Gift,
   MessageSquare,
   Radio,
@@ -10,10 +11,17 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import type { DanmuMsg, LiveEmoticonPackage, User } from "../../types/studio";
+import type {
+  DanmuMsg,
+  LiveEmoticonPackage,
+  LiveVoteInfo,
+  LiveVotePanelData,
+  User,
+} from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { resolveBackendMessage, t, tf } from "../../utils/i18n";
 import { CompactEventStrip } from "./CompactEventStrip";
+import { LiveVotePanel } from "./LiveVotePanel";
 
 type DanmuTabProps = {
   locale: LocaleSetting;
@@ -24,8 +32,27 @@ type DanmuTabProps = {
   danmus: DanmuMsg[];
   liveEmoticonPackages: LiveEmoticonPackage[];
   liveEmoticonsLoading: boolean;
+  liveVotePanel: LiveVotePanelData | null;
+  liveVoteHistory: LiveVoteInfo[];
+  liveVoteLoading: boolean;
+  liveVoteSubmitting: boolean;
+  liveVoteTerminating: boolean;
+  liveVoteQuestion: string;
+  liveVoteOptionA: string;
+  liveVoteOptionB: string;
+  liveVoteDuration: number;
+  liveVoteSelectedTemplateId: number | null;
   onChangeDanmuText: React.Dispatch<React.SetStateAction<string>>;
   onClearDanmus: () => void;
+  onRefreshLiveVoteData: () => Promise<void>;
+  onApplyLiveVoteTemplate: (templateId: number) => void;
+  onClearLiveVoteDraft: () => void;
+  onChangeLiveVoteQuestion: (value: string) => void;
+  onChangeLiveVoteOptionA: (value: string) => void;
+  onChangeLiveVoteOptionB: (value: string) => void;
+  onChangeLiveVoteDuration: React.Dispatch<React.SetStateAction<number>>;
+  onCreateLiveVote: () => Promise<void>;
+  onTerminateLiveVote: (interactionId: number) => Promise<void>;
   onSendDanmu: (event: React.FormEvent) => Promise<void>;
   onStartDanmu: () => Promise<void>;
   onStopDanmu: () => Promise<void>;
@@ -151,16 +178,35 @@ export function DanmuTab({
   danmus,
   liveEmoticonPackages,
   liveEmoticonsLoading,
+  liveVotePanel,
+  liveVoteHistory,
+  liveVoteLoading,
+  liveVoteSubmitting,
+  liveVoteTerminating,
+  liveVoteQuestion,
+  liveVoteOptionA,
+  liveVoteOptionB,
+  liveVoteDuration,
+  liveVoteSelectedTemplateId,
   onChangeDanmuText,
   onClearDanmus,
+  onRefreshLiveVoteData,
+  onApplyLiveVoteTemplate,
+  onClearLiveVoteDraft,
+  onChangeLiveVoteQuestion,
+  onChangeLiveVoteOptionA,
+  onChangeLiveVoteOptionB,
+  onChangeLiveVoteDuration,
+  onCreateLiveVote,
+  onTerminateLiveVote,
   onSendDanmu,
   onStartDanmu,
   onStopDanmu,
 }: DanmuTabProps) {
-  const [emoticonPanelOpen, setEmoticonPanelOpen] = useState(false);
-  const composerRef = useRef<HTMLFormElement>(null);
+  const [openPanel, setOpenPanel] = useState<"emoticon" | "vote" | null>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const emoticonPanelRef = useRef<HTMLDivElement>(null);
+  const floatingPanelRef = useRef<HTMLDivElement>(null);
   const hasEmoticons = useMemo(
     () => liveEmoticonPackages.some((pkg) => pkg.emoticons.length > 0),
     [liveEmoticonPackages],
@@ -184,23 +230,23 @@ export function DanmuTab({
   );
 
   useEffect(() => {
-    if (!emoticonPanelOpen) {
+    if (!openPanel) {
       return;
     }
 
     const onPointerDown = (event: MouseEvent) => {
-      if (emoticonPanelRef.current?.contains(event.target as Node)) {
+      if (floatingPanelRef.current?.contains(event.target as Node)) {
         return;
       }
       if (composerRef.current?.contains(event.target as Node)) {
         return;
       }
-      setEmoticonPanelOpen(false);
+      setOpenPanel(null);
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setEmoticonPanelOpen(false);
+        setOpenPanel(null);
       }
     };
 
@@ -210,7 +256,7 @@ export function DanmuTab({
       document.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [emoticonPanelOpen]);
+  }, [openPanel]);
 
   const insertEmoticon = (text: string) => {
     const input = textareaRef.current;
@@ -323,64 +369,10 @@ export function DanmuTab({
       </div>
 
       <div className="border-t border-white/5 bg-[#090d16]/80 p-4">
-        <form
-          ref={composerRef}
-          onSubmit={(event) => {
-            setEmoticonPanelOpen(false);
-            void onSendDanmu(event);
-          }}
-          className="relative"
-        >
-          <div className="flex items-center space-x-2 rounded-2xl border border-white/8 bg-[#06080d] p-2 focus-within:border-bili-blue/40 focus-within:bg-[#090c15] transition-all duration-200">
-            <textarea
-              ref={textareaRef}
-              value={danmuText}
-              onChange={(event) => onChangeDanmuText(event.target.value)}
-              placeholder={t(locale, "ui.danmu.placeholder")}
-              rows={1}
-              className="selectable-text flex-1 resize-none bg-transparent px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none max-h-24 scrollbar-thin"
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && emoticonPanelOpen) {
-                  event.preventDefault();
-                  setEmoticonPanelOpen(false);
-                  return;
-                }
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  const form = event.currentTarget.form;
-                  form?.requestSubmit();
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => setEmoticonPanelOpen((prev) => !prev)}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
-                emoticonPanelOpen
-                  ? "border-bili-blue/40 bg-bili-blue/15 text-bili-blue"
-                  : "border-white/5 bg-white/3 text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
-              }`}
-              title={t(locale, "ui.danmu.emoticon.toggle")}
-            >
-              <SmilePlus className="h-4 w-4" />
-            </button>
-            <button
-              type="submit"
-              disabled={!danmuText.trim()}
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all ${
-                danmuText.trim()
-                  ? "bg-bili-blue text-white hover:bg-bili-blue/90 active:scale-95 shadow-[0_2px_8px_rgba(0,174,236,0.3)]"
-                  : "cursor-not-allowed bg-white/3 text-gray-600"
-              }`}
-              title={t(locale, "ui.danmu.send")}
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-
-          {emoticonPanelOpen && (
+        <div ref={composerRef} className="relative">
+          {openPanel === "emoticon" && (
             <div
-              ref={emoticonPanelRef}
+              ref={floatingPanelRef}
               className="absolute bottom-[calc(100%+12px)] right-0 z-20 w-[min(30rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-white/10 bg-[#0b1018]/95 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl"
             >
               <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
@@ -444,7 +436,99 @@ export function DanmuTab({
               </div>
             </div>
           )}
-        </form>
+
+          {openPanel === "vote" ? (
+            <LiveVotePanel
+              locale={locale}
+              panelRef={floatingPanelRef}
+              liveVotePanel={liveVotePanel}
+              liveVoteHistory={liveVoteHistory}
+              liveVoteLoading={liveVoteLoading}
+              liveVoteSubmitting={liveVoteSubmitting}
+              liveVoteTerminating={liveVoteTerminating}
+              liveVoteQuestion={liveVoteQuestion}
+              liveVoteOptionA={liveVoteOptionA}
+              liveVoteOptionB={liveVoteOptionB}
+              liveVoteDuration={liveVoteDuration}
+              liveVoteSelectedTemplateId={liveVoteSelectedTemplateId}
+              onRefreshLiveVoteData={onRefreshLiveVoteData}
+              onApplyLiveVoteTemplate={onApplyLiveVoteTemplate}
+              onClearLiveVoteDraft={onClearLiveVoteDraft}
+              onChangeLiveVoteQuestion={onChangeLiveVoteQuestion}
+              onChangeLiveVoteOptionA={onChangeLiveVoteOptionA}
+              onChangeLiveVoteOptionB={onChangeLiveVoteOptionB}
+              onChangeLiveVoteDuration={onChangeLiveVoteDuration}
+              onCreateLiveVote={onCreateLiveVote}
+              onTerminateLiveVote={onTerminateLiveVote}
+            />
+          ) : null}
+
+          <form
+            onSubmit={(event) => {
+              setOpenPanel(null);
+              void onSendDanmu(event);
+            }}
+          >
+            <div className="flex items-center space-x-2 rounded-2xl border border-white/8 bg-[#06080d] p-2 focus-within:border-bili-blue/40 focus-within:bg-[#090c15] transition-all duration-200">
+              <textarea
+                ref={textareaRef}
+                value={danmuText}
+                onChange={(event) => onChangeDanmuText(event.target.value)}
+                placeholder={t(locale, "ui.danmu.placeholder")}
+                rows={1}
+                className="selectable-text flex-1 resize-none bg-transparent px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none max-h-24 scrollbar-thin"
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && openPanel) {
+                    event.preventDefault();
+                    setOpenPanel(null);
+                    return;
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    const form = event.currentTarget.form;
+                    form?.requestSubmit();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setOpenPanel((prev) => (prev === "emoticon" ? null : "emoticon"))}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                  openPanel === "emoticon"
+                    ? "border-bili-blue/40 bg-bili-blue/15 text-bili-blue"
+                    : "border-white/5 bg-white/3 text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
+                }`}
+                title={t(locale, "ui.danmu.emoticon.toggle")}
+              >
+                <SmilePlus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpenPanel((prev) => (prev === "vote" ? null : "vote"))}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                  openPanel === "vote"
+                    ? "border-bili-blue/40 bg-bili-blue/15 text-bili-blue"
+                    : "border-white/5 bg-white/3 text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-white"
+                }`}
+                title={t(locale, "ui.danmu.vote.toggle")}
+              >
+                <BarChart3 className="h-4 w-4" />
+              </button>
+              <button
+                type="submit"
+                disabled={!danmuText.trim()}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all ${
+                  danmuText.trim()
+                    ? "bg-bili-blue text-white hover:bg-bili-blue/90 active:scale-95 shadow-[0_2px_8px_rgba(0,174,236,0.3)]"
+                    : "cursor-not-allowed bg-white/3 text-gray-600"
+                }`}
+                title={t(locale, "ui.danmu.send")}
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+          </form>
+        </div>
         <p className="mt-2 px-3 text-[10px] text-gray-500 leading-normal">
           {t(locale, "ui.danmu.fast_desc")}
         </p>

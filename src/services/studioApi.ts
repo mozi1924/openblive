@@ -8,6 +8,9 @@ import type {
   LinkageStatus,
   LiveFlowResp,
   LiveEmoticonPackage,
+  LiveVoteCreateResp,
+  LiveVoteHistoryData,
+  LiveVotePanelData,
   QrPayload,
   LiveRoomProfile,
   Resp,
@@ -81,6 +84,26 @@ export const studioApi = {
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
   getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
+  getLiveVotePanel: () => invokeCommand<LiveVotePanelData>("get_live_vote_panel"),
+  getLiveVoteHistory: () => invokeCommand<LiveVoteHistoryData>("get_live_vote_history"),
+  createLiveVote: (
+    question: string,
+    optionA: string,
+    optionB: string,
+    duration: number,
+    templateId?: number | null,
+  ) =>
+    invokeCommand<LiveVoteCreateResp>("create_live_vote", {
+      req: {
+        question,
+        option_a: optionA,
+        option_b: optionB,
+        duration,
+        template_id: templateId ?? undefined,
+      },
+    }),
+  terminateLiveVote: (interactionId: number) =>
+    invokeCommand("terminate_live_vote", { req: { interaction_id: interactionId } }),
   pushAppLog: (message: string) =>
     invokeCommand<{ line: string; logs: string[] }>("push_app_log", { req: { message } }),
   getAppLogs: () => invokeCommand<string[]>("get_app_logs"),

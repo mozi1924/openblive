@@ -6,6 +6,8 @@ import type {
   DanmuMsg,
   LinkageStatus,
   LiveEmoticonPackage,
+  LiveVoteInfo,
+  LiveVotePanelData,
   LiveProfileState,
   Session,
   StreamInfo,
@@ -30,6 +32,12 @@ import {
   unsavedLabelMap,
   type RecentArea,
 } from "./studio/controllerHelpers";
+import {
+  DEFAULT_LIVE_VOTE_DURATION,
+  isLiveVoteActive,
+  normalizeLiveVoteHistory,
+  normalizeLiveVotePanelData,
+} from "./studio/liveVoteUtils";
 
 type ConfirmModalTone = "primary" | "danger";
 
@@ -44,7 +52,7 @@ type ConfirmModalState = {
 
 const QR_LOGIN_TIMEOUT_MS = 2 * 60 * 1000;
 const QR_LOGIN_POLL_INTERVAL_MS = 2000;
-
+const LIVE_VOTE_SYNC_DEBOUNCE_MS = 800;
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
@@ -71,6 +79,18 @@ export function useStudioController() {
   const [danmus, setDanmus] = useState<DanmuMsg[]>([]);
   const [liveEmoticonPackages, setLiveEmoticonPackages] = useState<LiveEmoticonPackage[]>([]);
   const [liveEmoticonsLoading, setLiveEmoticonsLoading] = useState(false);
+  const [liveVotePanel, setLiveVotePanel] = useState<LiveVotePanelData | null>(null);
+  const [liveVoteHistory, setLiveVoteHistory] = useState<LiveVoteInfo[]>([]);
+  const [liveVoteLoading, setLiveVoteLoading] = useState(false);
+  const [liveVoteSubmitting, setLiveVoteSubmitting] = useState(false);
+  const [liveVoteTerminating, setLiveVoteTerminating] = useState(false);
+  const [liveVoteQuestion, setLiveVoteQuestion] = useState("");
+  const [liveVoteOptionA, setLiveVoteOptionA] = useState("");
+  const [liveVoteOptionB, setLiveVoteOptionB] = useState("");
+  const [liveVoteDuration, setLiveVoteDuration] = useState(DEFAULT_LIVE_VOTE_DURATION);
+  const [liveVoteSelectedTemplateId, setLiveVoteSelectedTemplateId] = useState<number | null>(
+    null,
+  );
   const [logs, setLogs] = useState<string[]>([]);
 
   const [faceQr, setFaceQr] = useState("");
@@ -111,6 +131,7 @@ export function useStudioController() {
   const childRef = useRef("");
   const syncStatusCacheHintRef = useRef("");
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
+  const liveVoteSyncTimerRef = useRef<number | null>(null);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   const liveEmoticonMap = useMemo(
@@ -178,6 +199,23 @@ export function useStudioController() {
       );
     });
   }, [append, localeSetting]);
+
+  const resetLiveVoteDraft = useCallback(() => {
+    setLiveVoteSelectedTemplateId(null);
+    setLiveVoteQuestion("");
+    setLiveVoteOptionA("");
+    setLiveVoteOptionB("");
+    setLiveVoteDuration(DEFAULT_LIVE_VOTE_DURATION);
+  }, []);
+
+  const clearLiveVoteState = useCallback(() => {
+    setLiveVotePanel(null);
+    setLiveVoteHistory([]);
+    setLiveVoteLoading(false);
+    setLiveVoteSubmitting(false);
+    setLiveVoteTerminating(false);
+    resetLiveVoteDraft();
+  }, [resetLiveVoteDraft]);
 
   const resetQrLoginState = useCallback(() => {
     qrLoginSessionNonceRef.current += 1;
@@ -666,6 +704,7 @@ export function useStudioController() {
         applyProfileState(res.data.live_profile_state);
         setDanmuListening(false);
         setDanmus([]);
+        clearLiveVoteState();
         titleDirtyRef.current = false;
         areaDirtyRef.current = false;
         tagsDirtyRef.current = false;
@@ -702,7 +741,7 @@ export function useStudioController() {
     } finally {
       loginPollBusyRef.current = false;
     }
-  }, [append, applyProfileState, applyUserDraftValues, cancelQrcodeLogin, loadAccounts, loadQrcode, qrcodeKey, refreshSession, resetQrLoginState, syncLiveRoomProfile, localeSetting]);
+  }, [append, applyProfileState, applyUserDraftValues, cancelQrcodeLogin, clearLiveVoteState, loadAccounts, loadQrcode, qrcodeKey, refreshSession, resetQrLoginState, syncLiveRoomProfile, localeSetting]);
 
   const switchAccount = useCallback(
     async (uid: string) => {
@@ -716,6 +755,7 @@ export function useStudioController() {
           setDanmus([]);
           setLiveEmoticonPackages([]);
           setLiveEmoticonsLoading(false);
+          clearLiveVoteState();
           setShowFaceModal(false);
           titleDirtyRef.current = false;
           areaDirtyRef.current = false;
@@ -735,7 +775,7 @@ export function useStudioController() {
         append(tf(localeSetting, "ui.ctrl.switch_failed", { msg: resolveBackendMessage(String(error), localeSetting) }));
       }
     },
-    [append, applyProfileState, applyUserDraftValues, loadAccounts, refreshSession, syncLiveRoomProfile, localeSetting],
+    [append, applyProfileState, applyUserDraftValues, clearLiveVoteState, loadAccounts, refreshSession, syncLiveRoomProfile, localeSetting],
   );
 
   const logout = useCallback(
@@ -745,6 +785,7 @@ export function useStudioController() {
         setDanmus([]);
         setLiveEmoticonPackages([]);
         setLiveEmoticonsLoading(false);
+        clearLiveVoteState();
       }
       const res = await studioApi.logout(uid);
       if (res.code === 0) {
@@ -754,7 +795,7 @@ export function useStudioController() {
         await refreshSession();
       }
     },
-    [append, loadAccounts, loadSavedUser, refreshSession, localeSetting],
+    [append, clearLiveVoteState, loadAccounts, loadSavedUser, refreshSession, localeSetting],
   );
 
   const requestLogout = useCallback(
@@ -1209,6 +1250,228 @@ export function useStudioController() {
     }
   }, [append, localeSetting, session?.room_id]);
 
+  const loadLiveVoteData = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!activeUidRef.current || !session?.room_id) {
+        setLiveVotePanel(null);
+        setLiveVoteHistory([]);
+        return;
+      }
+
+      const requestUid = activeUidRef.current;
+      if (!options?.silent) {
+        setLiveVoteLoading(true);
+      }
+
+      const [panelResult, historyResult] = await Promise.allSettled([
+        studioApi.getLiveVotePanel(),
+        studioApi.getLiveVoteHistory(),
+      ]);
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+
+      let panelError: string | null = null;
+      if (panelResult.status === "fulfilled") {
+        const res = panelResult.value;
+        if (res.code === 0) {
+          setLiveVotePanel(normalizeLiveVotePanelData(res.data));
+        } else {
+          setLiveVotePanel({
+            vote_info: null,
+            templates: [],
+          });
+          panelError = resolveBackendMessage(res.msg, localeSetting);
+        }
+      } else {
+        setLiveVotePanel({
+          vote_info: null,
+          templates: [],
+        });
+        panelError = resolveBackendMessage(String(panelResult.reason), localeSetting);
+      }
+
+      let historyError: string | null = null;
+      if (historyResult.status === "fulfilled") {
+        const res = historyResult.value;
+        if (res.code === 0) {
+          setLiveVoteHistory(normalizeLiveVoteHistory(res.data));
+        } else {
+          setLiveVoteHistory([]);
+          historyError = resolveBackendMessage(res.msg, localeSetting);
+        }
+      } else {
+        setLiveVoteHistory([]);
+        historyError = resolveBackendMessage(String(historyResult.reason), localeSetting);
+      }
+
+      if (!options?.silent && panelError) {
+        append(tf(localeSetting, "ui.ctrl.live_vote_panel_load_failed", { msg: panelError }));
+      }
+      if (!options?.silent && historyError) {
+        append(tf(localeSetting, "ui.ctrl.live_vote_history_load_failed", { msg: historyError }));
+      }
+
+      if (requestUid === activeUidRef.current) {
+        setLiveVoteLoading(false);
+      }
+    },
+    [append, localeSetting, session?.room_id],
+  );
+
+  const applyLiveVoteTemplate = useCallback(
+    (templateId: number) => {
+      const template = liveVotePanel?.templates.find((item) => item.template_id === templateId);
+      if (!template) {
+        return;
+      }
+      setLiveVoteSelectedTemplateId(template.template_id);
+      setLiveVoteQuestion(template.question);
+      setLiveVoteOptionA(template.option_a);
+      setLiveVoteOptionB(template.option_b);
+    },
+    [liveVotePanel?.templates],
+  );
+
+  const updateLiveVoteQuestion = useCallback((value: string) => {
+    setLiveVoteSelectedTemplateId(null);
+    setLiveVoteQuestion(value);
+  }, []);
+
+  const updateLiveVoteOptionA = useCallback((value: string) => {
+    setLiveVoteSelectedTemplateId(null);
+    setLiveVoteOptionA(value);
+  }, []);
+
+  const updateLiveVoteOptionB = useCallback((value: string) => {
+    setLiveVoteSelectedTemplateId(null);
+    setLiveVoteOptionB(value);
+  }, []);
+
+  const createLiveVote = useCallback(async () => {
+    const question = liveVoteQuestion.trim();
+    const optionA = liveVoteOptionA.trim();
+    const optionB = liveVoteOptionB.trim();
+    if (!question || !optionA || !optionB) {
+      return;
+    }
+    if (isLiveVoteActive(liveVotePanel?.vote_info ?? null)) {
+      append(t(localeSetting, "ui.danmu.vote.create_disabled_active"));
+      return;
+    }
+
+    const requestUid = activeUidRef.current;
+    setLiveVoteSubmitting(true);
+    try {
+      const res = await studioApi.createLiveVote(
+        question,
+        optionA,
+        optionB,
+        liveVoteDuration,
+        liveVoteSelectedTemplateId,
+      );
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      if (res.code === 0) {
+        append(tf(localeSetting, "ui.ctrl.live_vote_created", { question }));
+        resetLiveVoteDraft();
+        await loadLiveVoteData({ silent: true });
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_vote_create_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_vote_create_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    } finally {
+      if (requestUid === activeUidRef.current) {
+        setLiveVoteSubmitting(false);
+      }
+    }
+  }, [
+    append,
+    liveVoteDuration,
+    liveVoteOptionA,
+    liveVoteOptionB,
+    liveVotePanel?.vote_info,
+    liveVoteQuestion,
+    liveVoteSelectedTemplateId,
+    loadLiveVoteData,
+    localeSetting,
+    resetLiveVoteDraft,
+  ]);
+
+  const terminateLiveVote = useCallback(
+    async (interactionId: number) => {
+      if (interactionId <= 0) {
+        return;
+      }
+
+      const confirmed = await requestConfirm({
+        title: t(localeSetting, "ui.danmu.vote.terminate"),
+        description: t(localeSetting, "ui.danmu.vote.terminate_confirm"),
+        confirmText: t(localeSetting, "ui.danmu.vote.terminate"),
+        tone: "danger",
+      });
+      if (!confirmed) {
+        return;
+      }
+
+      const requestUid = activeUidRef.current;
+      setLiveVoteTerminating(true);
+      try {
+        const res = await studioApi.terminateLiveVote(interactionId);
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        if (res.code === 0) {
+          append(t(localeSetting, "ui.ctrl.live_vote_terminated"));
+          await loadLiveVoteData({ silent: true });
+          return;
+        }
+        append(
+          tf(localeSetting, "ui.ctrl.live_vote_terminate_failed", {
+            msg: resolveBackendMessage(res.msg, localeSetting),
+          }),
+        );
+      } catch (error) {
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        append(
+          tf(localeSetting, "ui.ctrl.live_vote_terminate_failed", {
+            msg: resolveBackendMessage(String(error), localeSetting),
+          }),
+        );
+      } finally {
+        if (requestUid === activeUidRef.current) {
+          setLiveVoteTerminating(false);
+        }
+      }
+    },
+    [append, loadLiveVoteData, localeSetting, requestConfirm],
+  );
+
+  const scheduleLiveVoteSync = useCallback(() => {
+    if (liveVoteSyncTimerRef.current !== null) {
+      window.clearTimeout(liveVoteSyncTimerRef.current);
+    }
+    liveVoteSyncTimerRef.current = window.setTimeout(() => {
+      liveVoteSyncTimerRef.current = null;
+      void loadLiveVoteData({ silent: true });
+    }, LIVE_VOTE_SYNC_DEBOUNCE_MS);
+  }, [loadLiveVoteData]);
+
   const submitDanmu = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
@@ -1289,19 +1552,29 @@ export function useStudioController() {
     if (!currentUser?.uid) {
       setLiveEmoticonPackages([]);
       setLiveEmoticonsLoading(false);
+      clearLiveVoteState();
       return;
     }
     void syncLiveRoomProfile(true);
-  }, [currentUser?.uid, syncLiveRoomProfile]);
+  }, [clearLiveVoteState, currentUser?.uid, syncLiveRoomProfile]);
 
   useEffect(() => {
     if (!currentUser?.uid || !session?.room_id) {
       setLiveEmoticonPackages([]);
       setLiveEmoticonsLoading(false);
+      clearLiveVoteState();
       return;
     }
     void loadLiveEmoticons();
-  }, [currentUser?.uid, loadLiveEmoticons, session?.room_id]);
+  }, [clearLiveVoteState, currentUser?.uid, loadLiveEmoticons, session?.room_id]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || !session?.room_id) {
+      clearLiveVoteState();
+      return;
+    }
+    void loadLiveVoteData();
+  }, [clearLiveVoteState, currentUser?.uid, loadLiveVoteData, session?.room_id]);
 
   useEffect(() => {
     if (!qrcodeKey || !qrLoginExpiresAt) {
@@ -1347,14 +1620,23 @@ export function useStudioController() {
         ? { ...message, segments: withFallbackSegments.segments }
         : message;
       setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, localeSetting));
+
+      if (message.cmd === "DM_INTERACTION" && message.interaction_event_type === 101) {
+        scheduleLiveVoteSync();
+      }
+
       append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
     });
 
     return () => {
       active = false;
+      if (liveVoteSyncTimerRef.current !== null) {
+        window.clearTimeout(liveVoteSyncTimerRef.current);
+        liveVoteSyncTimerRef.current = null;
+      }
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [append, liveEmoticonMap, localeSetting]);
+  }, [append, liveEmoticonMap, localeSetting, scheduleLiveVoteSync]);
 
   useEffect(() => {
     let active = true;
@@ -1499,6 +1781,16 @@ export function useStudioController() {
       danmus,
       liveEmoticonPackages,
       liveEmoticonsLoading,
+      liveVotePanel,
+      liveVoteHistory,
+      liveVoteLoading,
+      liveVoteSubmitting,
+      liveVoteTerminating,
+      liveVoteQuestion,
+      liveVoteOptionA,
+      liveVoteOptionB,
+      liveVoteDuration,
+      liveVoteSelectedTemplateId,
       faceQr,
       faceQrContent,
       logs,
@@ -1553,6 +1845,7 @@ export function useStudioController() {
       setActiveTab,
       setChild: changeChild,
       setDanmuText,
+      setLiveVoteDuration,
       updateAppConfig,
       generateHttpUserAgent,
       updateLocaleConfig,
@@ -1561,6 +1854,14 @@ export function useStudioController() {
       setTitle,
       addTag,
       removeTag,
+      refreshLiveVoteData: () => loadLiveVoteData(),
+      applyLiveVoteTemplate,
+      clearLiveVoteDraft: resetLiveVoteDraft,
+      setLiveVoteQuestion: updateLiveVoteQuestion,
+      setLiveVoteOptionA: updateLiveVoteOptionA,
+      setLiveVoteOptionB: updateLiveVoteOptionB,
+      createLiveVote,
+      terminateLiveVote,
       startDanmu,
       startLive,
       applyRecentArea,

@@ -41,7 +41,7 @@ function App() {
           onRefreshPartitions={actions.loadPartitions}
         />
 
-        <div className={`flex-1 ${state.activeTab === "danmu" ? "overflow-hidden flex flex-col p-4 md:p-6" : "overflow-y-auto p-8"}`}>
+        <div className={`flex-1 ${state.activeTab === "danmu" ? "overflow-hidden flex flex-col" : "overflow-y-auto p-8"}`}>
           {state.activeTab === "account" && (
             <AccountTab
               locale={locale}
@@ -108,8 +108,27 @@ function App() {
               danmus={state.danmus}
               liveEmoticonPackages={state.liveEmoticonPackages}
               liveEmoticonsLoading={state.liveEmoticonsLoading}
+              liveVotePanel={state.liveVotePanel}
+              liveVoteHistory={state.liveVoteHistory}
+              liveVoteLoading={state.liveVoteLoading}
+              liveVoteSubmitting={state.liveVoteSubmitting}
+              liveVoteTerminating={state.liveVoteTerminating}
+              liveVoteQuestion={state.liveVoteQuestion}
+              liveVoteOptionA={state.liveVoteOptionA}
+              liveVoteOptionB={state.liveVoteOptionB}
+              liveVoteDuration={state.liveVoteDuration}
+              liveVoteSelectedTemplateId={state.liveVoteSelectedTemplateId}
               onChangeDanmuText={actions.setDanmuText}
               onClearDanmus={actions.clearDanmus}
+              onRefreshLiveVoteData={actions.refreshLiveVoteData}
+              onApplyLiveVoteTemplate={actions.applyLiveVoteTemplate}
+              onClearLiveVoteDraft={actions.clearLiveVoteDraft}
+              onChangeLiveVoteQuestion={actions.setLiveVoteQuestion}
+              onChangeLiveVoteOptionA={actions.setLiveVoteOptionA}
+              onChangeLiveVoteOptionB={actions.setLiveVoteOptionB}
+              onChangeLiveVoteDuration={actions.setLiveVoteDuration}
+              onCreateLiveVote={actions.createLiveVote}
+              onTerminateLiveVote={actions.terminateLiveVote}
               onSendDanmu={actions.submitDanmu}
               onStartDanmu={actions.startDanmu}
               onStopDanmu={actions.stopDanmu}

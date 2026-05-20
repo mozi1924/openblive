@@ -205,6 +205,12 @@ export type DanmuMsg = {
   sender_guard_level?: number;
   sender_face?: string;
   interact_type?: "enter" | "follow" | "share" | "unknown";
+  interaction_kind?: "vote" | "danmu" | "follow" | "gift" | "share" | "like" | "unknown";
+  interaction_event_type?: number;
+  interaction_vote_id?: number;
+  interaction_vote_status?: number;
+  interaction_vote_question?: string;
+  interaction_detail?: unknown;
   superchat_id?: number;
   superchat_price?: number;
   superchat_message_jpn?: string;
@@ -266,6 +272,45 @@ export type LiveEmoticonPackage = {
   pkg_name: string;
   pkg_descript: string;
   emoticons: LiveEmoticon[];
+};
+
+export type LiveVoteOption = {
+  idx: number;
+  desc: string;
+  percent: number;
+};
+
+export type LiveVoteInfo = {
+  status: number;
+  question: string;
+  options: LiveVoteOption[];
+  duration: number;
+  result?: number;
+  result_text?: string;
+  etime_str?: string;
+  left_duration?: number;
+  interaction_id: number;
+  template_id?: number;
+};
+
+export type LiveVoteTemplate = {
+  template_id: number;
+  question: string;
+  option_a: string;
+  option_b: string;
+};
+
+export type LiveVotePanelData = {
+  vote_info: LiveVoteInfo | null;
+  templates: LiveVoteTemplate[];
+};
+
+export type LiveVoteHistoryData = {
+  history: LiveVoteInfo[];
+};
+
+export type LiveVoteCreateResp = {
+  interaction_id: number;
 };
 
 export type LinkageStatus = {

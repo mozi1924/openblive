@@ -368,6 +368,21 @@ pub struct DanmuReq {
 }
 
 #[derive(Deserialize)]
+pub struct CreateLiveVoteReq {
+    pub question: String,
+    pub option_a: String,
+    pub option_b: String,
+    pub duration: u32,
+    #[serde(default)]
+    pub template_id: Option<u64>,
+}
+
+#[derive(Deserialize)]
+pub struct TerminateLiveVoteReq {
+    pub interaction_id: u64,
+}
+
+#[derive(Deserialize)]
 pub struct UidReq {
     pub uid: String,
 }
