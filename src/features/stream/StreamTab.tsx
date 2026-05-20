@@ -135,8 +135,6 @@ export function StreamTab({
 }: StreamTabProps) {
   const streamEndpoints = buildStreamEndpoints(rtmp);
   const primaryEndpoint = streamEndpoints[0];
-  const actionButtonClass =
-    "flex h-11 items-center justify-center rounded-xl text-xs font-bold transition-all duration-150";
   const liveStatus = session?.live_status ?? (session?.is_live ? 1 : 0);
   const isLive = liveStatus === 1;
   const isRoundPlay = liveStatus === 2;
@@ -223,13 +221,13 @@ export function StreamTab({
   };
 
   return (
-    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-12">
+    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-12">
       {/* Parameters Setup */}
       <div className="space-y-6 lg:col-span-7">
-        <div className="glass-panel rounded-3xl p-6">
-          <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="flat-panel rounded-xl p-5">
+          <div className="mb-5 flex items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <Compass className="h-4.5 w-4.5 text-bili-blue" />
+              <Compass className="h-4 w-4 text-bili-blue" />
               <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
                 ROOM MANAGEMENT
               </span>
@@ -237,29 +235,29 @@ export function StreamTab({
             
             <button
               onClick={() => void onSyncProfile()}
-              className={`${actionButtonClass} shrink-0 border border-white/8 bg-white/4 px-4 text-gray-300 active:scale-95 hover:border-bili-blue/30 hover:bg-white/8 hover:text-white`}
+              className="flex h-9 items-center justify-center rounded-lg border border-white/8 bg-white/3 px-3.5 text-xs font-bold text-gray-300 transition-all hover:border-bili-blue/30 hover:bg-white/6 hover:text-white active:scale-95"
             >
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               {t(locale, "ui.stream.sync_profile")}
             </button>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-5">
             {/* Title setting */}
             <form onSubmit={(event) => void onSubmitTitle(event)} className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
                   {t(locale, "ui.stream.title.label")}
                 </label>
-                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
-                  <span className={`h-2 w-2 rounded-full ${
+                <div className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2 py-0.5 text-[10px]">
+                  <span className={`h-1.5 w-1.5 rounded-full ${
                     sectionStatus.title.tone === "green"
                       ? "bg-emerald-400"
                       : sectionStatus.title.tone === "red"
                         ? "bg-rose-400"
                         : "bg-amber-400"
                   }`} />
-                  <span className="text-gray-200">{sectionStatus.title.label}</span>
+                  <span className="text-gray-300 font-medium">{sectionStatus.title.label}</span>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -268,17 +266,17 @@ export function StreamTab({
                   value={title}
                   onChange={(event) => onChangeTitle(event.target.value)}
                   placeholder={t(locale, "ui.stream.title.placeholder")}
-                  className="flex-1 rounded-xl border border-white/8 bg-white/3 px-4 py-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/5 focus:outline-none hover:border-white/15"
+                  className="flex-1 rounded-lg border border-white/8 bg-white/1.5 px-3.5 py-2 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/3 focus:outline-none hover:border-white/12"
                 />
                 <button
                   type="submit"
-                  className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-5 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
+                  className="flex h-9 items-center justify-center rounded-lg border border-bili-blue/20 bg-bili-blue/10 px-4 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue hover:text-white active:scale-95"
                 >
                   {t(locale, "ui.stream.title.update")}
                 </button>
               </div>
               {titleAuditDetail && (
-                <p className="text-[10px] leading-relaxed text-amber-200/90">
+                <p className="text-[10px] leading-relaxed text-amber-200/90 font-medium">
                   {titleAuditDetail} · {profileState.title.message}
                 </p>
               )}
@@ -292,8 +290,8 @@ export function StreamTab({
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
                   {t(locale, "ui.stream.area.title")}
                 </label>
-                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
-                  <span className={`h-2 w-2 rounded-full ${
+                <div className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2 py-0.5 text-[10px]">
+                  <span className={`h-1.5 w-1.5 rounded-full ${
                     sectionStatus.area.tone === "green"
                       ? "bg-emerald-400"
                       : sectionStatus.area.tone === "red"
@@ -310,7 +308,7 @@ export function StreamTab({
                     <select
                       value={parent}
                       onChange={(event) => onChangeParent(event.target.value)}
-                      className="h-11 w-full appearance-none rounded-xl border border-white/8 bg-gradient-to-br from-[#0b111c] to-[#090b0f] px-3.5 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
+                      className="h-10 w-full appearance-none rounded-lg border border-white/8 bg-[#0b111c] px-3 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
                     >
                       {Object.keys(partitions).map((partition) => (
                         <option key={partition} value={partition} className="bg-[#090b0f]">
@@ -327,7 +325,7 @@ export function StreamTab({
                     <select
                       value={child}
                       onChange={(event) => onChangeChild(event.target.value)}
-                      className="h-11 w-full appearance-none rounded-xl border border-white/8 bg-gradient-to-br from-[#0b111c] to-[#090b0f] px-3.5 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
+                      className="h-10 w-full appearance-none rounded-lg border border-white/8 bg-[#0b111c] px-3 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
                     >
                       {children.map((partition) => (
                         <option key={partition} value={partition} className="bg-[#090b0f]">
@@ -340,7 +338,7 @@ export function StreamTab({
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <div className="flex min-h-11 flex-1 flex-wrap items-center gap-1.5">
+                <div className="flex min-h-9 flex-1 flex-wrap items-center gap-1.5">
                   {recentAreas.map((area) => {
                     const key = `${area.parent}/${area.child}`;
                     return (
@@ -348,7 +346,7 @@ export function StreamTab({
                         key={key}
                         type="button"
                         onClick={() => onApplyRecentArea(area.parent, area.child)}
-                        className="rounded-lg border border-white/10 bg-white/4 px-2.5 py-1 text-[10px] text-gray-300 transition-all hover:border-bili-blue/30 hover:bg-bili-blue/10 hover:text-bili-blue"
+                        className="rounded border border-white/10 bg-white/2 px-2 py-0.5 text-[10px] text-gray-400 transition-all hover:border-bili-blue/30 hover:bg-bili-blue/10 hover:text-bili-blue font-medium"
                         title={`${area.parent} / ${area.child}`}
                       >
                         {area.parent} / {area.child}
@@ -358,7 +356,7 @@ export function StreamTab({
                 </div>
                 <button
                   type="submit"
-                  className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-6 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
+                  className="flex h-9 items-center justify-center rounded-lg border border-bili-blue/20 bg-bili-blue/10 px-5 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue hover:text-white active:scale-95"
                 >
                   {t(locale, "ui.stream.area.save")}
                 </button>
@@ -373,36 +371,36 @@ export function StreamTab({
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
                   {t(locale, "ui.stream.tags.title")}
                 </label>
-                <div className="flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[10px]">
-                  <span className={`h-2 w-2 rounded-full ${
+                <div className="flex items-center gap-1.5 rounded-md border border-white/8 bg-white/3 px-2 py-0.5 text-[10px]">
+                  <span className={`h-1.5 w-1.5 rounded-full ${
                     sectionStatus.tags.tone === "green"
                       ? "bg-emerald-400"
                       : sectionStatus.tags.tone === "red"
                         ? "bg-rose-400"
                         : "bg-amber-400"
                   }`} />
-                  <span className="text-gray-200">{sectionStatus.tags.label}</span>
+                  <span className="text-gray-300 font-medium">{sectionStatus.tags.label}</span>
                 </div>
               </div>
               
               {/* Display Current Tags */}
-              <div className="min-h-12 rounded-xl border border-white/5 bg-white/2.5 p-2.5">
+              <div className="min-h-11 rounded-lg border border-white/5 bg-white/1.5 p-2">
                 {tags.length === 0 ? (
-                  <p className="px-1.5 py-1 text-xs text-gray-500">
+                  <p className="px-1.5 py-1 text-xs text-gray-500 font-medium">
                     {t(locale, "ui.stream.tags.empty")}
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {tags.map((tag) => (
                       <span
                         key={tag}
-                        className="inline-flex items-center rounded-lg border border-bili-blue/20 bg-bili-blue/8 px-2.5 py-1 text-xs font-medium text-bili-blue"
+                        className="inline-flex items-center rounded border border-bili-blue/20 bg-bili-blue/8 px-2 py-0.5 text-xs font-semibold text-bili-blue"
                       >
                         {tag}
                         <button
                           type="button"
                           onClick={() => onRemoveTag(tag)}
-                          className="ml-1.5 rounded p-0.5 text-bili-blue/60 transition-colors hover:bg-bili-blue/25 hover:text-bili-blue"
+                          className="ml-1.5 rounded p-0.5 text-bili-blue/60 transition-colors hover:bg-bili-blue/20 hover:text-bili-blue"
                           title={t(locale, "ui.stream.tags.delete")}
                         >
                           <X className="h-3 w-3" />
@@ -426,18 +424,18 @@ export function StreamTab({
                     }
                   }}
                   placeholder={t(locale, "ui.stream.tags.placeholder")}
-                  className="flex-1 rounded-xl border border-white/8 bg-white/3 px-4 py-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/5 focus:outline-none"
+                  className="flex-1 rounded-lg border border-white/8 bg-white/1.5 px-3.5 py-2 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/3 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={onAddTag}
-                  className={`${actionButtonClass} border border-white/8 bg-white/4 px-4 font-semibold text-gray-300 hover:bg-white/8 hover:text-white`}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/8 bg-white/3 text-gray-300 hover:bg-white/6 hover:text-white"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
                 <button
                   type="submit"
-                  className={`${actionButtonClass} border border-bili-blue/20 bg-bili-blue/10 px-5 text-bili-blue active:scale-95 hover:bg-bili-blue hover:text-white`}
+                  className="flex h-9 items-center justify-center rounded-lg border border-bili-blue/20 bg-bili-blue/10 px-5 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue hover:text-white active:scale-95"
                 >
                   {t(locale, "ui.stream.tags.save")}
                 </button>
@@ -448,7 +446,7 @@ export function StreamTab({
 
         {/* RTMP Server info */}
         {rtmp && (
-          <div className="glass-panel overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-[#0a1815] to-[#070b0e] p-6 shadow-lg shadow-emerald-950/20">
+          <div className="flat-panel rounded-xl border border-emerald-500/20 bg-emerald-500/[0.01] p-5">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Link className="h-4 w-4 text-emerald-400" />
@@ -456,16 +454,16 @@ export function StreamTab({
                   RTMP STREAM ENDPOINTS
                 </span>
               </div>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
                 {t(locale, "ui.stream.ready")}
               </span>
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-white/5 bg-[#05090a] p-4 space-y-3 font-mono text-[11px]">
+              <div className="rounded-lg border border-white/5 bg-[#05090a] p-3.5 space-y-2.5 font-mono text-[11px]">
                 
                 {/* Server URL field */}
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/2 px-3.5 py-2.5">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-white/2 px-3 py-1.5">
                   <div className="flex items-center space-x-2 truncate">
                     <Server className="h-3.5 w-3.5 text-gray-500 shrink-0" />
                     <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.addr")}</span>
@@ -474,7 +472,7 @@ export function StreamTab({
                   <button
                     onClick={() => void onCopyToClipboard(primaryEndpoint?.addr || "", "server")}
                     disabled={!primaryEndpoint?.addr}
-                    className="flex items-center rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/10 hover:text-white active:scale-95"
+                    className="flex items-center rounded bg-white/4 px-2 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/8 hover:text-white active:scale-95"
                   >
                     {copiedKey === "server" ? (
                       <Check className="mr-1 h-3 w-3 text-emerald-400" />
@@ -486,7 +484,7 @@ export function StreamTab({
                 </div>
 
                 {/* Key field */}
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/2 px-3.5 py-2.5">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-white/2 px-3 py-1.5">
                   <div className="flex items-center space-x-2 truncate">
                     <Key className="h-3.5 w-3.5 text-gray-500 shrink-0" />
                     <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.key")}</span>
@@ -502,7 +500,7 @@ export function StreamTab({
                       )
                     }
                     disabled={!primaryEndpoint?.code && !primaryEndpoint?.stream_key}
-                    className="flex items-center rounded-lg bg-white/5 px-2.5 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/10 hover:text-white active:scale-95"
+                    className="flex items-center rounded bg-white/4 px-2 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/8 hover:text-white active:scale-95"
                   >
                     {copiedKey === "key" ? (
                       <Check className="mr-1 h-3 w-3 text-emerald-400" />
@@ -519,19 +517,19 @@ export function StreamTab({
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 px-1 text-[10px] text-gray-500 font-mono">
                   <div className="flex justify-between border-b border-white/5 pb-1">
                     <span>{t(locale, "ui.stream.protocol")}</span>
-                    <span className="text-gray-300 uppercase">{(primaryEndpoint.protocol || "rtmp")}</span>
+                    <span className="text-gray-300 uppercase font-medium">{(primaryEndpoint.protocol || "rtmp")}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/5 pb-1">
                     <span>{t(locale, "ui.stream.provider")}</span>
-                    <span className="text-gray-300">{primaryEndpoint.provider || "Bilibili"}</span>
+                    <span className="text-gray-300 font-medium">{primaryEndpoint.provider || "Bilibili"}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/5 pb-1">
                     <span>{t(locale, "ui.stream.schedule")}</span>
-                    <span className="text-gray-300">{primaryEndpoint.schedule || t(locale, "ui.stream.schedule.default")}</span>
+                    <span className="text-gray-300 font-medium">{primaryEndpoint.schedule || t(locale, "ui.stream.schedule.default")}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/5 pb-1">
                     <span>Live Key:</span>
-                    <span className="text-gray-300 truncate max-w-[80px]">{rtmp.live_key || "-"}</span>
+                    <span className="text-gray-300 truncate max-w-[80px] font-medium">{rtmp.live_key || "-"}</span>
                   </div>
                 </div>
               )}
@@ -542,40 +540,40 @@ export function StreamTab({
 
       {/* Right Column: Live cockpit control */}
       <div className="lg:col-span-5">
-        <div className="glass-panel flex h-full flex-col justify-between space-y-6 rounded-3xl p-6 text-center">
+        <div className="flat-panel flex h-full flex-col justify-between space-y-5 rounded-xl p-5 text-center">
           <div>
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-5 flex items-center justify-between">
               <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
                 LIVE CONTROLLER
               </span>
               <span
-                className={`rounded-full border px-2.5 py-0.5 text-[9px] font-bold tracking-wide ${statusColorPill}`}
+                className={`rounded border px-2.5 py-0.5 text-[9px] font-bold tracking-wide ${statusColorPill}`}
               >
                 {statusLabel}
               </span>
             </div>
 
             {/* Reactor Core Indicator */}
-            <div className="flex flex-col items-center py-6">
+            <div className="flex flex-col items-center py-4">
               <div
-                className={`flex h-28 w-28 items-center justify-center rounded-full border-2 transition-all duration-500 ${reactorRingClass}`}
+                className={`flex h-24 w-24 items-center justify-center rounded-full border-2 transition-all duration-300 ${reactorRingClass}`}
               >
-                <div className={`flex h-22 w-22 items-center justify-center rounded-full border border-white/5 bg-[#0a0d14] ${isLive ? "shadow-[inset_0_0_20px_rgba(16,185,129,0.1)]" : ""}`}>
-                  <Radio className={`h-11 w-11 ${isLive ? "text-emerald-400 animate-pulse" : "text-gray-600"}`} />
+                <div className={`flex h-20 w-20 items-center justify-center rounded-full border border-white/5 bg-[#0a0d14] ${isLive ? "shadow-[inset_0_0_15px_rgba(16,185,129,0.1)]" : ""}`}>
+                  <Radio className={`h-10 w-10 ${isLive ? "text-emerald-400 animate-pulse" : "text-gray-600"}`} />
                 </div>
               </div>
-              <h4 className="mt-5 text-sm font-bold text-white tracking-wide">
+              <h4 className="mt-4 text-xs font-bold text-white tracking-wide">
                 {tf(locale, "ui.stream.live_status", { status: statusLabel })}
               </h4>
-              <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-gray-500">
+              <p className="mt-1 max-w-xs text-[11px] leading-relaxed text-gray-500 font-medium">
                 {statusHint}
               </p>
               {(hasUnsavedChanges || hasAttentionStatus) && (
-                <div className="mt-3 w-full max-w-sm rounded-2xl border border-white/8 bg-white/3 p-3 text-left">
+                <div className="mt-3.5 w-full max-w-sm rounded-lg border border-white/8 bg-white/2.5 p-3 text-left">
                   {hasUnsavedChanges ? (
-                    <div className="mb-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-300">
+                    <div className="mb-2.5 rounded border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[10px] leading-relaxed text-amber-300 font-medium">
                       <p>{tf(locale, "ui.stream.unsaved.detected", { items: unsavedItems.join("、") })}</p>
-                      <p className="mt-1 text-amber-200/90">
+                      <p className="mt-1 text-amber-200/90 font-medium">
                         {tf(locale, "ui.stream.unsaved.detail", {
                           title: dirtyStatus.title ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
                           area: dirtyStatus.area ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
@@ -584,7 +582,7 @@ export function StreamTab({
                       </p>
                     </div>
                   ) : (
-                    <p className="mb-3 text-[10px] leading-relaxed text-gray-400">
+                    <p className="mb-2.5 text-[10px] leading-relaxed text-gray-400 font-medium">
                       {t(locale, "ui.stream.pending_desc")}
                     </p>
                   )}
@@ -598,49 +596,49 @@ export function StreamTab({
             </div>
 
             {/* Linkage status dashboards */}
-            <div className="space-y-3.5 rounded-2xl border border-white/5 bg-[#05070a] p-4 text-left">
+            <div className="space-y-3 rounded-lg border border-white/5 bg-[#05070a] p-3.5 text-left">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-extrabold tracking-widest text-gray-500 uppercase">
                     EQUIPMENT LINKAGE
                   </span>
-                  <p className="mt-1 text-[11px] text-gray-500">
+                  <p className="mt-0.5 text-[11px] text-gray-500 font-medium">
                     {linkageHint}
                   </p>
                 </div>
               </div>
 
               {!hasActiveLinkage ? (
-                <div className="rounded-xl border border-dashed border-white/10 bg-white/2 p-4">
-                  <p className="text-sm font-bold text-gray-200">{t(locale, "ui.stream.no_linkage")}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+                <div className="rounded border border-dashed border-white/10 bg-white/2 p-3 text-center">
+                  <p className="text-xs font-bold text-gray-200">{t(locale, "ui.stream.no_linkage")}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-gray-500 font-medium">
                     {t(locale, "ui.stream.no_linkage.desc")}
                   </p>
                   <button
                     onClick={() => onSelectTab("settings")}
-                    className="mt-3 inline-flex items-center text-[11px] font-bold text-bili-blue hover:underline"
+                    className="mt-2 inline-flex items-center text-[11px] font-bold text-bili-blue hover:underline"
                   >
                     {t(locale, "ui.stream.no_linkage.goto")}
                     <ExternalLink className="ml-1 h-3 w-3" />
                   </button>
                 </div>
               ) : (
-                <div className="rounded-xl border border-white/5 bg-white/2 p-3 font-mono text-[11px] transition-all hover:bg-white/4">
+                <div className="rounded border border-white/5 bg-white/2 p-2.5 font-mono text-[11px] transition-all hover:bg-white/4">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
                       <span className="text-[11px] font-bold text-gray-300">{linkageTitle}</span>
-                      <p className="mt-1 text-[10px] font-sans text-gray-500">
+                      <p className="mt-0.5 text-[10px] font-sans text-gray-500 font-medium">
                         {activeLinkageMode === "obs_ws" ? t(locale, "ui.stream.linkage.current.obs") : t(locale, "ui.stream.linkage.current.command")}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[9px] font-extrabold ${linkageStateClass}`}>
+                    <span className={`shrink-0 rounded border px-2 py-0.5 text-[9px] font-extrabold ${linkageStateClass}`}>
                       {linkageStateText}
                     </span>
                   </div>
 
                   {activeLinkageMode === "obs_ws" && (
                     <div className="space-y-1">
-                      <p className="truncate text-[10px] text-gray-500">
+                      <p className="truncate text-[10px] text-gray-500 font-medium">
                         {tf(locale, "ui.stream.linkage.address", { value: obsStatus?.url || "ws://127.0.0.1:4455" })}
                       </p>
                       {obsStatus?.last_error && (
@@ -654,7 +652,7 @@ export function StreamTab({
                   {activeLinkageMode === "command" && (
                     <div className="space-y-2">
                       <div className="flex flex-wrap gap-2">
-                        <span className={`rounded-md border px-2 py-1 text-[9px] font-bold ${
+                        <span className={`rounded border px-2 py-0.5 text-[9px] font-bold ${
                           commandStatus?.start_configured
                             ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                             : "border-white/8 bg-white/4 text-gray-500"
@@ -665,7 +663,7 @@ export function StreamTab({
                               : t(locale, "ui.stream.command.unconfigured"),
                           })}
                         </span>
-                        <span className={`rounded-md border px-2 py-1 text-[9px] font-bold ${
+                        <span className={`rounded border px-2 py-0.5 text-[9px] font-bold ${
                           commandStatus?.stop_configured
                             ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
                             : "border-white/8 bg-white/4 text-gray-500"
@@ -679,7 +677,7 @@ export function StreamTab({
                       </div>
 
                       {commandStatus?.template_preview && (
-                        <p className="truncate rounded bg-black/40 px-2 py-1 text-[9px] text-gray-500 select-text">
+                        <p className="truncate rounded bg-black/40 px-2 py-1 text-[9px] text-gray-500 select-text font-medium">
                           CMD: {commandStatus.template_preview}
                         </p>
                       )}
@@ -691,13 +689,13 @@ export function StreamTab({
           </div>
 
           {/* Action button */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <button
               onClick={() => void handleLiveToggle()}
-              className={`flex h-13 w-full items-center justify-center rounded-2xl border text-xs font-bold transition-all duration-200 active:scale-98 ${
+              className={`flex h-11 w-full items-center justify-center rounded-lg border text-xs font-bold transition-all duration-200 active:scale-98 ${
                 isLive
                   ? "border-rose-500/20 bg-rose-500/8 text-rose-400 hover:bg-rose-500/15"
-                  : "border-emerald-500/20 bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/20 hover:opacity-95 hover:shadow-emerald-500/30"
+                  : "border-emerald-500/20 bg-gradient-to-r from-emerald-500 to-teal-400 text-white shadow-md shadow-emerald-500/10 hover:opacity-95 hover:shadow-emerald-500/20"
               }`}
             >
               {isLive ? (

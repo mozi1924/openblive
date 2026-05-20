@@ -78,6 +78,18 @@
   box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
 }
 
+/* Clean flat desktop panel */
+.flat-panel {
+  background: rgba(13, 17, 28, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s ease;
+}
+
+.flat-panel:hover {
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(13, 17, 28, 0.55);
+}
+
 /* Glowing effects */
 .glow-blue {
   box-shadow: 0 0 20px rgba(0, 174, 236, 0.1), inset 0 0 12px rgba(0, 174, 236, 0.05);

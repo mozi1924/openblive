@@ -111,35 +111,6 @@ const canMergeDanmu = (
   return sameSender;
 };
 
-const resolveDanmuBubbleShape = (
-  isSelf: boolean,
-  mergeWithAbove: boolean,
-  mergeWithBelow: boolean,
-) => {
-  if (isSelf) {
-    if (mergeWithAbove && mergeWithBelow) {
-      return "rounded-2xl rounded-tr-md rounded-br-md";
-    }
-    if (mergeWithAbove) {
-      return "rounded-2xl rounded-tr-md rounded-br-none";
-    }
-    if (mergeWithBelow) {
-      return "rounded-2xl rounded-tr-none rounded-br-md";
-    }
-    return "rounded-2xl rounded-tr-none";
-  }
-
-  if (mergeWithAbove && mergeWithBelow) {
-    return "rounded-2xl rounded-tl-md rounded-bl-md";
-  }
-  if (mergeWithAbove) {
-    return "rounded-2xl rounded-tl-md rounded-bl-none";
-  }
-  if (mergeWithBelow) {
-    return "rounded-2xl rounded-tl-none rounded-bl-md";
-  }
-  return "rounded-2xl rounded-tl-none";
-};
 
 const formatGiftPrice = (rawValue: number) => {
   const yuan = rawValue / 1000;
@@ -223,7 +194,7 @@ export function DanmuTab({
           message,
           mergeWithAbove,
           mergeWithBelow,
-          showSenderMeta: !mergeWithAbove,
+          showSenderMeta: true,
         };
       }),
     [currentUser, danmus, locale],
@@ -542,18 +513,20 @@ function DanmuBubbleContent({
   locale,
   className,
   emoticonHeight = 24,
+  style,
 }: {
   message: DanmuMsg;
   locale: LocaleSetting;
   className: string;
   emoticonHeight?: number;
+  style?: CSSProperties;
 }) {
   if (!message.segments?.length) {
-    return <div className={className}>{resolveBackendMessage(message.content, locale)}</div>;
+    return <div className={className} style={style}>{resolveBackendMessage(message.content, locale)}</div>;
   }
 
   return (
-    <div className={className}>
+    <div className={className} style={style}>
       {message.segments.map((segment, index) =>
         segment.type === "text" ? (
           <span key={`${message.id}-text-${index}`} className="whitespace-pre-wrap break-all">
@@ -698,13 +671,33 @@ function pickAvatarColorBySender(sender: string) {
   return palette[Math.abs(hash) % palette.length];
 }
 
+function pickBorderColorBySender(sender: string) {
+  const palette = [
+    "border-red-500/80",
+    "border-orange-500/80",
+    "border-amber-500/80",
+    "border-emerald-500/80",
+    "border-teal-500/80",
+    "border-blue-500/80",
+    "border-indigo-500/80",
+    "border-violet-500/80",
+    "border-purple-500/80",
+    "border-pink-500/80",
+  ];
+  let hash = 0;
+  for (let i = 0; i < sender.length; i++) {
+    hash = sender.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return palette[Math.abs(hash) % palette.length];
+}
+
 function DanmuCard({
   message,
   locale,
   currentUser,
-  mergeWithAbove,
-  mergeWithBelow,
-  showSenderMeta,
+  mergeWithAbove: _mergeWithAbove,
+  mergeWithBelow: _mergeWithBelow,
+  showSenderMeta: _showSenderMeta,
 }: {
   message: DanmuMsg;
   locale: LocaleSetting;
@@ -757,8 +750,26 @@ function DanmuCard({
           }
         : null;
   const meNameClass = senderBadge ? senderNameClass : "text-bili-blue";
-  const bubbleShapeClass = resolveDanmuBubbleShape(isMe, mergeWithAbove, mergeWithBelow);
-  const stackGapClass = mergeWithAbove ? "mt-1" : "mt-4";
+  
+  // Flatten bubble shapes with clean rounded corners instead of extreme merge logic
+  const bubbleShapeClass = isMe ? "rounded-xl rounded-tr-none" : "rounded-xl rounded-tl-none";
+  const stackGapClass = "mt-3.5";
+
+  // Determine border accent colors and styles
+  let borderInlineStyle: CSSProperties | undefined = undefined;
+  let borderClass = "";
+
+  if (isAnchor) {
+    borderClass = "border-amber-400";
+  } else if (isAdmin) {
+    borderClass = "border-cyan-400";
+  } else if (isGuard) {
+    borderClass = "border-violet-400";
+  } else if (message.sender_name_color) {
+    borderInlineStyle = { borderColor: message.sender_name_color };
+  } else {
+    borderClass = pickBorderColorBySender(localizedSender);
+  }
 
   if (
     rawType === "system" ||
@@ -776,8 +787,8 @@ function DanmuCard({
       superchatAmount > 0 ? `¥${superchatAmount}` : t(locale, "ui.danmu.superchat.amount_fallback");
     const cardToneClass =
       superchatAmount >= 100
-        ? "border-amber-300/30 bg-[linear-gradient(145deg,rgba(251,191,36,0.16),rgba(180,83,9,0.12))]"
-        : "border-sky-300/30 bg-[linear-gradient(145deg,rgba(56,189,248,0.16),rgba(14,116,144,0.12))]";
+        ? "border-amber-300/30 bg-amber-500/[0.03]"
+        : "border-sky-300/30 bg-sky-500/[0.03]";
     const badgeToneClass =
       superchatAmount >= 100
         ? "border-amber-300/35 bg-amber-500/15 text-amber-100"
@@ -811,7 +822,7 @@ function DanmuCard({
             <span className="text-[9px] font-mono text-gray-500">{message.time}</span>
           </div>
           <div
-            className={`mt-1.5 min-w-0 rounded-[22px] rounded-tl-none border px-4 py-3 text-gray-100 shadow-[0_10px_24px_rgba(0,0,0,0.2)] ${cardToneClass}`}
+            className={`mt-1.5 min-w-0 rounded-xl rounded-tl-none border px-4 py-3 text-gray-100 ${cardToneClass}`}
           >
             <div className="mb-2 flex items-center justify-between gap-3">
               <p className="truncate text-sm font-semibold text-white">
@@ -820,7 +831,7 @@ function DanmuCard({
                   locale,
                 )}
               </p>
-              <span className="shrink-0 rounded-full border border-white/15 bg-black/25 px-2.5 py-1 text-[11px] font-semibold text-white">
+              <span className="shrink-0 rounded-md border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white">
                 {superchatAmountLabel}
               </span>
             </div>
@@ -871,12 +882,12 @@ function DanmuCard({
             </span>
             <span className="text-[9px] text-gray-500 font-mono">{message.time}</span>
           </div>
-          <div className="mt-1.5 flex min-w-0 items-center justify-between gap-3 rounded-[22px] rounded-tl-none border border-bili-pink/20 bg-[linear-gradient(145deg,rgba(255,102,153,0.14),rgba(255,102,153,0.05))] px-4 py-3 text-gray-100 shadow-[0_10px_24px_rgba(255,102,153,0.08)]">
+          <div className="mt-1.5 flex min-w-0 items-center justify-between gap-3 rounded-xl rounded-tl-none border border-bili-pink/20 bg-bili-pink/[0.03] px-4 py-3 text-gray-100">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{giftName}</p>
-              <p className="mt-1 text-xs text-gray-300">x{giftCount}</p>
+              <p className="mt-1 text-xs text-gray-300 font-medium">x{giftCount}</p>
             </div>
-            <div className="shrink-0 rounded-full border border-bili-pink/20 bg-black/20 px-2.5 py-1 text-[11px] font-semibold text-bili-pink">
+            <div className="shrink-0 rounded border border-bili-pink/20 bg-black/20 px-2 py-0.5 text-[10px] font-semibold text-bili-pink">
               {giftAmountLabel}
             </div>
           </div>
@@ -915,12 +926,12 @@ function DanmuCard({
             </span>
             <span className="text-[9px] text-gray-500 font-mono">{message.time}</span>
           </div>
-          <div className="mt-1.5 flex min-w-0 items-center justify-between gap-3 rounded-[22px] rounded-tl-none border border-violet-400/20 bg-[linear-gradient(145deg,rgba(139,92,246,0.16),rgba(139,92,246,0.05))] px-4 py-3 text-gray-100 shadow-[0_10px_24px_rgba(139,92,246,0.08)]">
+          <div className="mt-1.5 flex min-w-0 items-center justify-between gap-3 rounded-xl rounded-tl-none border border-violet-400/20 bg-violet-500/[0.03] px-4 py-3 text-gray-100">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{guardName}</p>
-              <p className="mt-1 text-xs text-gray-300">x{guardCount}</p>
+              <p className="mt-1 text-xs text-gray-300 font-medium">x{guardCount}</p>
             </div>
-            <div className="shrink-0 rounded-full border border-violet-400/20 bg-black/20 px-2.5 py-1 text-[11px] font-semibold text-violet-200">
+            <div className="shrink-0 rounded border border-violet-400/20 bg-black/20 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
               {guardAmountLabel}
             </div>
           </div>
@@ -940,8 +951,13 @@ function DanmuCard({
 
   if (isMe) {
     return (
-      <div className={`flex flex-col items-end max-w-[78%] self-end transition-all duration-300 ${stackGapClass}`}>
-        {showSenderMeta ? (
+      <div className={`flex items-start space-x-3 space-x-reverse max-w-[82%] self-end transition-all duration-300 ${stackGapClass}`}>
+        <DanmuAvatar
+          sender={localizedSender}
+          avatarUrl={resolvedSenderFace}
+          className="mt-0.5 h-8 w-8 shrink-0"
+        />
+        <div className="flex flex-col items-end">
           <DanmuSenderMeta
             align="right"
             sender={localizedSender}
@@ -950,42 +966,38 @@ function DanmuCard({
             senderBadge={senderBadge}
             time={message.time}
           />
-        ) : null}
-        <DanmuBubbleContent
-          message={message}
-          locale={locale}
-          className={`${bubbleShapeClass} bg-[linear-gradient(135deg,rgba(0,174,236,0.96),rgba(0,144,214,0.92))] px-4 py-2.5 text-[13px] leading-[1.45] text-white shadow-[0_10px_24px_rgba(0,174,236,0.14)] select-text break-all border border-bili-blue/18`}
-        />
+          <DanmuBubbleContent
+            message={message}
+            locale={locale}
+            style={borderInlineStyle}
+            className={`${bubbleShapeClass} bg-bili-blue/[0.08] hover:bg-bili-blue/[0.12] text-white border-r-4 ${borderClass || ""} border-t border-l border-b border-white/5 px-4 py-2.5 text-[13px] leading-[1.45] select-text break-all transition-all duration-150`}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`flex items-end space-x-2.5 max-w-[82%] self-start transition-all duration-300 ${stackGapClass}`}>
-      {showSenderMeta ? (
-        <DanmuAvatar
-          sender={localizedSender}
-          avatarUrl={resolvedSenderFace}
-          className="mt-0.5 h-8 w-8 shrink-0"
-        />
-      ) : (
-        <div className="h-8 w-8 shrink-0" />
-      )}
+    <div className={`flex items-start space-x-3 max-w-[82%] self-start transition-all duration-300 ${stackGapClass}`}>
+      <DanmuAvatar
+        sender={localizedSender}
+        avatarUrl={resolvedSenderFace}
+        className="mt-0.5 h-8 w-8 shrink-0"
+      />
       <div className="flex flex-col items-start">
-        {showSenderMeta ? (
-          <DanmuSenderMeta
-            align="left"
-            sender={localizedSender}
-            senderNameClass={senderNameClass}
-            senderNameStyle={senderNameStyle}
-            senderBadge={senderBadge}
-            time={message.time}
-          />
-        ) : null}
+        <DanmuSenderMeta
+          align="left"
+          sender={localizedSender}
+          senderNameClass={senderNameClass}
+          senderNameStyle={senderNameStyle}
+          senderBadge={senderBadge}
+          time={message.time}
+        />
         <DanmuBubbleContent
           message={message}
           locale={locale}
-          className={`${bubbleShapeClass} bg-[rgba(20,26,36,0.92)] border border-white/6 px-4 py-2.5 text-[13px] leading-[1.45] text-gray-100 shadow-[0_10px_24px_rgba(0,0,0,0.14)] select-text break-all hover:bg-[rgba(24,31,43,0.96)] hover:border-white/10 transition-all duration-150`}
+          style={borderInlineStyle}
+          className={`${bubbleShapeClass} bg-[rgba(20,26,36,0.5)] border-l-4 ${borderClass || ""} border-t border-r border-b border-white/5 px-4 py-2.5 text-[13px] leading-[1.45] text-gray-100 select-text break-all hover:bg-[rgba(24,31,43,0.7)] hover:border-white/10 transition-all duration-150`}
         />
       </div>
     </div>

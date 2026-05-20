@@ -43,6 +43,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     clearAppLogs: vi.fn(),
     listenDanmuMessage: vi.fn(),
     listenAppLog: vi.fn(),
+    listenStudioState: vi.fn(),
   },
 }));
 
@@ -122,6 +123,7 @@ beforeEach(() => {
   mockStudioApi.getPartitions.mockResolvedValue(ok({ 手游: ["王者荣耀", "永劫无间"] }));
   mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
   mockStudioApi.listenAppLog.mockResolvedValue(() => undefined);
+  mockStudioApi.listenStudioState.mockResolvedValue(() => undefined);
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
   mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
     ok({ updated: 0, failed: [], expired: [] }),
