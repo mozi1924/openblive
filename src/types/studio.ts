@@ -5,7 +5,7 @@ export type Resp<T> = {
   qr?: string;
 };
 
-export type ActiveTab = "account" | "stream" | "danmu" | "settings";
+export type ActiveTab = "account" | "dashboard" | "stream" | "danmu" | "settings";
 
 export type TransportStatus = "idle" | "saving" | "synced" | "conflict" | "failed";
 
@@ -316,6 +316,65 @@ export type LiveVotePanelData = {
 
 export type LiveVoteHistoryData = {
   history: LiveVoteInfo[];
+};
+
+export type LiveOverviewMetric = {
+  name: string;
+  index: string;
+  me: number;
+  max: number;
+  aver: number;
+};
+
+export type LiveSessionStats = {
+  live_time: number;
+  add_fans: number;
+  revenue: number;
+  new_fans_club: number;
+  danmu_num: number;
+  max_online: number;
+  watched_count: number;
+};
+
+export type LiveSessionSummary = {
+  live_key: string;
+  title: string;
+  cover: string;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  platform: string;
+  room_id: number;
+  stats?: LiveSessionStats | null;
+};
+
+export type LiveSessionPoint = {
+  ts: number;
+  value: number;
+};
+
+export type LiveSessionHighlight = {
+  id: number;
+  type: number;
+  start_time: number;
+  end_time: number;
+  title: string;
+};
+
+export type LiveSessionDetail = {
+  summary: LiveSessionSummary;
+  session_data: LiveSessionPoint[];
+  highlights: LiveSessionHighlight[];
+  max_danmaku_ts?: number | null;
+  max_pcu_ts?: number | null;
+  max_value?: number | null;
+};
+
+export type LiveDashboardSnapshot = {
+  overview: LiveOverviewMetric[];
+  sessions: LiveSessionSummary[];
+  latest_session?: LiveSessionDetail | null;
+  fetched_at: number;
 };
 
 export type LiveVoteCreateResp = {

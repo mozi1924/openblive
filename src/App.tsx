@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import "./App.css";
 import { HeaderBar } from "./components/layout/HeaderBar";
 import { LogDrawer } from "./components/layout/LogDrawer";
@@ -10,6 +11,12 @@ import { SettingsTab } from "./features/settings/SettingsTab";
 import { StreamTab } from "./features/stream/StreamTab";
 import { useStudioController } from "./hooks/useStudioController";
 import type { LocaleSetting } from "./utils/i18n";
+
+const DashboardTab = lazy(() =>
+  import("./features/dashboard/DashboardTab").then((module) => ({
+    default: module.DashboardTab,
+  })),
+);
 
 function App() {
   const controller = useStudioController();
@@ -65,6 +72,21 @@ function App() {
               onRefreshCurrentUser={actions.refreshCurrentUser}
               onSwitchAccount={actions.switchAccount}
             />
+          )}
+
+          {state.activeTab === "dashboard" && (
+            <Suspense
+              fallback={
+                <div className="flat-panel rounded-3xl px-8 py-14 text-center text-sm text-gray-400">
+                  Loading dashboard...
+                </div>
+              }
+            >
+              <DashboardTab
+                locale={locale}
+                currentUid={state.currentUser?.uid ?? null}
+              />
+            </Suspense>
           )}
 
           {state.activeTab === "stream" && (

@@ -10,6 +10,7 @@ import type {
   LiveFlowResp,
   LiveEmoticonPackage,
   LiveVoteCreateResp,
+  LiveDashboardSnapshot,
   LiveVoteHistoryData,
   LiveVotePanelData,
   QrPayload,
@@ -89,6 +90,8 @@ export const studioApi = {
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
   getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
+  getLiveDashboardSnapshot: () =>
+    invokeCommand<LiveDashboardSnapshot>("get_live_dashboard_snapshot"),
   getLiveVotePanel: () => invokeCommand<LiveVotePanelData>("get_live_vote_panel"),
   getLiveVoteHistory: () => invokeCommand<LiveVoteHistoryData>("get_live_vote_history"),
   createLiveVote: (

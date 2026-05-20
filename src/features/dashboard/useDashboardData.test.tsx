@@ -1,0 +1,93 @@
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { useDashboardData } from "./useDashboardData";
+import { studioApi } from "../../services/studioApi";
+import type { LiveDashboardSnapshot } from "../../types/studio";
+
+const snapshot: LiveDashboardSnapshot = {
+  overview: [],
+  sessions: [
+    {
+      live_key: "abc",
+      title: "Session A",
+      cover: "",
+      start_time: 10,
+      end_time: 20,
+      duration: 10,
+      platform: "pc_link",
+      room_id: 1,
+      stats: {
+        live_time: 10,
+        add_fans: 1,
+        revenue: 2.5,
+        new_fans_club: 0,
+        danmu_num: 9,
+        max_online: 4,
+        watched_count: 11,
+      },
+    },
+  ],
+  latest_session: null,
+  fetched_at: 123,
+};
+
+function HookHarness({ uid }: { uid: string | null }) {
+  const { snapshot, loading, refreshing, error, reload } = useDashboardData(uid);
+
+  return (
+    <div>
+      <div data-testid="loading">{String(loading)}</div>
+      <div data-testid="refreshing">{String(refreshing)}</div>
+      <div data-testid="error">{error || ""}</div>
+      <div data-testid="title">{snapshot?.sessions[0]?.title || ""}</div>
+      <button onClick={() => void reload()}>reload</button>
+    </div>
+  );
+}
+
+describe("useDashboardData", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  it("loads dashboard data on mount", async () => {
+    vi.spyOn(studioApi, "getLiveDashboardSnapshot").mockResolvedValue({
+      code: 0,
+      msg: "ok",
+      data: snapshot,
+    });
+
+    render(<HookHarness uid="1001" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("title").textContent).toBe("Session A");
+    });
+    expect(screen.getByTestId("loading").textContent).toBe("false");
+  });
+
+  it("keeps existing snapshot and exposes an error when refresh fails", async () => {
+    const apiSpy = vi
+      .spyOn(studioApi, "getLiveDashboardSnapshot")
+      .mockResolvedValueOnce({
+        code: 0,
+        msg: "ok",
+        data: snapshot,
+      })
+      .mockRejectedValueOnce(new Error("network"));
+
+    render(<HookHarness uid="2002" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("title").textContent).toBe("Session A");
+    });
+
+    screen.getByRole("button", { name: "reload" }).click();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toContain("network");
+    });
+    expect(screen.getByTestId("title").textContent).toBe("Session A");
+    expect(apiSpy).toHaveBeenCalledTimes(2);
+  });
+});

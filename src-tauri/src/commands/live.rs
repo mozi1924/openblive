@@ -16,6 +16,7 @@ use tauri::{AppHandle, State};
 mod client_version;
 mod common;
 mod danmu;
+mod dashboard;
 mod flow;
 mod linkage;
 mod profile;
@@ -29,6 +30,7 @@ use common::{
     clear_user_auth_flags, error_message, is_auth_invalid_code, mark_current_user_login_invalid,
 };
 use danmu::{start_danmu_monitor_inner, stop_danmu_monitor_inner};
+use dashboard::get_live_dashboard_snapshot_inner;
 pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 use flow::{start_live_inner, stop_live_inner};
 pub(crate) use linkage::obs_ws_probe;
@@ -251,6 +253,11 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
             "i18n.live.error.fetch_live_emoticons_failed",
         ))
     }
+}
+
+#[tauri::command]
+pub async fn get_live_dashboard_snapshot(state: State<'_, AppState>) -> CmdResult {
+    get_live_dashboard_snapshot_inner(state).await
 }
 
 #[tauri::command]

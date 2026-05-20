@@ -1,4 +1,5 @@
 import {
+  ChartNoAxesCombined,
   Compass,
   ExternalLink,
   MessageSquare,
@@ -31,6 +32,7 @@ const tabs: Array<{
   icon: typeof UserIcon;
 }> = [
   { key: "account", labelKey: "ui.sidebar.tab.account", icon: UserIcon },
+  { key: "dashboard", labelKey: "ui.sidebar.tab.dashboard", icon: ChartNoAxesCombined },
   { key: "stream", labelKey: "ui.sidebar.tab.stream", icon: Compass },
   { key: "danmu", labelKey: "ui.sidebar.tab.danmu", icon: MessageSquare },
   { key: "settings", labelKey: "ui.sidebar.tab.settings", icon: Settings },

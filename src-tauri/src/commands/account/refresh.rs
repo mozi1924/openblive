@@ -598,7 +598,10 @@ pub(super) async fn refresh_cookie_for_uid(
     RefreshCookieResult::Updated(Box::new(user))
 }
 
-pub(super) async fn refresh_accounts_batch(state: &AppState, refresh_profile: bool) -> serde_json::Value {
+pub(super) async fn refresh_accounts_batch(
+    state: &AppState,
+    refresh_profile: bool,
+) -> serde_json::Value {
     let uids = {
         let runtime = state.runtime.lock().await;
         runtime.config.users.keys().cloned().collect::<Vec<_>>()

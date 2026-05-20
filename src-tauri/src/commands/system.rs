@@ -123,7 +123,10 @@ fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<()
         .map_err(|error| format!("position overlay window failed: {error}"))
 }
 
-fn apply_overlay_window_config(window: &WebviewWindow, config: &PersistConfig) -> Result<(), String> {
+fn apply_overlay_window_config(
+    window: &WebviewWindow,
+    config: &PersistConfig,
+) -> Result<(), String> {
     window
         .set_always_on_top(config.danmu_overlay_always_on_top)
         .map_err(|error| format!("set overlay always-on-top failed: {error}"))?;
