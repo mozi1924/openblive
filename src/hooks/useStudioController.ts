@@ -343,6 +343,18 @@ export function useStudioController() {
         "on_live_start_command",
         "on_live_stop_command",
         "locale",
+        "host_www",
+        "host_api",
+        "host_live_api",
+        "host_passport",
+        "host_live_web",
+        "cookie_domain",
+        "danmu_host",
+        "app_key",
+        "app_sec",
+        "livehime_version_override",
+        "livehime_build_override",
+        "live_platform",
       ];
       for (const key of writableKeys) {
         await studioApi.setAppConfig(key, appConfig[key]);

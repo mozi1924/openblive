@@ -35,6 +35,30 @@ struct AppSettingsFile {
     on_live_stop_command: String,
     #[serde(default = "default_locale")]
     locale: String,
+    #[serde(default)]
+    host_www: String,
+    #[serde(default)]
+    host_api: String,
+    #[serde(default)]
+    host_live_api: String,
+    #[serde(default)]
+    host_passport: String,
+    #[serde(default)]
+    host_live_web: String,
+    #[serde(default)]
+    cookie_domain: String,
+    #[serde(default)]
+    danmu_host: String,
+    #[serde(default)]
+    app_key: String,
+    #[serde(default)]
+    app_sec: String,
+    #[serde(default)]
+    livehime_version_override: String,
+    #[serde(default)]
+    livehime_build_override: String,
+    #[serde(default)]
+    live_platform: String,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -260,6 +284,18 @@ pub fn load_config(path: &PathBuf, key: &[u8; 32]) -> PersistConfig {
         cfg.on_live_start_command = app_file.on_live_start_command;
         cfg.on_live_stop_command = app_file.on_live_stop_command;
         cfg.locale = crate::i18n::normalize_locale_setting(&app_file.locale).to_string();
+        cfg.host_www = app_file.host_www;
+        cfg.host_api = app_file.host_api;
+        cfg.host_live_api = app_file.host_live_api;
+        cfg.host_passport = app_file.host_passport;
+        cfg.host_live_web = app_file.host_live_web;
+        cfg.cookie_domain = app_file.cookie_domain;
+        cfg.danmu_host = app_file.danmu_host;
+        cfg.app_key = app_file.app_key;
+        cfg.app_sec = app_file.app_sec;
+        cfg.livehime_version_override = app_file.livehime_version_override;
+        cfg.livehime_build_override = app_file.livehime_build_override;
+        cfg.live_platform = app_file.live_platform;
 
         if cfg.live_control_mode.trim().is_empty() || cfg.live_control_mode == "none" {
             if cfg.obs_ws_enabled {
@@ -361,6 +397,18 @@ pub fn save_config(path: &PathBuf, cfg: &PersistConfig, key: &[u8; 32]) {
     app_file.on_live_start_command = cfg.on_live_start_command.clone();
     app_file.on_live_stop_command = cfg.on_live_stop_command.clone();
     app_file.locale = cfg.locale.clone();
+    app_file.host_www = cfg.host_www.clone();
+    app_file.host_api = cfg.host_api.clone();
+    app_file.host_live_api = cfg.host_live_api.clone();
+    app_file.host_passport = cfg.host_passport.clone();
+    app_file.host_live_web = cfg.host_live_web.clone();
+    app_file.cookie_domain = cfg.cookie_domain.clone();
+    app_file.danmu_host = cfg.danmu_host.clone();
+    app_file.app_key = cfg.app_key.clone();
+    app_file.app_sec = cfg.app_sec.clone();
+    app_file.livehime_version_override = cfg.livehime_version_override.clone();
+    app_file.livehime_build_override = cfg.livehime_build_override.clone();
+    app_file.live_platform = cfg.live_platform.clone();
 
     let mut account_file = AccountFile::default();
     account_file.current_uid = cfg.current_uid.clone();

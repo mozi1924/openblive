@@ -2,9 +2,9 @@ use crate::state::AppState;
 use serde::Serialize;
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, AppHandle, Emitter, Manager, Window, WindowEvent};
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
+use tauri::{App, AppHandle, Emitter, Manager, Window, WindowEvent};
 
 const TRAY_ID: &str = "main-tray";
 const MENU_ACCOUNT_INFO: &str = "tray.account_info";

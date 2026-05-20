@@ -1,4 +1,5 @@
 use crate::client::BiliClient;
+use crate::endpoints;
 use crate::models::UserRecord;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -78,7 +79,7 @@ pub async fn refresh_avatar_cache(
     let resp = client
         .http
         .get(&face_url)
-        .header("referer", "https://www.bilibili.com")
+        .header("referer", endpoints::www_origin())
         .send()
         .await
         .map_err(|error| error.to_string())?;

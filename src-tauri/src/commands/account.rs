@@ -3,6 +3,7 @@ use crate::bili::fetch_full_user_data;
 use crate::client::parse_cookie_value;
 use crate::config::save_config;
 use crate::constants::CmdResult;
+use crate::endpoints;
 use crate::models::{sync_live_profile_state_defaults, PollReq, UidReq, UserRecord};
 use crate::response::wrap_ok;
 use crate::state::{restore_session_from_current, AppState};
@@ -137,7 +138,7 @@ async fn refresh_cookie_with_official_flow(
     };
     eprintln!("[auth][refresh] uid={} use timestamp={ts}", user.uid);
     let correspond_path = build_correspond_path(ts)?;
-    let correspond_url = format!("https://www.bilibili.com/correspond/1/{correspond_path}");
+    let correspond_url = format!("{}/correspond/1/{}", endpoints::www(""), correspond_path);
 
     let correspond_response = state
         .client
@@ -179,7 +180,7 @@ async fn refresh_cookie_with_official_flow(
     let refresh_value = state
         .client
         .post_form(
-            "https://passport.bilibili.com/x/passport-login/web/cookie/refresh",
+            &endpoints::passport("/x/passport-login/web/cookie/refresh"),
             &refresh_form,
         )
         .await
@@ -204,7 +205,7 @@ async fn refresh_cookie_with_official_flow(
         }
     }
 
-    let cookie_header = state.client.cookie_header_for("https://api.bilibili.com/");
+    let cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
     if !cookie_header.is_empty() {
         user.cookie = cookie_header;
     }
@@ -233,7 +234,7 @@ async fn refresh_cookie_with_official_flow(
     let confirm_value = state
         .client
         .post_form(
-            "https://passport.bilibili.com/x/passport-login/web/confirm/refresh",
+            &endpoints::passport("/x/passport-login/web/confirm/refresh"),
             &confirm_form,
         )
         .await
@@ -349,7 +350,7 @@ async fn refresh_cookie_for_uid(
     let info = match state
         .client
         .get_json(
-            "https://passport.bilibili.com/x/passport-login/web/cookie/info",
+            &endpoints::passport("/x/passport-login/web/cookie/info"),
             &info_params,
         )
         .await
@@ -434,7 +435,7 @@ async fn refresh_cookie_for_uid(
 
     let nav = match state
         .client
-        .get_json("https://api.bilibili.com/x/web-interface/nav", &[])
+        .get_json(&endpoints::api("/x/web-interface/nav"), &[])
         .await
     {
         Ok(value) => value,
@@ -482,7 +483,7 @@ async fn refresh_cookie_for_uid(
 
     let stat = match state
         .client
-        .get_json("https://api.bilibili.com/x/web-interface/nav/stat", &[])
+        .get_json(&endpoints::api("/x/web-interface/nav/stat"), &[])
         .await
     {
         Ok(value) => value,
@@ -498,7 +499,7 @@ async fn refresh_cookie_for_uid(
     let mut full = nav["data"].clone();
     full["stat"] = stat["data"].clone();
 
-    let cookie_header = state.client.cookie_header_for("https://api.bilibili.com/");
+    let cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
     if !cookie_header.is_empty() {
         user.cookie = cookie_header;
     }
@@ -533,7 +534,7 @@ pub async fn get_login_qrcode(state: State<'_, AppState>) -> CmdResult {
     let value = state
         .client
         .get_json(
-            "https://passport.bilibili.com/x/passport-login/web/qrcode/generate",
+            &endpoints::passport("/x/passport-login/web/qrcode/generate"),
             &[],
         )
         .await
@@ -546,7 +547,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     let value: serde_json::Value = state
         .client
         .http
-        .get("https://passport.bilibili.com/x/passport-login/web/qrcode/poll")
+        .get(endpoints::passport("/x/passport-login/web/qrcode/poll"))
         .query(&[("qrcode_key", req.key)])
         .send()
         .await
@@ -580,7 +581,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
         }
     }
 
-    let cookie_header = state.client.cookie_header_for("https://api.bilibili.com/");
+    let cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
     let full = fetch_full_user_data(&state.client)
         .await
         .map_err(|error| error.to_string())?;
@@ -610,7 +611,7 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     let room = state
         .client
         .get_json(
-            "https://api.live.bilibili.com/room/v2/Room/room_id_by_uid",
+            &endpoints::live_api("/room/v2/Room/room_id_by_uid"),
             &[("uid", uid.to_string())],
         )
         .await

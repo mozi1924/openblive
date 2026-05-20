@@ -1,4 +1,5 @@
 use crate::client::BiliClient;
+use crate::endpoints;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use serde::Serialize;
@@ -114,7 +115,7 @@ async fn refresh_emoticon_cache(
     let resp = client
         .http
         .get(&normalized_url)
-        .header("referer", "https://live.bilibili.com")
+        .header("referer", endpoints::live_web_origin())
         .send()
         .await
         .map_err(|error| error.to_string())?;

@@ -1,9 +1,8 @@
 use crate::config::save_config;
+use crate::endpoints;
 use crate::models::UserRecord;
 use crate::state::AppState;
 use std::collections::BTreeMap;
-
-const LIVE_PLATFORM_PC_LINK: &str = "pc_link";
 
 pub(crate) fn is_auth_invalid_code(code: i64) -> bool {
     matches!(code, -101 | 3 | 65530)
@@ -25,14 +24,14 @@ pub(crate) fn error_message(value: &serde_json::Value, fallback: &str) -> String
 pub(crate) fn build_room_update_form(room_id: &str, csrf: &str) -> BTreeMap<String, String> {
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id.to_string());
-    form.insert("platform".into(), LIVE_PLATFORM_PC_LINK.into());
+    form.insert("platform".into(), endpoints::live_platform());
     form.insert("csrf".into(), csrf.to_string());
     form.insert("csrf_token".into(), csrf.to_string());
     form
 }
 
-pub(crate) fn live_platform_pc_link() -> &'static str {
-    LIVE_PLATFORM_PC_LINK
+pub(crate) fn live_platform() -> String {
+    endpoints::live_platform()
 }
 
 pub(crate) fn clear_user_auth_flags(user: &mut UserRecord) {

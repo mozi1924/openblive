@@ -1,3 +1,4 @@
+use crate::endpoints;
 use anyhow::Result;
 use reqwest::cookie::{CookieStore, Jar};
 use reqwest::header::COOKIE;
@@ -80,13 +81,14 @@ impl BiliClient {
     }
 
     pub fn apply_cookie_header(&self, cookie_header: &str) {
-        let url = Url::parse("https://www.bilibili.com/").unwrap();
+        let url = Url::parse(&endpoints::www_origin()).unwrap();
+        let cookie_domain = endpoints::cookie_domain();
         for kv in cookie_header
             .split(';')
             .map(|item| item.trim())
             .filter(|item| !item.is_empty())
         {
-            let enriched = format!("{kv}; Domain=.bilibili.com; Path=/; Secure; HttpOnly");
+            let enriched = format!("{kv}; Domain={}; Path=/; Secure; HttpOnly", cookie_domain);
             self.jar.add_cookie_str(&enriched, &url);
         }
     }

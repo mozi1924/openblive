@@ -1,4 +1,5 @@
 use crate::constants::CmdResult;
+use crate::endpoints;
 use crate::i18n::normalize_locale_setting;
 use crate::models::AppConfigReq;
 use crate::response::wrap_ok;
@@ -113,6 +114,18 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "on_live_start_command": runtime.config.on_live_start_command,
         "on_live_stop_command": runtime.config.on_live_stop_command,
         "locale": runtime.config.locale,
+        "host_www": runtime.config.host_www,
+        "host_api": runtime.config.host_api,
+        "host_live_api": runtime.config.host_live_api,
+        "host_passport": runtime.config.host_passport,
+        "host_live_web": runtime.config.host_live_web,
+        "cookie_domain": runtime.config.cookie_domain,
+        "danmu_host": runtime.config.danmu_host,
+        "app_key": runtime.config.app_key,
+        "app_sec": runtime.config.app_sec,
+        "livehime_version_override": runtime.config.livehime_version_override,
+        "livehime_build_override": runtime.config.livehime_build_override,
+        "live_platform": runtime.config.live_platform,
         "is_win32": cfg!(target_os = "windows"),
         "is_macos": cfg!(target_os = "macos"),
         "has_tray": crate::tray::has_tray(&app)
@@ -166,8 +179,47 @@ pub async fn set_app_config(
             runtime.config.locale =
                 normalize_locale_setting(req.value.as_str().unwrap_or("auto")).to_string();
         }
+        "host_www" => {
+            runtime.config.host_www = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_api" => {
+            runtime.config.host_api = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_live_api" => {
+            runtime.config.host_live_api = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_passport" => {
+            runtime.config.host_passport = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "host_live_web" => {
+            runtime.config.host_live_web = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "cookie_domain" => {
+            runtime.config.cookie_domain = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "danmu_host" => {
+            runtime.config.danmu_host = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "app_key" => {
+            runtime.config.app_key = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "app_sec" => {
+            runtime.config.app_sec = req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "livehime_version_override" => {
+            runtime.config.livehime_version_override =
+                req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "livehime_build_override" => {
+            runtime.config.livehime_build_override =
+                req.value.as_str().unwrap_or("").trim().to_string();
+        }
+        "live_platform" => {
+            runtime.config.live_platform = req.value.as_str().unwrap_or("").trim().to_string();
+        }
         _ => return Err("i18n.system.error.unknown_config_key".into()),
     }
+    endpoints::set_runtime_overrides_from_config(&runtime.config);
     runtime.config.obs_ws_enabled = runtime.config.live_control_mode == "obs_ws";
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);

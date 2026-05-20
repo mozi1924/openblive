@@ -16,6 +16,7 @@ type SidebarProps = {
   locale: LocaleSetting;
   danmuListening: boolean;
   roomId?: string;
+  roomBaseHost?: string;
   sessionLive: boolean;
   showLogs: boolean;
   sidebarDragRef: React.RefObject<HTMLDivElement | null>;
@@ -40,6 +41,7 @@ export function Sidebar({
   locale,
   danmuListening,
   roomId,
+  roomBaseHost,
   sessionLive,
   showLogs,
   sidebarDragRef,
@@ -47,6 +49,20 @@ export function Sidebar({
   onSelectTab,
   onToggleLogs,
 }: SidebarProps) {
+  const liveRoomUrl = (() => {
+    if (!roomId) {
+      return "";
+    }
+    const raw = (roomBaseHost || "live.bilibili.com").trim();
+    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+      const url = new URL(candidate);
+      return `${url.origin}/${roomId}`;
+    } catch {
+      return `https://live.bilibili.com/${roomId}`;
+    }
+  })();
+
   return (
     <aside className="z-10 flex w-64 shrink-0 flex-col border-r border-white/5 bg-[#070a0f]/90 backdrop-blur-xl">
       <div
@@ -137,7 +153,7 @@ export function Sidebar({
               </span>
               {roomId && (
                 <a
-                  href={`https://live.bilibili.com/${roomId}`}
+                  href={liveRoomUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="no-drag text-gray-500 transition-colors hover:text-bili-blue"

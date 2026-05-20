@@ -3,6 +3,7 @@ use crate::config::save_config;
 use crate::constants::{CmdResult, DEFAULT_LIVEHIME_BUILD, DEFAULT_LIVEHIME_VERSION};
 use crate::danmu::decode_and_emit;
 use crate::emoticon::parse_live_emoticon_packages;
+use crate::endpoints;
 use crate::models::{
     sync_live_profile_state_defaults, DanmuReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
     UserRecord,
@@ -20,7 +21,7 @@ mod linkage;
 mod stream;
 use common::{
     build_room_update_form, clear_user_auth_flags, error_message, is_auth_invalid_code,
-    live_platform_pc_link, mark_current_user_login_invalid,
+    live_platform, mark_current_user_login_invalid,
 };
 pub(crate) use linkage::obs_ws_probe;
 use linkage::{
@@ -230,7 +231,7 @@ async fn fetch_room_info_by_room_id(
     let value = state
         .client
         .get_json_with_cookie(
-            "https://api.live.bilibili.com/room/v1/Room/get_info",
+            &endpoints::live_api("/room/v1/Room/get_info"),
             &[("room_id", room_id.to_string())],
             cookie,
         )
@@ -243,6 +244,25 @@ async fn fetch_room_info_by_room_id(
 }
 
 pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(String, u64), String> {
+    let override_version = endpoints::livehime_version_override();
+    let override_build = endpoints::livehime_build_override();
+    if !override_version.trim().is_empty() || override_build.is_some() {
+        let (version, build) = sanitized_live_client_version(
+            if override_version.trim().is_empty() {
+                DEFAULT_LIVEHIME_VERSION
+            } else {
+                &override_version
+            },
+            override_build.unwrap_or(DEFAULT_LIVEHIME_BUILD),
+        );
+        let mut runtime = state.runtime.lock().await;
+        runtime.config.live_client_version = version.clone();
+        runtime.config.live_client_build = build;
+        runtime.config.live_client_synced_at = chrono::Utc::now().timestamp();
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+        return Ok((version, build));
+    }
+
     let ts = chrono::Utc::now().timestamp().to_string();
     let mut params = BTreeMap::new();
     params.insert("system_version".into(), "2".into());
@@ -256,7 +276,7 @@ pub async fn refresh_live_client_version_inner(state: &AppState) -> Result<(Stri
     let value = state
         .client
         .get_json(
-            "https://api.live.bilibili.com/xlive/app-blink/v1/liveVersionInfo/getHomePageLiveVersion",
+            &endpoints::live_api("/xlive/app-blink/v1/liveVersionInfo/getHomePageLiveVersion"),
             &query,
         )
         .await
@@ -326,6 +346,18 @@ pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
 }
 
 async fn resolve_live_client_version(state: &AppState, force_refresh: bool) -> (String, u64, bool) {
+    let override_version = endpoints::livehime_version_override();
+    let override_build = endpoints::livehime_build_override();
+    if !override_version.trim().is_empty() || override_build.is_some() {
+        let version = if override_version.trim().is_empty() {
+            DEFAULT_LIVEHIME_VERSION.to_string()
+        } else {
+            override_version
+        };
+        let build = override_build.unwrap_or(DEFAULT_LIVEHIME_BUILD);
+        return (version, build, true);
+    }
+
     let (cached_version, cached_build, synced_at) = {
         let runtime = state.runtime.lock().await;
         (
@@ -501,7 +533,7 @@ pub async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
     let value = state
         .client
         .get_json(
-            "https://api.live.bilibili.com/room/v1/Area/getList",
+            &endpoints::live_api("/room/v1/Area/getList"),
             &[("show_pinyin", "1".into())],
         )
         .await
@@ -565,11 +597,7 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
     form.insert("area_id".into(), area_id.to_string());
     let value = state
         .client
-        .post_form_with_cookie(
-            "https://api.live.bilibili.com/room/v1/Room/update",
-            &form,
-            &cookie,
-        )
+        .post_form_with_cookie(&endpoints::live_api("/room/v1/Room/update"), &form, &cookie)
         .await
         .map_err(|error| error.to_string())?;
 
@@ -633,18 +661,14 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
     }
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id);
-    form.insert("platform".into(), live_platform_pc_link().into());
+    form.insert("platform".into(), live_platform());
     form.insert("title".into(), req.title.clone());
     form.insert("csrf".into(), csrf.clone());
     form.insert("csrf_token".into(), csrf);
 
     let value = state
         .client
-        .post_form_with_cookie(
-            "https://api.live.bilibili.com/room/v1/Room/update",
-            &form,
-            &cookie,
-        )
+        .post_form_with_cookie(&endpoints::live_api("/room/v1/Room/update"), &form, &cookie)
         .await
         .map_err(|error| error.to_string())?;
 
@@ -738,11 +762,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
         form.insert("add_tag".into(), tag.clone());
         let value = state
             .client
-            .post_form_with_cookie(
-                "https://api.live.bilibili.com/room/v1/Room/update",
-                &form,
-                &cookie,
-            )
+            .post_form_with_cookie(&endpoints::live_api("/room/v1/Room/update"), &form, &cookie)
             .await
             .map_err(|error| error.to_string())?;
         let code = value["code"].as_i64().unwrap_or(-1);
@@ -770,11 +790,7 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
         form.insert("del_tag".into(), tag.clone());
         let value = state
             .client
-            .post_form_with_cookie(
-                "https://api.live.bilibili.com/room/v1/Room/update",
-                &form,
-                &cookie,
-            )
+            .post_form_with_cookie(&endpoints::live_api("/room/v1/Room/update"), &form, &cookie)
             .await
             .map_err(|error| error.to_string())?;
         let code = value["code"].as_i64().unwrap_or(-1);
@@ -847,7 +863,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
 
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id);
-    form.insert("platform".into(), live_platform_pc_link().into());
+    form.insert("platform".into(), live_platform());
     form.insert("area_v2".into(), area.to_string());
     form.insert("backup_stream".into(), "0".into());
     form.insert("csrf_token".into(), csrf.clone());
@@ -859,7 +875,7 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     let response = state
         .client
         .post_form_with_cookie(
-            "https://api.live.bilibili.com/room/v1/Room/startLive",
+            &endpoints::live_api("/room/v1/Room/startLive"),
             &form,
             &cookie,
         )
@@ -876,7 +892,8 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
             runtime.session.uid
         };
         let qr = format!(
-            "https://www.bilibili.com/blackboard/live/face-auth-middle.html?source_event=400&mid={uid}"
+            "{}/blackboard/live/face-auth-middle.html?source_event=400&mid={uid}",
+            endpoints::www("")
         );
         return Ok(json!({ "code": 60043, "msg": "i18n.live.face_auth_required", "qr": qr }));
     }
@@ -936,13 +953,13 @@ pub async fn start_live(state: State<'_, AppState>) -> CmdResult {
     if let Err(link_error) = linkage_result {
         let mut rollback_form = BTreeMap::new();
         rollback_form.insert("room_id".into(), room_id_for_rollback);
-        rollback_form.insert("platform".into(), live_platform_pc_link().into());
+        rollback_form.insert("platform".into(), live_platform());
         rollback_form.insert("csrf".into(), csrf_for_rollback.clone());
         rollback_form.insert("csrf_token".into(), csrf_for_rollback);
         let _ = state
             .client
             .post_form_with_cookie(
-                "https://api.live.bilibili.com/room/v1/Room/stopLive",
+                &endpoints::live_api("/room/v1/Room/stopLive"),
                 &rollback_form,
                 &cookie,
             )
@@ -1000,14 +1017,14 @@ pub async fn stop_live(state: State<'_, AppState>) -> CmdResult {
     }
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id);
-    form.insert("platform".into(), live_platform_pc_link().into());
+    form.insert("platform".into(), live_platform());
     form.insert("csrf".into(), csrf.clone());
     form.insert("csrf_token".into(), csrf);
 
     let value = state
         .client
         .post_form_with_cookie(
-            "https://api.live.bilibili.com/room/v1/Room/stopLive",
+            &endpoints::live_api("/room/v1/Room/stopLive"),
             &form,
             &cookie,
         )
@@ -1096,7 +1113,7 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
     let value = state
         .client
         .post_form_with_cookie(
-            &format!("https://api.live.bilibili.com/msg/send?{query}"),
+            &format!("{}?{query}", endpoints::live_api("/msg/send")),
             &form,
             &cookie,
         )
@@ -1141,7 +1158,7 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
     let value = state
         .client
         .get_json_with_cookie(
-            "https://api.live.bilibili.com/xlive/web-ucenter/v2/emoticon/GetEmoticons",
+            &endpoints::live_api("/xlive/web-ucenter/v2/emoticon/GetEmoticons"),
             &[("platform", "pc".to_string()), ("room_id", room_id)],
             &cookie,
         )
@@ -1197,15 +1214,16 @@ pub async fn start_danmu_monitor(app: AppHandle, state: State<'_, AppState>) -> 
     runtime.danmu_task = Some(tokio::spawn(async move {
         if let Ok(info) = get_danmu_info(&client, &room_id).await {
             let token = info["data"]["token"].as_str().unwrap_or("");
+            let default_danmu_host = endpoints::danmu_default_host();
             let host = info["data"]["host_list"][0]["host"]
                 .as_str()
-                .unwrap_or("broadcastlv.chat.bilibili.com");
+                .unwrap_or(default_danmu_host.as_str());
             let port = info["data"]["host_list"][0]["wss_port"]
                 .as_u64()
-                .unwrap_or(2245);
+                .unwrap_or(endpoints::danmu_default_wss_port());
 
             if let Ok((ws, _)) =
-                tokio_tungstenite::connect_async(format!("wss://{}:{}/sub", host, port)).await
+                tokio_tungstenite::connect_async(endpoints::danmu_wss(host, port)).await
             {
                 let (mut write, mut read) = ws.split();
                 let auth = json!({

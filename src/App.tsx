@@ -23,6 +23,7 @@ function App() {
         locale={locale}
         danmuListening={state.danmuListening}
         roomId={state.session?.room_id}
+        roomBaseHost={state.appConfig?.host_live_web}
         sessionLive={state.session?.is_live ?? false}
         showLogs={state.showLogs}
         sidebarDragRef={refs.sidebarDragRef}

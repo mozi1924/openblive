@@ -1,14 +1,16 @@
 use crate::client::BiliClient;
-use crate::constants::{APP_KEY, APP_SEC};
+use crate::endpoints;
 use anyhow::{anyhow, Result};
 use serde_json::json;
 use std::collections::BTreeMap;
 
 pub fn app_sign(params: &BTreeMap<String, String>) -> BTreeMap<String, String> {
     let mut signed = params.clone();
-    signed.insert("appkey".into(), APP_KEY.into());
+    let app_key = endpoints::app_key();
+    let app_sec = endpoints::app_sec();
+    signed.insert("appkey".into(), app_key);
     let query = serde_urlencoded::to_string(&signed).unwrap();
-    let sign = format!("{:x}", md5::compute(format!("{query}{APP_SEC}")));
+    let sign = format!("{:x}", md5::compute(format!("{query}{app_sec}")));
     signed.insert("sign".into(), sign);
     signed
 }
@@ -32,7 +34,7 @@ pub async fn wbi_signed(
     mut params: BTreeMap<String, String>,
 ) -> Result<BTreeMap<String, String>> {
     let nav = client
-        .get_json("https://api.bilibili.com/x/web-interface/nav", &[])
+        .get_json(&endpoints::api("/x/web-interface/nav"), &[])
         .await?;
     let img = nav["data"]["wbi_img"]["img_url"]
         .as_str()
@@ -79,14 +81,14 @@ pub async fn wbi_signed(
 
 pub async fn fetch_full_user_data(client: &BiliClient) -> Result<serde_json::Value> {
     let nav = client
-        .get_json("https://api.bilibili.com/x/web-interface/nav", &[])
+        .get_json(&endpoints::api("/x/web-interface/nav"), &[])
         .await?;
     if nav["code"].as_i64().unwrap_or(-1) != 0 {
         return Err(anyhow!("i18n.account.error.fetch_user_info_failed"));
     }
 
     let stat = client
-        .get_json("https://api.bilibili.com/x/web-interface/nav/stat", &[])
+        .get_json(&endpoints::api("/x/web-interface/nav/stat"), &[])
         .await
         .unwrap_or(json!({ "data": {} }));
     let mut data = nav["data"].clone();
@@ -106,7 +108,7 @@ pub async fn get_danmu_info(client: &BiliClient, room_id: &str) -> Result<serde_
 
     client
         .get_json(
-            "https://api.live.bilibili.com/xlive/web-room/v1/index/getDanmuInfo",
+            &endpoints::live_api("/xlive/web-room/v1/index/getDanmuInfo"),
             &pairs,
         )
         .await

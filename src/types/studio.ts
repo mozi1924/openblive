@@ -23,6 +23,18 @@ export type AppConfig = {
   on_live_start_command: string;
   on_live_stop_command: string;
   locale: "auto" | "zh-CN" | "en-US";
+  host_www: string;
+  host_api: string;
+  host_live_api: string;
+  host_passport: string;
+  host_live_web: string;
+  cookie_domain: string;
+  danmu_host: string;
+  app_key: string;
+  app_sec: string;
+  livehime_version_override: string;
+  livehime_build_override: string;
+  live_platform: string;
   is_win32: boolean;
   is_macos: boolean;
   has_tray: boolean;

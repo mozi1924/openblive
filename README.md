@@ -56,6 +56,53 @@
 
 ---
 
+## 🧩 高级调试配置（Endpoint / 签名参数覆盖）
+
+在 `设置` 页新增了「高级调试配置」折叠面板。默认留空即可，程序会使用内置默认值。  
+仅在以下场景建议填写：
+
+- 需要通过代理、网关或镜像域名转发 Bilibili API
+- 需要临时切换 App 签名参数、弹幕网关、LiveHime 版本参数进行排障
+
+可覆盖项包括：
+
+- `host_www`
+- `host_api`
+- `host_live_api`
+- `host_passport`
+- `host_live_web`
+- `cookie_domain`
+- `danmu_host`
+- `app_key`
+- `app_sec`
+- `livehime_version_override`
+- `livehime_build_override`
+- `live_platform`
+
+同时支持通过环境变量注入（优先级低于设置页保存值）：
+
+- `OPENBLIVE_HOST_WWW`
+- `OPENBLIVE_HOST_API`
+- `OPENBLIVE_HOST_LIVE_API`
+- `OPENBLIVE_HOST_PASSPORT`
+- `OPENBLIVE_HOST_LIVE_WEB`
+- `OPENBLIVE_COOKIE_DOMAIN`
+- `OPENBLIVE_DANMU_HOST`
+- `OPENBLIVE_DANMU_WSS_PORT`
+- `OPENBLIVE_APP_KEY`
+- `OPENBLIVE_APP_SEC`
+- `OPENBLIVE_LIVEHIME_VERSION`
+- `OPENBLIVE_LIVEHIME_BUILD`
+- `OPENBLIVE_LIVE_PLATFORM`
+
+说明：
+
+- Host 支持填写 `host` 或完整 URL（程序会自动归一化为 origin）。
+- `cookie_domain` 支持填写 host 或 URL，程序会自动提取域名并规范化。
+- `host_live_web` 会同时影响侧边栏“打开直播间”外链。
+
+---
+
 ## 🚀 贡献与开发指南
 
 如果您希望在本地运行、修改或打包本项目，请参考以下指南。

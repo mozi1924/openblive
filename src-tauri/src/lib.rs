@@ -7,6 +7,7 @@ mod constants;
 mod crypto;
 mod danmu;
 mod emoticon;
+mod endpoints;
 mod i18n;
 mod models;
 mod response;
@@ -34,6 +35,7 @@ pub fn run() {
     let master_key =
         get_or_create_master_key().expect("failed to load/create master key from system keyring");
     let cfg = load_config(&path, &master_key);
+    endpoints::set_runtime_overrides_from_config(&cfg);
     let client = client::BiliClient::new();
     let mut runtime = RuntimeState {
         config: cfg,

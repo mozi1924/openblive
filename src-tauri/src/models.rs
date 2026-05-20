@@ -237,6 +237,30 @@ pub struct PersistConfig {
     pub on_live_stop_command: String,
     #[serde(default = "default_locale")]
     pub locale: String,
+    #[serde(default)]
+    pub host_www: String,
+    #[serde(default)]
+    pub host_api: String,
+    #[serde(default)]
+    pub host_live_api: String,
+    #[serde(default)]
+    pub host_passport: String,
+    #[serde(default)]
+    pub host_live_web: String,
+    #[serde(default)]
+    pub cookie_domain: String,
+    #[serde(default)]
+    pub danmu_host: String,
+    #[serde(default)]
+    pub app_key: String,
+    #[serde(default)]
+    pub app_sec: String,
+    #[serde(default)]
+    pub livehime_version_override: String,
+    #[serde(default)]
+    pub livehime_build_override: String,
+    #[serde(default)]
+    pub live_platform: String,
     #[serde(default = "default_live_client_version")]
     pub live_client_version: String,
     #[serde(default = "default_live_client_build")]
@@ -261,6 +285,18 @@ impl Default for PersistConfig {
             on_live_start_command: String::new(),
             on_live_stop_command: String::new(),
             locale: default_locale(),
+            host_www: String::new(),
+            host_api: String::new(),
+            host_live_api: String::new(),
+            host_passport: String::new(),
+            host_live_web: String::new(),
+            cookie_domain: String::new(),
+            danmu_host: String::new(),
+            app_key: String::new(),
+            app_sec: String::new(),
+            livehime_version_override: String::new(),
+            livehime_build_override: String::new(),
+            live_platform: String::new(),
             live_client_version: default_live_client_version(),
             live_client_build: default_live_client_build(),
             live_client_synced_at: default_live_client_synced_at(),
