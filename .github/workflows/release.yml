@@ -70,7 +70,18 @@ jobs:
           tauriScript: pnpm tauri
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v__VERSION__-dev.{0}', github.run_number) }}
           releaseName: "OpenBlive Studio v__VERSION__"
-          releaseBody: "Automated release built by GitHub Actions."
+          releaseBody: |
+            Automated release built by GitHub Actions.
+
+            ## Notes
+
+            macOS users need to remove the quarantine attribute before first launch:
+
+            ```bash
+            sudo xattr -dr com.apple.quarantine "/Applications/OpenBlive Studio.app"
+            ```
+
+            If the app is installed outside `/Applications`, replace the path with the actual app location.
           releaseDraft: false
           prerelease: ${{ (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-')) || (github.event_name == 'workflow_dispatch' && (inputs.prerelease == true || inputs.prerelease == 'true')) }}
           uploadUpdaterJson: true

@@ -206,6 +206,16 @@ pnpm verify:release
 - 触发方式 2：手动触发 `workflow_dispatch`
 - 构建平台：`macOS` / `Windows` / `Linux`
 
+### macOS 使用提示
+
+macOS 用户在下载并移动应用后，需要先移除隔离属性，再启动：
+
+```bash
+sudo xattr -dr com.apple.quarantine "/Applications/OpenBlive Studio.app"
+```
+
+如果应用不在 `Applications` 目录，请将命令中的路径替换为实际安装位置。
+
 ## 📈 Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=mozi1924/openblive&type=Date)](https://star-history.com/#mozi1924/openblive&Date)
