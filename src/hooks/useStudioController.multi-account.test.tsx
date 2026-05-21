@@ -424,4 +424,51 @@ describe("useStudioController multi-account regressions", () => {
       vi.useRealTimers();
     }
   });
+
+  it("refreshes session as fallback when start live flow request throws", async () => {
+    const user = makeUser("1", "A", "A-old");
+    const syncedProfileState = defaultProfileState();
+    syncedProfileState.title.submitted = user.last_title;
+    syncedProfileState.title.effective = user.last_title;
+    syncedProfileState.title.transport = "synced";
+    syncedProfileState.area.submitted_parent = user.last_area_name[0];
+    syncedProfileState.area.submitted_child = user.last_area_name[1];
+    syncedProfileState.area.effective_parent = user.last_area_name[0];
+    syncedProfileState.area.effective_child = user.last_area_name[1];
+    syncedProfileState.area.transport = "synced";
+    syncedProfileState.tags.submitted = [...(user.last_tags || [])];
+    syncedProfileState.tags.effective = [...(user.last_tags || [])];
+    syncedProfileState.tags.transport = "synced";
+    user.live_profile_state = syncedProfileState;
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.syncLiveRoomProfile.mockResolvedValue(
+      ok({
+        title: user.last_title,
+        parent: user.last_area_name[0],
+        child: user.last_area_name[1],
+        tags: user.last_tags || [],
+        from_cache: false,
+        profile_state: syncedProfileState,
+      }),
+    );
+    mockStudioApi.startLiveFlow.mockRejectedValue(new Error("network down"));
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    const syncCallsBefore = mockStudioApi.syncLiveStatus.mock.calls.length;
+
+    let startPromise: Promise<void> | undefined;
+    act(() => {
+      startPromise = result.current.actions.startLive("face_retry");
+    });
+
+    await act(async () => {
+      await startPromise;
+      await flush();
+    });
+
+    expect(mockStudioApi.syncLiveStatus.mock.calls.length).toBeGreaterThan(syncCallsBefore);
+  });
 });

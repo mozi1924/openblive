@@ -306,55 +306,69 @@ export function useLiveInteractionActions({
     }
 
     pendingLiveFlowHintSkipRef.current = "start";
-    const res = await studioApi.startLiveFlow();
-    if (requestUid !== activeUidRef.current) {
-      return;
-    }
-    if (res.code === 0) {
-      const flow = res.data;
-      setRtmp(flow?.stream_info || null);
-      setRecentAreas(flow?.recent_areas || []);
-      append(t(localeSetting, "ui.ctrl.start_live_ok"));
-      const danmuStarted = Boolean(flow?.danmu_monitor_started);
-      const danmuMsg = resolveBackendMessage(flow?.danmu_monitor_msg || "", localeSetting);
-      if (danmuStarted) {
-        setDanmuListening(true);
-        append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
-      } else {
-        if (flow?.danmu_monitor_msg === "i18n.live.danmu_monitor_already_running") {
-          setDanmuListening(true);
-          append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
-        } else if (danmuMsg) {
-          append(tf(localeSetting, "ui.ctrl.danmu_monitor_failed", { msg: danmuMsg }));
-        }
-      }
-      await refreshSession();
-      await loadLinkageStatus();
-      return;
-    }
-
-    if (res.code === 60024 || res.code === 60043) {
-      setActiveTab("stream");
-      if (source === "tray") {
-        await revealMainWindowForAction();
-      }
-      const qrPayload = await resolveFaceQrImage(res.qr || "");
-      setFaceQrContent(qrPayload.content);
-      setFaceQr(qrPayload.imageSrc);
-      setShowFaceModal(true);
-      if (!qrPayload.content) {
-        append(t(localeSetting, "ui.ctrl.face_qr_missing"));
+    try {
+      const res = await studioApi.startLiveFlow();
+      if (requestUid !== activeUidRef.current) {
         return;
       }
-      if (!qrPayload.imageSrc) {
-        append(t(localeSetting, "ui.ctrl.face_qr_render_failed"));
+      if (res.code === 0) {
+        const flow = res.data;
+        setRtmp(flow?.stream_info || null);
+        setRecentAreas(flow?.recent_areas || []);
+        append(t(localeSetting, "ui.ctrl.start_live_ok"));
+        const danmuStarted = Boolean(flow?.danmu_monitor_started);
+        const danmuMsg = resolveBackendMessage(flow?.danmu_monitor_msg || "", localeSetting);
+        if (danmuStarted) {
+          setDanmuListening(true);
+          append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
+        } else {
+          if (flow?.danmu_monitor_msg === "i18n.live.danmu_monitor_already_running") {
+            setDanmuListening(true);
+            append(t(localeSetting, "ui.ctrl.danmu_monitor_started"));
+          } else if (danmuMsg) {
+            append(tf(localeSetting, "ui.ctrl.danmu_monitor_failed", { msg: danmuMsg }));
+          }
+        }
+        await refreshSession();
+        await loadLinkageStatus();
+        return;
       }
-      append(t(localeSetting, "ui.ctrl.face_required"));
-      return;
-    }
 
-    append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
-    await loadLinkageStatus();
+      if (res.code === 60024 || res.code === 60043) {
+        setActiveTab("stream");
+        if (source === "tray") {
+          await revealMainWindowForAction();
+        }
+        const qrPayload = await resolveFaceQrImage(res.qr || "");
+        setFaceQrContent(qrPayload.content);
+        setFaceQr(qrPayload.imageSrc);
+        setShowFaceModal(true);
+        if (!qrPayload.content) {
+          append(t(localeSetting, "ui.ctrl.face_qr_missing"));
+          return;
+        }
+        if (!qrPayload.imageSrc) {
+          append(t(localeSetting, "ui.ctrl.face_qr_render_failed"));
+        }
+        append(t(localeSetting, "ui.ctrl.face_required"));
+        return;
+      }
+
+      append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
+      await refreshSession();
+      await loadLinkageStatus();
+    } catch (error) {
+      append(
+        tf(localeSetting, "ui.ctrl.start_live_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+      setRtmp(null);
+      await refreshSession();
+      await loadLinkageStatus();
+    } finally {
+      pendingLiveFlowHintSkipRef.current = null;
+    }
   }, [
     activeUidRef,
     append,
@@ -408,30 +422,43 @@ export function useLiveInteractionActions({
       return;
     }
     pendingLiveFlowHintSkipRef.current = "stop";
-    const res = await studioApi.stopLiveFlow();
-    if (requestUid !== activeUidRef.current) {
-      return;
-    }
-    const sessionConsistent = res.data?.session_consistent ?? true;
-    append(
-      res.code === 0
-        ? sessionConsistent
-          ? t(localeSetting, "ui.ctrl.stop_live_ok")
-          : t(localeSetting, "ui.ctrl.stop_live_session_mismatch")
-        : tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }),
-    );
-    if (res.code === 0 && sessionConsistent) {
-      setDanmuListening(false);
+    try {
+      const res = await studioApi.stopLiveFlow();
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      const sessionConsistent = res.data?.session_consistent ?? true;
+      append(
+        res.code === 0
+          ? sessionConsistent
+            ? t(localeSetting, "ui.ctrl.stop_live_ok")
+            : t(localeSetting, "ui.ctrl.stop_live_session_mismatch")
+          : tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }),
+      );
+      if (res.code === 0 && sessionConsistent) {
+        setDanmuListening(false);
+        setRtmp(null);
+      }
+      if (res.code === 0) {
+        await refreshSession();
+        await loadLinkageStatus();
+        return;
+      }
       setRtmp(null);
-    }
-    if (res.code === 0) {
       await refreshSession();
       await loadLinkageStatus();
-      return;
+    } catch (error) {
+      append(
+        tf(localeSetting, "ui.ctrl.stop_live_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+      setRtmp(null);
+      await refreshSession();
+      await loadLinkageStatus();
+    } finally {
+      pendingLiveFlowHintSkipRef.current = null;
     }
-    setRtmp(null);
-    await refreshSession();
-    await loadLinkageStatus();
   }, [
     activeUidRef,
     append,

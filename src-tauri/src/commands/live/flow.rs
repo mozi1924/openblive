@@ -9,9 +9,10 @@ use super::linkage::{
     normalize_live_control_mode, obs_ws_start_stream, obs_ws_stop_stream, spawn_shell_command,
 };
 use super::profile::push_recent_area;
+use super::profile_sync::sync_live_status_runtime;
 use super::session::{
     apply_live_session_identity, clear_live_session_identity, resolve_current_auth_context,
-    LIVE_STATUS_LIVE, LIVE_STATUS_OFFLINE,
+    LIVE_STATUS_LIVE, LIVE_STATUS_OFFLINE, LIVE_STATUS_ROUND,
 };
 use super::stream::{collect_stream_endpoints, select_primary_endpoint};
 use crate::bili::app_sign;
@@ -418,10 +419,30 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
             && current_sub_session_key == expected_sub_session_key
             && response_session_consistent;
         if !same_session {
+            let has_expected_identity =
+                expected_live_key.as_deref().is_some() || expected_sub_session_key.as_deref().is_some();
+            let mut reclaimed_user_count = 0usize;
+            if has_expected_identity {
+                for user in runtime.config.users.values_mut() {
+                    if user.live_key.as_deref() == expected_live_key.as_deref()
+                        && user.sub_session_key.as_deref() == expected_sub_session_key.as_deref()
+                    {
+                        user.live_key = None;
+                        user.sub_session_key = None;
+                        reclaimed_user_count += 1;
+                    }
+                }
+            }
+            if reclaimed_user_count > 0 {
+                save_config(&state.config_path, &runtime.config, &state.master_key);
+            }
             crate::runtime_log!(
-                "[live][stop] session identity changed during stop, skip local session override"
+                "[live][stop] session identity changed during stop, skip local session override, reclaimed_user_count={reclaimed_user_count}"
             );
-            return Ok(wrap_ok(json!({ "session_consistent": false })));
+            return Ok(wrap_ok(json!({
+                "session_consistent": false,
+                "reclaimed_user_count": reclaimed_user_count
+            })));
         }
         runtime.session.is_live = false;
         runtime.session.live_status = Some(LIVE_STATUS_OFFLINE);
@@ -544,11 +565,33 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
         .as_bool()
         .unwrap_or(true);
     if !session_consistent {
+        let synced_session = sync_live_status_runtime(state).await;
+        let synced_live_status =
+            synced_session
+                .live_status
+                .unwrap_or(if synced_session.is_live { LIVE_STATUS_LIVE } else { LIVE_STATUS_OFFLINE });
+        let synced_is_live = matches!(synced_live_status, LIVE_STATUS_LIVE | LIVE_STATUS_ROUND);
+        let danmu_result = if synced_is_live {
+            json!({
+                "stopped": false,
+                "msg": "",
+            })
+        } else {
+            stop_danmu_monitor_inner(state)
+                .await
+                .unwrap_or_else(|error| {
+                    json!({
+                        "stopped": false,
+                        "msg": format!("i18n.live.error.stop_live_failed:{error}"),
+                    })
+                })
+        };
         let response = wrap_ok(json!({
-            "live_stopped": false,
-            "danmu_monitor_stopped": false,
-            "danmu_monitor_msg": "",
-            "session_consistent": false
+            "live_stopped": !synced_is_live,
+            "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
+            "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
+            "session_consistent": false,
+            "sync_fallback_applied": true
         }));
         emit_studio_state_event(
             app,
@@ -558,7 +601,9 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
                 "action": "stop",
                 "ok": true,
                 "code": 0,
-                "session_consistent": false
+                "session_consistent": false,
+                "sync_fallback_applied": true,
+                "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
             }),
         );
         emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;

@@ -6,6 +6,7 @@ use super::session::{
 use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::endpoints;
+use crate::models::SessionState;
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use serde_json::json;
@@ -33,20 +34,16 @@ pub(crate) async fn fetch_room_info_by_room_id(
     Ok(value["data"].clone())
 }
 
-pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
+pub(crate) async fn sync_live_status_runtime(state: &AppState) -> SessionState {
     let (uid, room_id, cookie) = {
         let mut runtime = state.runtime.lock().await;
         let Some(uid) = runtime.config.current_uid.clone() else {
             mark_session_sync_state(&mut runtime.session, true, Some("NO_ACTIVE_USER"));
-            return Ok(wrap_ok(
-                serde_json::to_value(runtime.session.clone()).unwrap(),
-            ));
+            return runtime.session.clone();
         };
         let Some(user) = runtime.config.users.get(&uid) else {
             mark_session_sync_state(&mut runtime.session, true, Some("ACTIVE_USER_MISSING"));
-            return Ok(wrap_ok(
-                serde_json::to_value(runtime.session.clone()).unwrap(),
-            ));
+            return runtime.session.clone();
         };
         let room_id = if user.room_id.trim().is_empty() {
             runtime.session.room_id.clone()
@@ -59,19 +56,15 @@ pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
     if room_id.trim().is_empty() {
         let mut runtime = state.runtime.lock().await;
         mark_session_sync_state(&mut runtime.session, true, Some("ROOM_ID_MISSING"));
-        return Ok(wrap_ok(
-            serde_json::to_value(runtime.session.clone()).unwrap(),
-        ));
+        return runtime.session.clone();
     }
 
-    let room_info = match fetch_room_info_by_room_id(&state, &room_id, Some(&cookie)).await {
+    let room_info = match fetch_room_info_by_room_id(state, &room_id, Some(&cookie)).await {
         Ok(data) => data,
         Err(_) => {
             let mut runtime = state.runtime.lock().await;
             mark_session_sync_state(&mut runtime.session, true, Some("FETCH_ROOM_INFO_FAILED"));
-            return Ok(wrap_ok(
-                serde_json::to_value(runtime.session.clone()).unwrap(),
-            ));
+            return runtime.session.clone();
         }
     };
 
@@ -107,9 +100,12 @@ pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
         save_config(&state.config_path, &runtime.config, &state.master_key);
     }
 
-    Ok(wrap_ok(
-        serde_json::to_value(runtime.session.clone()).unwrap(),
-    ))
+    runtime.session.clone()
+}
+
+pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
+    let session = sync_live_status_runtime(&state).await;
+    Ok(wrap_ok(serde_json::to_value(session).unwrap()))
 }
 
 pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
