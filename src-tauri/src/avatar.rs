@@ -218,18 +218,19 @@ pub async fn resolve_and_cache_face_data_urls(
         Err(_) => None,
     };
     for uid in uids {
-        let resolved_face = if let Some(face_url) = batch_faces.as_ref().and_then(|faces| faces.get(&uid)) {
-            refresh_avatar_cache(client, config_path, &uid, face_url).await?;
-            load_cached_face_data_url(config_path, &uid)
-        } else {
-            resolve_and_cache_face_data_url(
-                client,
-                config_path,
-                &uid,
-                requests.get(&uid).and_then(|value| value.as_deref()),
-            )
-            .await?
-        };
+        let resolved_face =
+            if let Some(face_url) = batch_faces.as_ref().and_then(|faces| faces.get(&uid)) {
+                refresh_avatar_cache(client, config_path, &uid, face_url).await?;
+                load_cached_face_data_url(config_path, &uid)
+            } else {
+                resolve_and_cache_face_data_url(
+                    client,
+                    config_path,
+                    &uid,
+                    requests.get(&uid).and_then(|value| value.as_deref()),
+                )
+                .await?
+            };
 
         if let Some(face) = resolved_face {
             resolved.insert(uid, face);

@@ -91,6 +91,11 @@ export function DanmuTab({
     messages: DanmuMsg[];
   };
 
+  const hasSameRenderMeta = (left: DanmuMsg, right: DanmuMsg) =>
+    (left.sender_role || "viewer") === (right.sender_role || "viewer") &&
+    (left.sender_guard_level ?? 0) === (right.sender_guard_level ?? 0) &&
+    (left.sender_name_color || "") === (right.sender_name_color || "");
+
   const groupedDanmus = useMemo<DanmuGroupItem[]>(() => {
     const result: DanmuGroupItem[] = [];
     let currentGroup: DanmuGroupItem | null = null;
@@ -131,8 +136,9 @@ export function DanmuTab({
           ? currentGroup.messages[0].sender_uid === msg.sender_uid
           : currentGroup.messages[0].sender === msg.sender
       );
+      const sameRenderMeta = currentGroup && hasSameRenderMeta(currentGroup.messages[0], msg);
 
-      if (currentGroup && groupIsMe === isMe && sameSender) {
+      if (currentGroup && groupIsMe === isMe && sameSender && sameRenderMeta) {
         currentGroup.messages.push(msg);
       } else {
         currentGroup = {

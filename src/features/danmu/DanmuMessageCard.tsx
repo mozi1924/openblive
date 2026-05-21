@@ -25,33 +25,6 @@ export const isSelfMessage = (message: DanmuMsg, currentUser: User | null, local
         message.sender === "Me"),
   );
 
-export const canMergeDanmu = (
-  current: DanmuMsg | undefined,
-  neighbor: DanmuMsg | undefined,
-  currentUser: User | null,
-  locale: LocaleSetting,
-) => {
-  if (!current || !neighbor) {
-    return false;
-  }
-  if (current.type !== "danmu" || neighbor.type !== "danmu") {
-    return false;
-  }
-
-  const currentIsSelf = isSelfMessage(current, currentUser, locale);
-  const neighborIsSelf = isSelfMessage(neighbor, currentUser, locale);
-  if (currentIsSelf !== neighborIsSelf) {
-    return false;
-  }
-
-  const sameSender =
-    typeof current.sender_uid === "number" && typeof neighbor.sender_uid === "number"
-      ? current.sender_uid === neighbor.sender_uid
-      : current.sender === neighbor.sender;
-
-  return sameSender;
-};
-
 
 const formatGiftPrice = (rawValue: number) => {
   const yuan = rawValue / 1000;
@@ -270,17 +243,11 @@ export function DanmuCard({
   messages,
   locale,
   currentUser,
-  mergeWithAbove: _mergeWithAbove,
-  mergeWithBelow: _mergeWithBelow,
-  showSenderMeta: _showSenderMeta,
 }: {
   message?: DanmuMsg;
   messages?: DanmuMsg[];
   locale: LocaleSetting;
   currentUser: User | null;
-  mergeWithAbove?: boolean;
-  mergeWithBelow?: boolean;
-  showSenderMeta?: boolean;
 }) {
   const msgList = messages ? messages : message ? [message] : [];
   const firstMessage = msgList[0];
@@ -292,7 +259,11 @@ export function DanmuCard({
   const localizedSender = resolveBackendMessage(firstMessage.sender, locale);
   const localizedContent = resolveBackendMessage(firstMessage.content, locale);
   const isMe = isSelfMessage(firstMessage, currentUser, locale);
-  const resolvedSenderFace = isMe ? firstMessage.sender_face || currentUser?.face : firstMessage.sender_face;
+  const resolvedSenderFace = (
+    isMe
+      ? msgList.find((message) => Boolean(message.sender_face))?.sender_face || currentUser?.face
+      : msgList.find((message) => Boolean(message.sender_face))?.sender_face
+  );
   const senderUid =
     typeof firstMessage.sender_uid === "number" ? firstMessage.sender_uid : Number.NaN;
   const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
