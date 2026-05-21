@@ -578,6 +578,7 @@ pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResu
         }),
     );
     emit_runtime_snapshot(app, state, "start_live_flow_inner").await;
+    crate::tray::refresh_tray_menu(app);
     Ok(response)
 }
 
@@ -643,6 +644,7 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
             }),
         );
         emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;
+        crate::tray::refresh_tray_menu(app);
         return Ok(response);
     }
 
@@ -674,5 +676,6 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
         }),
     );
     emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;
+    crate::tray::refresh_tray_menu(app);
     Ok(response)
 }

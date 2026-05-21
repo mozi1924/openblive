@@ -50,6 +50,7 @@ pub async fn sync_live_status(app: AppHandle, state: State<'_, AppState>) -> Cmd
     let result = sync_live_status_inner(state.clone()).await;
     if result.is_ok() {
         emit_runtime_snapshot(&app, &state, "command.sync_live_status").await;
+        crate::tray::refresh_tray_menu(&app);
     }
     result
 }
@@ -101,6 +102,7 @@ pub async fn start_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult
     }
     if result.is_ok() {
         emit_runtime_snapshot(&app, &state, "command.start_live").await;
+        crate::tray::refresh_tray_menu(&app);
     }
     result
 }
@@ -123,6 +125,7 @@ pub async fn stop_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult 
     }
     if result.is_ok() {
         emit_runtime_snapshot(&app, &state, "command.stop_live").await;
+        crate::tray::refresh_tray_menu(&app);
     }
     result
 }

@@ -20,6 +20,24 @@ const TRAY_WHITE: &[u8] = include_bytes!("../icons/tray_white.png");
 #[cfg(target_os = "macos")]
 const TRAY_TEMPLATE: &[u8] = include_bytes!("../icons/trayTemplate.png");
 
+struct TrayMenuSnapshot {
+    locale: String,
+    account_label: String,
+    live_status_label: String,
+    logged_in: bool,
+}
+
+impl TrayMenuSnapshot {
+    fn fallback() -> Self {
+        Self {
+            locale: "zh-CN".to_string(),
+            account_label: crate::i18n::tr("zh-CN", "tray.account.loading"),
+            live_status_label: crate::i18n::tr("zh-CN", "tray.live.loading"),
+            logged_in: false,
+        }
+    }
+}
+
 fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
     #[cfg(target_os = "macos")]
     {
@@ -36,66 +54,48 @@ fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
     }
 }
 
-fn current_account_label(app: &AppHandle) -> String {
+fn read_tray_menu_snapshot(app: &AppHandle) -> Option<TrayMenuSnapshot> {
     let state = app.state::<AppState>();
-    let Ok(runtime) = state.runtime.try_lock() else {
-        return crate::i18n::tr("zh-CN", "tray.account.loading");
+    let runtime = state.runtime.try_lock().ok()?;
+    let locale = runtime.config.locale.clone();
+    let account_label = match runtime.config.current_uid.as_ref() {
+        Some(uid) => match runtime.config.users.get(uid) {
+            Some(user) => format!(
+                "{}: {} ({})",
+                crate::i18n::tr_config(&runtime.config, "tray.account.current"),
+                user.uname,
+                user.uid
+            ),
+            None => crate::i18n::tr_config(&runtime.config, "tray.account.logged_out"),
+        },
+        None => crate::i18n::tr_config(&runtime.config, "tray.account.logged_out"),
     };
-    let Some(uid) = runtime.config.current_uid.as_ref() else {
-        return crate::i18n::tr_config(&runtime.config, "tray.account.logged_out");
-    };
-    let Some(user) = runtime.config.users.get(uid) else {
-        return crate::i18n::tr_config(&runtime.config, "tray.account.logged_out");
-    };
-    format!(
-        "{}: {} ({})",
-        crate::i18n::tr_config(&runtime.config, "tray.account.current"),
-        user.uname,
-        user.uid
-    )
-}
-
-fn current_live_status_label(app: &AppHandle) -> String {
-    let state = app.state::<AppState>();
-    let Ok(runtime) = state.runtime.try_lock() else {
-        return crate::i18n::tr("zh-CN", "tray.live.loading");
-    };
-    match runtime.session.live_status.unwrap_or(0) {
+    let live_status_label = match runtime.session.live_status.unwrap_or(0) {
         1 => crate::i18n::tr_config(&runtime.config, "tray.live.on"),
         2 => crate::i18n::tr_config(&runtime.config, "tray.live.round"),
         _ => crate::i18n::tr_config(&runtime.config, "tray.live.off"),
-    }
-}
-
-fn has_logged_in_user(app: &AppHandle) -> bool {
-    let state = app.state::<AppState>();
-    state
-        .runtime
-        .try_lock()
-        .map(|runtime| runtime.config.current_uid.is_some())
-        .unwrap_or(false)
-}
-
-fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let locale = {
-        let state = app.state::<AppState>();
-        state
-            .runtime
-            .try_lock()
-            .map(|runtime| runtime.config.locale.clone())
-            .unwrap_or_else(|_| "zh-CN".to_string())
     };
+    let logged_in = runtime.config.current_uid.is_some();
+    Some(TrayMenuSnapshot {
+        locale,
+        account_label,
+        live_status_label,
+        logged_in,
+    })
+}
+
+fn build_tray_menu(app: &AppHandle, snapshot: &TrayMenuSnapshot) -> tauri::Result<Menu<tauri::Wry>> {
     let account_info = MenuItem::with_id(
         app,
         MENU_ACCOUNT_INFO,
-        current_account_label(app),
+        snapshot.account_label.clone(),
         false,
         None::<&str>,
     )?;
     let live_status = MenuItem::with_id(
         app,
         MENU_LIVE_STATUS,
-        current_live_status_label(app),
+        snapshot.live_status_label.clone(),
         false,
         None::<&str>,
     )?;
@@ -103,30 +103,29 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let toggle_window = MenuItem::with_id(
         app,
         MENU_TOGGLE_WINDOW,
-        crate::i18n::tr(&locale, "tray.menu.toggle_window"),
+        crate::i18n::tr(&snapshot.locale, "tray.menu.toggle_window"),
         true,
         None::<&str>,
     )?;
-    let logged_in = has_logged_in_user(app);
     let start_live = MenuItem::with_id(
         app,
         MENU_START_LIVE,
-        crate::i18n::tr(&locale, "tray.menu.start_live"),
-        logged_in,
+        crate::i18n::tr(&snapshot.locale, "tray.menu.start_live"),
+        snapshot.logged_in,
         None::<&str>,
     )?;
     let stop_live = MenuItem::with_id(
         app,
         MENU_STOP_LIVE,
-        crate::i18n::tr(&locale, "tray.menu.stop_live"),
-        logged_in,
+        crate::i18n::tr(&snapshot.locale, "tray.menu.stop_live"),
+        snapshot.logged_in,
         None::<&str>,
     )?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(
         app,
         MENU_QUIT,
-        crate::i18n::tr(&locale, "tray.menu.quit"),
+        crate::i18n::tr(&snapshot.locale, "tray.menu.quit"),
         true,
         None::<&str>,
     )?;
@@ -154,7 +153,11 @@ pub fn refresh_tray_menu(app: &AppHandle) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    if let Ok(menu) = build_tray_menu(app) {
+    let Some(snapshot) = read_tray_menu_snapshot(app) else {
+        crate::runtime_log!("[tray] skip menu refresh: runtime lock busy");
+        return;
+    };
+    if let Ok(menu) = build_tray_menu(app, &snapshot) {
         let _ = tray.set_menu(Some(menu));
     }
 }
@@ -242,21 +245,14 @@ pub fn on_reopen_event(_app: &AppHandle, _has_visible_windows: bool) {}
 
 pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
     let handle = app.handle().clone();
-    let menu = build_tray_menu(&handle)?;
-    let locale = {
-        let state = app.state::<AppState>();
-        state
-            .runtime
-            .try_lock()
-            .map(|runtime| runtime.config.locale.clone())
-            .unwrap_or_else(|_| "zh-CN".to_string())
-    };
+    let snapshot = read_tray_menu_snapshot(&handle).unwrap_or_else(TrayMenuSnapshot::fallback);
+    let menu = build_tray_menu(&handle, &snapshot)?;
 
     let icon = get_tray_icon(&handle);
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .tooltip(crate::i18n::tr(&locale, "tray.tooltip"))
+        .tooltip(crate::i18n::tr(&snapshot.locale, "tray.tooltip"))
         .icon(icon);
 
     #[cfg(target_os = "macos")]

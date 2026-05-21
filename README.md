@@ -158,6 +158,9 @@ pnpm tauri build
 ## 🤝 特别鸣谢
 
 - 感谢 [bilibili-api-collect](https://github.com/socialsisteryi/bilibili-api-collect) 项目，其整理归纳的哔哩哔哩 API 接口文档为本项目的账号登录、开播控制等核心功能的实现提供了不可或缺的帮助与参考。
+- 感谢 [ChaceQC/bilibili_live_stream_code](https://github.com/ChaceQC/bilibili_live_stream_code) 项目，为本项目提供了重要的实现思路启发，并在 API 链路对齐方面提供了参考。
+- 感谢 [TNXG/bilibili_live_stream](https://github.com/TNXG/bilibili_live_stream) 项目，为本项目提供了关键的功能设计启发，并在 API 链路对齐方面提供了参考。
+- 感谢 [Radekyspec/StartLive](https://github.com/Radekyspec/StartLive) 项目，为本项目提供了工程实践启发，并在 API 链路对齐方面提供了参考。
 
 ---
 

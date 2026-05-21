@@ -15,7 +15,7 @@ use crate::models::{sync_live_profile_state_defaults, PollReq, UidReq, UserRecor
 use crate::response::wrap_ok;
 use crate::state::{restore_session_from_current, AppState};
 use serde_json::json;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn get_login_qrcode(state: State<'_, AppState>) -> CmdResult {
@@ -46,7 +46,11 @@ pub async fn get_login_qrcode(state: State<'_, AppState>) -> CmdResult {
 }
 
 #[tauri::command]
-pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdResult {
+pub async fn poll_login_status(
+    app: AppHandle,
+    req: PollReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
     let value: serde_json::Value = state
         .client
         .http
@@ -198,6 +202,8 @@ pub async fn poll_login_status(req: PollReq, state: State<'_, AppState>) -> CmdR
     runtime.session.error_code = None;
     save_config(&state.config_path, &runtime.config, &state.master_key);
     let response_user = to_response_user(&state.config_path, &user);
+    drop(runtime);
+    crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }
 
@@ -287,7 +293,7 @@ pub async fn get_account_list(state: State<'_, AppState>) -> CmdResult {
 }
 
 #[tauri::command]
-pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResult {
+pub async fn switch_account(app: AppHandle, req: UidReq, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if !runtime.config.users.contains_key(&req.uid) {
         return Err("i18n.account.error.account_not_found".into());
@@ -324,11 +330,12 @@ pub async fn switch_account(req: UidReq, state: State<'_, AppState>) -> CmdResul
         }
     }
     let response_user = to_response_user(&state.config_path, &user);
+    crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }
 
 #[tauri::command]
-pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
+pub async fn logout(app: AppHandle, req: UidReq, state: State<'_, AppState>) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if !req.uid.chars().all(|ch| ch.is_ascii_digit()) {
         return Err("i18n.account.error.account_not_found".into());
@@ -353,6 +360,8 @@ pub async fn logout(req: UidReq, state: State<'_, AppState>) -> CmdResult {
         runtime.session = Default::default();
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
+    drop(runtime);
+    crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(json!({})))
 }
 
