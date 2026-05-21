@@ -54,7 +54,6 @@
 </template>
 
 <script>
-import _ from 'lodash'
 import * as chatConfig from '@/api/chatConfig'
 import Ticker from './Ticker'
 import TextMessage from './TextMessage'
@@ -428,7 +427,7 @@ export default {
       message.addTime = new Date()
 
       if (message.type !== constants.MESSAGE_TYPE_TEXT) {
-        this.paidMessages.unshift(_.cloneDeep(message))
+        this.paidMessages.unshift(JSON.parse(JSON.stringify(message)))
         const MAX_PAID_MESSAGE_NUM = 100
         if (this.paidMessages.length > MAX_PAID_MESSAGE_NUM) {
           this.paidMessages.splice(MAX_PAID_MESSAGE_NUM, this.paidMessages.length - MAX_PAID_MESSAGE_NUM)

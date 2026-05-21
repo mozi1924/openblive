@@ -1,5 +1,3 @@
-import _ from 'lodash'
-
 export const DEFAULT_CONFIG = {
   minGiftPrice: 0.1,
   showDanmaku: true,
@@ -25,7 +23,7 @@ export const DEFAULT_CONFIG = {
 }
 
 export function deepCloneDefaultConfig() {
-  return _.cloneDeep(DEFAULT_CONFIG)
+  return JSON.parse(JSON.stringify(DEFAULT_CONFIG))
 }
 
 export function sanitizeConfig(config) {

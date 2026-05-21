@@ -1,9 +1,5 @@
 import Vue from 'vue'
 import VueRouter from 'vue-router'
-import ElementUI from 'element-ui'
-if (!process.env.LIB_USE_CDN) {
-  import('element-ui/lib/theme-chalk/index.css')
-}
 
 import * as apiBase from './api/base'
 import * as i18n from './i18n'
@@ -11,10 +7,7 @@ import App from './App'
 
 apiBase.init()
 
-if (!process.env.LIB_USE_CDN) {
-  Vue.use(VueRouter)
-  Vue.use(ElementUI)
-}
+Vue.use(VueRouter)
 
 Vue.config.ignoredElements = [
   /^yt-/

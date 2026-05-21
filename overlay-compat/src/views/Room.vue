@@ -124,17 +124,9 @@ export default {
       try {
         await initChatClientPromise
       } catch (e) {
-        this.$message.error({
-          message: `Failed to load: ${e}`,
-          duration: 10 * 1000
-        })
+        console.error('Failed to load room overlay:', e)
         throw e
       }
-
-      this.$message({
-        message: 'Loaded',
-        duration: 500
-      })
     },
     initConfig() {
       const locale = this.strConfig.lang
@@ -331,10 +323,7 @@ export default {
       this.renderer.updateMessage(data.id, { translation: data.translation })
     },
     onFatalError(error) {
-      this.$message.error({
-        message: error.toString(),
-        duration: 30 * 1000
-      })
+      console.error('Overlay fatal error:', error)
       this.onAddText(new chatModels.AddTextMsg({
         authorName: 'blivechat',
         authorType: constants.AUTHOR_TYPE_ADMIN,
