@@ -203,14 +203,14 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, _event| {
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen {
             has_visible_windows,
             ..
-        } = event
+        } = _event
         {
-            tray::on_reopen_event(app_handle, has_visible_windows);
+            tray::on_reopen_event(_app_handle, has_visible_windows);
         }
     });
 }

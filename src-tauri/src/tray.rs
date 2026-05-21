@@ -66,7 +66,13 @@ fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
     }
     #[cfg(target_os = "windows")]
     {
-        if let Some(tauri::Theme::Dark) = _app.theme() {
+        let is_dark = _app
+            .get_webview_window("main")
+            .and_then(|window| window.theme().ok())
+            .map(|theme| matches!(theme, tauri::Theme::Dark))
+            .unwrap_or(false);
+
+        if is_dark {
             tauri::image::Image::from_bytes(TRAY_WHITE).expect("failed to load white tray icon")
         } else {
             tauri::image::Image::from_bytes(TRAY_BLACK).expect("failed to load black tray icon")
@@ -409,6 +415,7 @@ pub fn on_reopen_event(app: &AppHandle, has_visible_windows: bool) {
 }
 
 #[cfg(not(target_os = "macos"))]
+#[allow(dead_code)]
 pub fn on_reopen_event(_app: &AppHandle, _has_visible_windows: bool) {}
 
 pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
@@ -417,16 +424,14 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
     let menu = build_tray_menu(&handle, &snapshot)?;
 
     let icon = get_tray_icon(&handle);
-    let mut builder = TrayIconBuilder::with_id(TRAY_ID)
+    let builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .tooltip(crate::i18n::tr(&snapshot.locale, "tray.tooltip"))
         .icon(icon);
 
     #[cfg(target_os = "macos")]
-    {
-        builder = builder.icon_as_template(true);
-    }
+    let builder = builder.icon_as_template(true);
 
     let _tray = builder.build(app)?;
     {

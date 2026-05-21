@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.openblive.app",
   "build": {
-    "beforeDevCommand": "pnpm ensure:overlay && exec node scripts/tauri-dev-server.mjs",
+    "beforeDevCommand": "pnpm ensure:overlay && node scripts/tauri-dev-server.mjs",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build:desktop",
     "frontendDist": "../dist"
