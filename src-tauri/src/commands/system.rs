@@ -11,12 +11,16 @@ use crate::{
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use qrcode_generator::QrCodeEcc;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashMap;
 use std::fs;
+use std::sync::Once;
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
+use tauri::{Window, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
 use tauri_plugin_window_state::{
     AppHandleExt as WindowStateAppHandleExt, StateFlags, WindowExt as WindowStateWindowExt,
@@ -33,6 +37,26 @@ const DANMU_OVERLAY_HEIGHT: f64 = 360.0;
 const DANMU_OVERLAY_MIN_WIDTH: f64 = 360.0;
 const DANMU_OVERLAY_MIN_HEIGHT: f64 = 260.0;
 const WINDOW_STATE_SYNC_DELAY_MS: u64 = 120;
+const MANAGED_WINDOW_STATE_FILENAME: &str = "managed-window-state.json";
+
+static ALWAYS_ON_TOP_UNSUPPORTED_WARN: Once = Once::new();
+static WINDOW_POSITION_UNSUPPORTED_WARN: Once = Once::new();
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ManagedWindowState {
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    height: Option<u32>,
+    #[serde(default)]
+    x: Option<i32>,
+    #[serde(default)]
+    y: Option<i32>,
+    #[serde(default)]
+    maximized: bool,
+}
+
+type ManagedWindowStateMap = HashMap<String, ManagedWindowState>;
 
 fn normalize_live_control_mode(mode: &str) -> &'static str {
     match mode.trim() {
@@ -63,6 +87,49 @@ fn emit_overlay_settings(window: &WebviewWindow, config: &PersistConfig) {
         DANMU_OVERLAY_SETTINGS_EVENT,
         overlay_settings_payload(config),
     );
+}
+
+fn is_managed_window_label(label: &str) -> bool {
+    matches!(label, "main" | DANMU_OVERLAY_LABEL)
+}
+
+fn is_wayland_session() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var("XDG_SESSION_TYPE")
+                .map(|value| value.eq_ignore_ascii_case("wayland"))
+                .unwrap_or(false)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
+fn supports_window_positioning() -> bool {
+    !is_wayland_session()
+}
+
+fn supports_always_on_top() -> bool {
+    !is_wayland_session()
+}
+
+fn warn_window_position_unsupported() {
+    WINDOW_POSITION_UNSUPPORTED_WARN.call_once(|| {
+        crate::runtime_warn!(
+            "[window] position restore is unsupported on Linux Wayland; only size/maximized will be restored"
+        );
+    });
+}
+
+fn warn_always_on_top_unsupported() {
+    ALWAYS_ON_TOP_UNSUPPORTED_WARN.call_once(|| {
+        crate::runtime_warn!(
+            "[window] always-on-top is unsupported on Linux Wayland; overlay pin is best-effort only"
+        );
+    });
 }
 
 fn managed_window_state_flags() -> StateFlags {
@@ -99,22 +166,141 @@ pub(crate) fn ensure_overlay_window(
     build_overlay_window(app, config).map(|window| (window, true))
 }
 
-fn window_has_saved_state(app: &AppHandle, label: &str) -> bool {
-    let Ok(app_dir) = app.path().app_config_dir() else {
-        return false;
+fn managed_window_state_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| format!("resolve app config dir failed: {error}"))?;
+    fs::create_dir_all(&app_dir)
+        .map_err(|error| format!("create app config dir failed: {error}"))?;
+    Ok(app_dir.join(MANAGED_WINDOW_STATE_FILENAME))
+}
+
+fn load_managed_window_states(app: &AppHandle) -> ManagedWindowStateMap {
+    let Ok(path) = managed_window_state_path(app) else {
+        return ManagedWindowStateMap::new();
     };
-    let state_path = app_dir.join(WindowStateAppHandleExt::filename(app));
-    let Ok(raw) = fs::read_to_string(state_path) else {
-        return false;
-    };
-    let Ok(saved_state) = serde_json::from_str::<serde_json::Value>(&raw) else {
-        return false;
+    let Ok(raw) = fs::read_to_string(path) else {
+        return ManagedWindowStateMap::new();
     };
 
-    saved_state.get(label).is_some()
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+fn save_managed_window_states(
+    app: &AppHandle,
+    states: &ManagedWindowStateMap,
+) -> Result<(), String> {
+    let path = managed_window_state_path(app)?;
+    let raw = serde_json::to_vec_pretty(states)
+        .map_err(|error| format!("serialize managed window state failed: {error}"))?;
+    fs::write(path, raw).map_err(|error| format!("write managed window state failed: {error}"))
+}
+
+fn capture_managed_window_state(window: &Window) -> Option<ManagedWindowState> {
+    if !is_managed_window_label(window.label()) || window.is_minimized().unwrap_or(false) {
+        return None;
+    }
+
+    let mut state = ManagedWindowState::default();
+    if let Ok(size) = window.inner_size() {
+        if size.width > 0 && size.height > 0 {
+            state.width = Some(size.width);
+            state.height = Some(size.height);
+        }
+    }
+
+    state.maximized = window.is_maximized().unwrap_or(false);
+
+    if supports_window_positioning() {
+        if let Ok(position) = window.outer_position() {
+            state.x = Some(position.x);
+            state.y = Some(position.y);
+        }
+    }
+
+    if state.width.is_none() && state.height.is_none() && state.x.is_none() && state.y.is_none() {
+        return None;
+    }
+
+    Some(state)
+}
+
+fn persist_managed_window_state(window: &Window) -> Result<(), String> {
+    if !is_managed_window_label(window.label()) {
+        return Ok(());
+    }
+
+    let Some(state) = capture_managed_window_state(window) else {
+        return Ok(());
+    };
+
+    let app = window.app_handle();
+    let mut states = load_managed_window_states(app);
+    states.insert(window.label().to_string(), state);
+    save_managed_window_states(app, &states)
+}
+
+fn load_managed_window_state(app: &AppHandle, label: &str) -> Option<ManagedWindowState> {
+    load_managed_window_states(app).remove(label)
+}
+
+fn managed_window_has_saved_state(app: &AppHandle, label: &str) -> bool {
+    load_managed_window_state(app, label).is_some()
+}
+
+fn window_has_saved_state(app: &AppHandle, label: &str) -> bool {
+    managed_window_has_saved_state(app, label) || {
+        let Ok(app_dir) = app.path().app_config_dir() else {
+            return false;
+        };
+        let state_path = app_dir.join(WindowStateAppHandleExt::filename(app));
+        let Ok(raw) = fs::read_to_string(state_path) else {
+            return false;
+        };
+        let Ok(saved_state) = serde_json::from_str::<serde_json::Value>(&raw) else {
+            return false;
+        };
+
+        saved_state.get(label).is_some()
+    }
+}
+
+fn restore_managed_window_state(window: &WebviewWindow) -> Result<bool, String> {
+    let Some(state) = load_managed_window_state(&window.app_handle(), window.label()) else {
+        return Ok(false);
+    };
+
+    if let (Some(width), Some(height)) = (state.width, state.height) {
+        window
+            .set_size(PhysicalSize::new(width, height))
+            .map_err(|error| format!("restore {} window size failed: {error}", window.label()))?;
+    }
+
+    if let (Some(x), Some(y)) = (state.x, state.y) {
+        if supports_window_positioning() {
+            window
+                .set_position(PhysicalPosition::new(x, y))
+                .map_err(|error| {
+                    format!("restore {} window position failed: {error}", window.label())
+                })?;
+        } else {
+            warn_window_position_unsupported();
+        }
+    }
+
+    if state.maximized {
+        let _ = window.maximize();
+    }
+
+    Ok(true)
 }
 
 fn restore_window_state(window: &WebviewWindow) -> Result<bool, String> {
+    if restore_managed_window_state(window)? {
+        return Ok(true);
+    }
+
     if !window_has_saved_state(&window.app_handle(), window.label()) {
         return Ok(false);
     }
@@ -136,6 +322,11 @@ fn schedule_restore_window_state(window: WebviewWindow) {
 }
 
 fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    if !supports_window_positioning() {
+        warn_window_position_unsupported();
+        return Ok(());
+    }
+
     let _ = window.as_ref().window().move_window(Position::TopLeft);
 
     let target_position = if let Some(monitor) = app
@@ -169,9 +360,13 @@ fn apply_overlay_window_config(
     window: &WebviewWindow,
     config: &PersistConfig,
 ) -> Result<(), String> {
-    window
-        .set_always_on_top(config.danmu_overlay_always_on_top)
-        .map_err(|error| format!("set overlay always-on-top failed: {error}"))?;
+    if supports_always_on_top() {
+        window
+            .set_always_on_top(config.danmu_overlay_always_on_top)
+            .map_err(|error| format!("set overlay always-on-top failed: {error}"))?;
+    } else if config.danmu_overlay_always_on_top {
+        warn_always_on_top_unsupported();
+    }
     emit_overlay_settings(window, config);
     Ok(())
 }
@@ -237,9 +432,22 @@ fn show_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<(), St
 fn hide_overlay_window(app: &AppHandle) {
     let _ = app.save_window_state(managed_window_state_flags());
     if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
+        let _ = persist_managed_window_state(&window.as_ref().window());
         let _ = window.hide();
     }
     emit_overlay_visibility(app, false);
+}
+
+pub(crate) fn on_window_event(window: &Window, event: &WindowEvent) {
+    match event {
+        WindowEvent::Moved(_)
+        | WindowEvent::Resized(_)
+        | WindowEvent::CloseRequested { .. }
+        | WindowEvent::Destroyed => {
+            let _ = persist_managed_window_state(window);
+        }
+        _ => {}
+    }
 }
 
 pub(crate) async fn sync_overlay_window_from_config(app: AppHandle, state: &AppState) {

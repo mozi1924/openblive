@@ -148,6 +148,7 @@ pub fn run() {
             tray::on_tray_icon_event(app, &event);
         })
         .on_window_event(|window, event| {
+            commands::on_window_event(window, event);
             tray::on_window_event(window, event);
         })
         .invoke_handler(tauri::generate_handler![
