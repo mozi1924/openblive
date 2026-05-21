@@ -10,6 +10,7 @@ pub struct RuntimeState {
     pub session: SessionState,
     pub partition_map: HashMap<String, HashMap<String, u64>>,
     pub danmu_task: Option<JoinHandle<()>>,
+    pub danmu_task_id: u64,
     pub obs_ws_keepalive_task: Option<JoinHandle<()>>,
     pub obs_ws_connected: bool,
     pub obs_ws_last_error: String,

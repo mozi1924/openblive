@@ -202,19 +202,31 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
 
         let body = &data[offset + header_len..offset + packet_len];
         if proto == 2 {
-            let mut decoder = flate2::read::ZlibDecoder::new(body);
+            let decoder = flate2::read::ZlibDecoder::new(body);
             let mut out = vec![];
-            if decoder.read_to_end(&mut out).is_ok() {
-                if let Some(delay) = decode_and_emit(app, &out) {
-                    reenter_delay_secs = Some(delay);
+            // Limit decompressed output to 5MB to prevent zip bombs
+            let mut reader = decoder.take(5 * 1024 * 1024);
+            if reader.read_to_end(&mut out).is_ok() {
+                if out.len() < 5 * 1024 * 1024 {
+                    if let Some(delay) = decode_and_emit(app, &out) {
+                        reenter_delay_secs = Some(delay);
+                    }
+                } else {
+                    crate::runtime_log!("[danmu] Decompressed size exceeded safety limit (5MB). Aborting packet.");
                 }
             }
         } else if proto == 3 {
-            let mut decoder = brotli::Decompressor::new(body, 4096);
+            let decoder = brotli::Decompressor::new(body, 4096);
             let mut out = vec![];
-            if decoder.read_to_end(&mut out).is_ok() {
-                if let Some(delay) = decode_and_emit(app, &out) {
-                    reenter_delay_secs = Some(delay);
+            // Limit decompressed output to 5MB to prevent zip bombs
+            let mut reader = decoder.take(5 * 1024 * 1024);
+            if reader.read_to_end(&mut out).is_ok() {
+                if out.len() < 5 * 1024 * 1024 {
+                    if let Some(delay) = decode_and_emit(app, &out) {
+                        reenter_delay_secs = Some(delay);
+                    }
+                } else {
+                    crate::runtime_log!("[danmu] Decompressed size exceeded safety limit (5MB). Aborting packet.");
                 }
             }
         } else if op == 5 {

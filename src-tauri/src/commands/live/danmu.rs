@@ -3,7 +3,7 @@ use crate::constants::CmdResult;
 use crate::danmu::decode_and_emit;
 use crate::endpoints;
 use crate::state::AppState;
-use crate::state_event::emit_studio_state_event;
+use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde_json::json;
@@ -59,6 +59,26 @@ fn danmu_reconnect_delay(attempt: u32) -> Duration {
     Duration::from_millis(capped.saturating_add(jitter))
 }
 
+struct DanmuTaskGuard {
+    app: AppHandle,
+    task_id: u64,
+}
+
+impl Drop for DanmuTaskGuard {
+    fn drop(&mut self) {
+        let app = self.app.clone();
+        let task_id = self.task_id;
+        tokio::spawn(async move {
+            let state = app.state::<AppState>();
+            let mut runtime = state.runtime.lock().await;
+            if runtime.danmu_task_id == task_id {
+                runtime.danmu_task = None;
+                emit_runtime_snapshot(&app, &state, "danmu.cleanup").await;
+            }
+        });
+    }
+}
+
 pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState) -> CmdResult {
     let mut runtime = state.runtime.lock().await;
     if runtime
@@ -76,6 +96,9 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
         }));
     }
 
+    runtime.danmu_task_id += 1;
+    let current_task_id = runtime.danmu_task_id;
+
     let room_id = runtime.session.room_id.clone();
     let uid = runtime.session.uid;
     if room_id.is_empty() {
@@ -84,7 +107,9 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
     let client = state.client.clone();
 
     let app_handle = app.clone();
+    let app_handle_for_guard = app.clone();
     runtime.danmu_task = Some(tokio::spawn(async move {
+        let _guard = DanmuTaskGuard { app: app_handle_for_guard, task_id: current_task_id };
         let mut attempt: u32 = 0;
         let mut host_cursor: usize = 0;
         loop {
@@ -210,24 +235,6 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
             }
         }
     }));
-
-    let cleanup_app = app.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            let state = cleanup_app.state::<AppState>();
-            let mut runtime = state.runtime.lock().await;
-            let status = runtime.danmu_task.as_ref().map(|task| task.is_finished());
-            match status {
-                Some(true) => {
-                    runtime.danmu_task = None;
-                    break;
-                }
-                Some(false) => {}
-                None => break,
-            }
-        }
-    });
 
     Ok(json!({
         "started": true,

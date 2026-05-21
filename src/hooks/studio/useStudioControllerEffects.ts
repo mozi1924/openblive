@@ -6,6 +6,7 @@ import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../../utils/dan
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
 import { tagsToKey } from "./controllerHelpers";
 import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "./realtimeDanmu";
+import { useTauriEvent } from "../useTauriEvent";
 
 type UseStudioControllerEffectsParams = {
   title: string;
@@ -199,178 +200,133 @@ export function useStudioControllerEffects({
   }, [cancelQrcodeLogin, pollLogin, qrcodeKey, qrLoginExpiresAt, setQrLoginRemainingSeconds]);
 
   useEffect(() => {
-    let active = true;
-
-    const unlistenPromise = studioApi.listenDanmuMessage((message) => {
-      if (!active) {
-        return;
-      }
-      const withFallbackSegments =
-        message.type === "danmu" && (!message.segments || message.segments.length === 0)
-          ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
-          : null;
-      const resolvedMessage = withFallbackSegments
-        ? { ...message, segments: withFallbackSegments.segments }
-        : message;
-      setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, localeSetting));
-
-      if (message.cmd === "DM_INTERACTION" && message.interaction_event_type === 101) {
-        scheduleLiveVoteSync();
-      }
-
-      append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
-    });
-
     return () => {
-      active = false;
       clearLiveVoteSyncTimer();
-      void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [append, clearLiveVoteSyncTimer, liveEmoticonMap, localeSetting, scheduleLiveVoteSync, setDanmus]);
+  }, [clearLiveVoteSyncTimer]);
 
-  useEffect(() => {
-    let active = true;
+  useTauriEvent(studioApi.listenDanmuMessage, (message) => {
+    const withFallbackSegments =
+      message.type === "danmu" && (!message.segments || message.segments.length === 0)
+        ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
+        : null;
+    const resolvedMessage = withFallbackSegments
+      ? { ...message, segments: withFallbackSegments.segments }
+      : message;
+    setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, localeSetting));
 
-    const unlistenPromise = studioApi.listenDanmuAvatarResolved((payload) => {
-      if (!active) {
-        return;
-      }
-      setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload));
-    });
+    if (message.cmd === "DM_INTERACTION" && message.interaction_event_type === 101) {
+      scheduleLiveVoteSync();
+    }
 
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [setDanmus]);
+    append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
+  });
 
-  useEffect(() => {
-    let active = true;
+  useTauriEvent(studioApi.listenDanmuAvatarResolved, (payload) => {
+    setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload));
+  });
 
-    const unlistenPromise = studioApi.listenStudioState((event) => {
-      if (!active) {
-        return;
-      }
-
-      switch (event.kind) {
-        case "runtime.snapshot": {
-          const nextSession = event.data?.session;
-          if (nextSession) {
-            setSession(nextSession);
-            const liveStatus = nextSession.live_status ?? (nextSession.is_live ? 1 : 0);
-            if (liveStatus !== 1) {
-              setRtmp(null);
-            }
+  useTauriEvent(studioApi.listenStudioState, (event) => {
+    switch (event.kind) {
+      case "runtime.snapshot": {
+        const nextSession = event.data?.session;
+        if (nextSession) {
+          setSession(nextSession);
+          const liveStatus = nextSession.live_status ?? (nextSession.is_live ? 1 : 0);
+          if (liveStatus !== 1) {
+            setRtmp(null);
           }
-          if (typeof event.data?.danmu_running === "boolean") {
-            setDanmuListening(event.data.danmu_running);
-          }
-          void syncTrayMenu();
+        }
+        if (typeof event.data?.danmu_running === "boolean") {
+          setDanmuListening(event.data.danmu_running);
+        }
+        void syncTrayMenu();
+        break;
+      }
+      case "live.flow": {
+        const action = event.data?.action;
+        if (action !== "start" && action !== "stop") {
           break;
         }
-        case "live.flow": {
-          const action = event.data?.action;
-          if (action !== "start" && action !== "stop") {
-            break;
-          }
-          if (pendingLiveFlowHintSkipRef.current === action) {
-            pendingLiveFlowHintSkipRef.current = null;
-            break;
-          }
-          const ok = event.data?.ok !== false;
-          if (!ok) {
-            const code = String(event.data?.code ?? "UNKNOWN");
-            if (action === "start") {
-              append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: code }));
-            } else {
-              append(tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: code }));
-            }
-            break;
-          }
+        if (pendingLiveFlowHintSkipRef.current === action) {
+          pendingLiveFlowHintSkipRef.current = null;
+          break;
+        }
+        const ok = event.data?.ok !== false;
+        if (!ok) {
+          const code = String(event.data?.code ?? "UNKNOWN");
           if (action === "start") {
-            append(t(localeSetting, "ui.ctrl.tray_start"));
-          } else if (event.data?.session_consistent === false) {
-            append(t(localeSetting, "ui.ctrl.stop_live_session_mismatch"));
+            append(tf(localeSetting, "ui.ctrl.start_live_failed", { msg: code }));
           } else {
-            append(t(localeSetting, "ui.ctrl.tray_stop"));
+            append(tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: code }));
           }
           break;
         }
-        case "live.preflight": {
-          const ok = event.data?.ok !== false;
-          if (!ok) {
-            append(
-              tf(localeSetting, "ui.ctrl.live_precheck_failed", {
-                msg: resolveBackendMessage(String(event.data?.error || "UNKNOWN"), localeSetting),
-              }),
-            );
-            break;
-          }
-          if (event.data?.skipped) {
-            append(t(localeSetting, "ui.ctrl.live_precheck_skipped"));
-            break;
-          }
-          const auditStatus = Number(event.data?.audit_title_status ?? -1);
-          const reason = String(event.data?.audit_title_reason || "").trim();
-          if (reason) {
-            append(
-              tf(localeSetting, "ui.ctrl.live_precheck_audit_hint", {
-                status: String(auditStatus),
-                reason,
-              }),
-            );
-          } else {
-            append(tf(localeSetting, "ui.ctrl.live_precheck_ok", { status: String(auditStatus) }));
-          }
-          break;
+        if (action === "start") {
+          append(t(localeSetting, "ui.ctrl.tray_start"));
+        } else if (event.data?.session_consistent === false) {
+          append(t(localeSetting, "ui.ctrl.stop_live_session_mismatch"));
+        } else {
+          append(t(localeSetting, "ui.ctrl.tray_stop"));
         }
-        case "overlay.visibility": {
-          if (typeof event.data?.visible === "boolean") {
-            setDanmuOverlayVisible(event.data.visible);
-          }
-          break;
-        }
-        default:
-          break;
+        break;
       }
-    });
-
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [append, localeSetting, pendingLiveFlowHintSkipRef, setDanmuListening, setDanmuOverlayVisible, setRtmp, setSession, syncTrayMenu]);
+      case "live.preflight": {
+        const ok = event.data?.ok !== false;
+        if (!ok) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_precheck_failed", {
+              msg: resolveBackendMessage(String(event.data?.error || "UNKNOWN"), localeSetting),
+            }),
+          );
+          break;
+        }
+        if (event.data?.skipped) {
+          append(t(localeSetting, "ui.ctrl.live_precheck_skipped"));
+          break;
+        }
+        const auditStatus = Number(event.data?.audit_title_status ?? -1);
+        const reason = String(event.data?.audit_title_reason || "").trim();
+        if (reason) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_precheck_audit_hint", {
+              status: String(auditStatus),
+              reason,
+            }),
+          );
+        } else {
+          append(tf(localeSetting, "ui.ctrl.live_precheck_ok", { status: String(auditStatus) }));
+        }
+        break;
+      }
+      case "overlay.visibility": {
+        if (typeof event.data?.visible === "boolean") {
+          setDanmuOverlayVisible(event.data.visible);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
 
   useEffect(() => {
-    let active = true;
-
     void studioApi.getAppLogs().then((res) => {
-      if (!active) {
-        return;
-      }
       if (res.code === 0 && Array.isArray(res.data)) {
         setLogs(res.data.filter((item) => typeof item === "string" && item.trim().length > 0));
       }
     });
-
-    const unlistenPromise = studioApi.listenAppLog((payload) => {
-      if (!active) {
-        return;
-      }
-      if (Array.isArray(payload?.logs)) {
-        setLogs(payload.logs.filter((item) => typeof item === "string" && item.trim().length > 0));
-        return;
-      }
-      const line = payload?.line?.trim() || "";
-      if (!line) {
-        return;
-      }
-      setLogs((prev) => [line, ...prev].slice(0, 300));
-    });
-
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
   }, [setLogs]);
+
+  useTauriEvent(studioApi.listenAppLog, (payload) => {
+    if (Array.isArray(payload?.logs)) {
+      setLogs(payload.logs.filter((item) => typeof item === "string" && item.trim().length > 0));
+      return;
+    }
+    const line = payload?.line?.trim() || "";
+    if (!line) {
+      return;
+    }
+    setLogs((prev) => [line, ...prev].slice(0, 300));
+  });
 }

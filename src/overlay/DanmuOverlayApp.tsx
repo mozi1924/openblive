@@ -7,6 +7,7 @@ import { t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
 import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "../hooks/studio/realtimeDanmu";
 import { DanmuOverlayMessageRow } from "../features/danmu/DanmuOverlayMessageRow";
+import { useTauriEvent } from "../hooks/useTauriEvent";
 
 const resolveEmoticonStyle = (width: number, height: number, targetHeight: number) => {
   const ratio = width > 0 && height > 0 ? width / height : 1;
@@ -104,72 +105,36 @@ export function DanmuOverlayApp() {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
+  useTauriEvent(studioApi.listenDanmuMessage, (message) => {
+    const withFallbackSegments =
+      message.type === "danmu" &&
+      (!message.segments || message.segments.length === 0)
+        ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
+        : null;
+    const resolvedMessage = withFallbackSegments
+      ? { ...message, segments: withFallbackSegments.segments }
+      : message;
 
-    const unlistenPromise = studioApi.listenDanmuMessage((message) => {
-      if (!active) {
-        return;
-      }
-      const withFallbackSegments =
-        message.type === "danmu" &&
-        (!message.segments || message.segments.length === 0)
-          ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
-          : null;
-      const resolvedMessage = withFallbackSegments
-        ? { ...message, segments: withFallbackSegments.segments }
-        : message;
+    setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, locale).slice(0, 160));
+  });
 
-      setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, locale).slice(0, 160));
-    });
+  useTauriEvent(studioApi.listenDanmuAvatarResolved, (payload) => {
+    setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload).slice(0, 160));
+  });
 
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [liveEmoticonMap, locale]);
-
-  useEffect(() => {
-    let active = true;
-
-    const unlistenPromise = studioApi.listenDanmuAvatarResolved((payload) => {
-      if (!active) {
-        return;
-      }
-      setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload).slice(0, 160));
-    });
-
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const unlistenPromise = studioApi.listenDanmuOverlaySettings((payload) => {
-      if (!active) {
-        return;
-      }
-      setAppConfig((prev) =>
-        prev
-          ? {
-              ...prev,
-              danmu_overlay_enabled: payload.enabled,
-              danmu_overlay_opacity: payload.opacity,
-              danmu_overlay_always_on_top: payload.always_on_top,
-            }
-          : prev,
-      );
-      setAlwaysOnTop(payload.always_on_top);
-    });
-
-    return () => {
-      active = false;
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, []);
+  useTauriEvent(studioApi.listenDanmuOverlaySettings, (payload) => {
+    setAppConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            danmu_overlay_enabled: payload.enabled,
+            danmu_overlay_opacity: payload.opacity,
+            danmu_overlay_always_on_top: payload.always_on_top,
+          }
+        : prev,
+    );
+    setAlwaysOnTop(payload.always_on_top);
+  });
 
   useEffect(() => {
     if (!openPanel) {
