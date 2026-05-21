@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "ensure:overlay": "if [ ! -d dist/overlay ]; then pnpm build:overlay; fi",
     "build": "NODE_OPTIONS=--no-deprecation tsc && NODE_OPTIONS=--no-deprecation vite build",
     "setup:overlay": "if [ ! -d overlay-compat/node_modules ]; then npm --prefix overlay-compat ci --loglevel=error --no-audit --fund=false; fi",
     "build:overlay": "pnpm setup:overlay && pnpm --dir overlay-compat exec vue-cli-service build --dest ../dist/overlay",

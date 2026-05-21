@@ -132,7 +132,16 @@ export function useStudioControllerEffects({
     void loadPartitions();
     void loadAppConfig();
     void loadLinkageStatus();
-  }, [loadAccounts, loadAppConfig, loadLinkageStatus, loadPartitions, loadSavedUser, refreshSession]);
+    void loadRecentDanmu();
+  }, [
+    loadAccounts,
+    loadAppConfig,
+    loadLinkageStatus,
+    loadPartitions,
+    loadRecentDanmu,
+    loadSavedUser,
+    refreshSession,
+  ]);
 
   useEffect(() => {
     void loadLinkageStatus();
@@ -159,11 +168,11 @@ export function useStudioControllerEffects({
   }, [clearDanmuAssetsAndVoteState, currentUserUid, loadLiveEmoticons, sessionRoomId]);
 
   useEffect(() => {
-    if (!currentUserUid || !sessionRoomId) {
+    if (!currentUserUid) {
       return;
     }
     void loadRecentDanmu();
-  }, [currentUserUid, loadRecentDanmu, sessionRoomId]);
+  }, [currentUserUid, loadRecentDanmu]);
 
   useEffect(() => {
     if (!currentUserUid || !sessionRoomId) {

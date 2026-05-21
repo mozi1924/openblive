@@ -61,4 +61,21 @@ describe("DanmuOverlayMessageRow", () => {
     expect(container.textContent).toContain("直播已开始");
     expect(container.textContent).not.toContain(":");
   });
+
+  it("hides sender prefix for interact events", () => {
+    const message: DanmuMsg = {
+      id: "3",
+      type: "interact",
+      time: "12:00:02",
+      sender: "mozi1924",
+      content: "mozi1924进入了直播间",
+    };
+
+    const { container } = render(
+      <DanmuOverlayMessageRow message={message} currentUser={currentUser} locale="zh-CN" />,
+    );
+
+    expect(container.textContent).toContain("mozi1924进入了直播间");
+    expect(container.textContent).not.toContain("mozi1924:");
+  });
 });

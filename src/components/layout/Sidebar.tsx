@@ -7,6 +7,7 @@ import {
   Terminal,
   User as UserIcon,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { AppLogo } from "../branding/AppLogo";
 import type { ActiveTab, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
@@ -62,6 +63,18 @@ export function Sidebar({
       return `https://live.bilibili.com/${roomId}`;
     }
   })();
+
+  const handleOpenLiveRoom = async () => {
+    if (!liveRoomUrl) {
+      return;
+    }
+
+    try {
+      await openUrl(liveRoomUrl);
+    } catch {
+      window.open(liveRoomUrl, "_blank", "noopener,noreferrer");
+    }
+  };
 
   return (
     <aside className="z-10 flex w-64 shrink-0 flex-col border-r border-white/5 bg-[#070a0f]/90 backdrop-blur-xl">
@@ -146,15 +159,14 @@ export function Sidebar({
                 {sessionLive ? t(locale, "ui.sidebar.live.on") : t(locale, "ui.sidebar.live.off")}
               </span>
               {roomId && (
-                <a
-                  href={liveRoomUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={handleOpenLiveRoom}
                   className="no-drag text-gray-500 transition-colors hover:text-bili-blue"
                   title="Open room in browser"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                </a>
+                </button>
               )}
             </div>
             <p className="mt-0.5 truncate text-[10px] text-gray-500 font-mono">

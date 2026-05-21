@@ -109,9 +109,6 @@ export function DanmuOverlayApp() {
   }, []);
 
   useEffect(() => {
-    if (!currentUser?.uid) {
-      return;
-    }
     let active = true;
     void studioApi.getRecentDanmu().then((res) => {
       if (!active || res.code !== 0 || !Array.isArray(res.data)) {
@@ -133,7 +130,7 @@ export function DanmuOverlayApp() {
     return () => {
       active = false;
     };
-  }, [currentUser?.uid, resolveDanmuSegments]);
+  }, [resolveDanmuSegments]);
 
   useEffect(() => {
     let active = true;

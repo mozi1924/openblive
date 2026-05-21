@@ -95,6 +95,17 @@ const resolveOverlayContent = (message: DanmuMsg, locale: LocaleSetting): ReactN
   }
 };
 
+const isEventStyleMessage = (message: DanmuMsg) => {
+  const rawType = String(message.type ?? "");
+  return (
+    rawType === "system" ||
+    rawType === "interact" ||
+    rawType === "moderation" ||
+    rawType === "live_state" ||
+    rawType === "recall"
+  );
+};
+
 const resolveSenderTone = (
   message: DanmuMsg,
   currentUser: User | null,
@@ -142,7 +153,7 @@ export function DanmuOverlayMessageRow({
   const localizedSender = resolveBackendMessage(message.sender, locale).trim();
   const content = resolveOverlayContent(message, locale);
   const senderTone = resolveSenderTone(message, currentUser, locale, localizedSender);
-  const hasSender = localizedSender.length > 0;
+  const hasSender = localizedSender.length > 0 && !isEventStyleMessage(message);
 
   return (
     <div className="rounded-xl px-2.5 py-1.5 text-[12px] leading-5 text-gray-100 transition-colors hover:bg-white/[0.04]">
