@@ -5,8 +5,9 @@ use super::common::{
 };
 use super::danmu::{start_danmu_monitor_inner, stop_danmu_monitor_inner};
 use super::linkage::{
-    apply_command_template, build_command_template_context, empty_command_template_context,
-    normalize_live_control_mode, obs_ws_start_stream, obs_ws_stop_stream, spawn_shell_command,
+    apply_command_template, build_command_template_context, build_primary_push_fallback_context,
+    empty_command_template_context, normalize_live_control_mode, obs_ws_start_stream,
+    obs_ws_stop_stream, spawn_shell_command, spawn_shell_command_checked,
 };
 use super::profile::push_recent_area;
 use super::profile_sync::sync_live_status_runtime;
@@ -177,7 +178,31 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
                 Err("i18n.live.error.command_start_template_missing".to_string())
             } else {
                 let command = apply_command_template(&start_command_template, &primary_context)?;
-                spawn_shell_command(&command).await
+                match spawn_shell_command_checked(&command).await {
+                    Ok(()) => Ok(()),
+                    Err(first_error) => {
+                        if let Some(fallback_context) =
+                            build_primary_push_fallback_context(&primary_context)
+                        {
+                            let fallback_command =
+                                apply_command_template(&start_command_template, &fallback_context)?;
+                            match spawn_shell_command_checked(&fallback_command).await {
+                                Ok(()) => {
+                                    crate::runtime_log!(
+                                        "[live][command] process exit non-zero detected, fallback to {} succeeded",
+                                        fallback_context.server
+                                    );
+                                    Ok(())
+                                }
+                                Err(fallback_error) => Err(format!(
+                                    "i18n.live.error.command_fallback_failed:first={first_error}, fallback={fallback_error}"
+                                )),
+                            }
+                        } else {
+                            Err(first_error)
+                        }
+                    }
+                }
             }
         }
         _ => Ok(()),

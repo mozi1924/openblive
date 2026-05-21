@@ -4,7 +4,9 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::process::Command;
+use tokio::time::{sleep, Duration};
 use tokio_tungstenite::tungstenite::Message;
+use url::Url;
 
 #[derive(Clone)]
 pub(crate) struct CommandTemplateContext {
@@ -38,6 +40,26 @@ pub(crate) fn empty_command_template_context() -> CommandTemplateContext {
         stream_url: String::new(),
         protocol: String::new(),
     }
+}
+
+pub(crate) fn build_primary_push_fallback_context(
+    context: &CommandTemplateContext,
+) -> Option<CommandTemplateContext> {
+    let next_server = rewrite_stream_server_host(&context.server, OBS_PRIMARY_PUSH_HOST)?;
+    let next_stream_url = rewrite_stream_server_host(&context.stream_url, OBS_PRIMARY_PUSH_HOST)
+        .unwrap_or_else(|| {
+            if context.stream_code.trim().is_empty() {
+                next_server.clone()
+            } else {
+                format!("{}{}", next_server, context.stream_code)
+            }
+        });
+    Some(CommandTemplateContext {
+        server: next_server,
+        stream_url: next_stream_url,
+        stream_code: context.stream_code.clone(),
+        protocol: context.protocol.clone(),
+    })
 }
 
 fn is_safe_template_value(value: &str) -> bool {
@@ -126,10 +148,98 @@ pub(crate) async fn spawn_shell_command(raw_command: &str) -> Result<(), String>
     Ok(())
 }
 
+pub(crate) async fn spawn_shell_command_checked(raw_command: &str) -> Result<(), String> {
+    let command = raw_command.trim();
+    if command.is_empty() {
+        return Ok(());
+    }
+    #[cfg(target_os = "windows")]
+    let mut child = Command::new("cmd")
+        .arg("/C")
+        .arg(command)
+        .spawn()
+        .map_err(|error| format!("i18n.live.error.spawn_command_failed: {error}"))?;
+
+    #[cfg(not(target_os = "windows"))]
+    let mut child = Command::new("sh")
+        .arg("-lc")
+        .arg(command)
+        .spawn()
+        .map_err(|error| format!("i18n.live.error.spawn_command_failed: {error}"))?;
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|error| format!("i18n.live.error.command_process_wait_failed: {error}"))?;
+    if status.success() {
+        return Ok(());
+    }
+    let code_text = status
+        .code()
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "SIGNAL".to_string());
+    Err(format!(
+        "i18n.live.error.command_process_exit_non_zero:{code_text}"
+    ))
+}
+
 static OBS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+const OBS_PRIMARY_PUSH_HOST: &str = "live-push.bilivideo.com";
+const OBS_STREAM_STATUS_CHECK_RETRY: usize = 3;
+const OBS_STREAM_STATUS_CHECK_DELAY_MS: u64 = 800;
 
 fn obs_next_request_id() -> String {
     format!("obs-{}", OBS_REQUEST_ID.fetch_add(1, Ordering::Relaxed))
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ObsStreamStatus {
+    output_active: bool,
+    output_reconnecting: bool,
+}
+
+fn obs_parse_stream_status(value: &serde_json::Value) -> ObsStreamStatus {
+    let data = &value["d"]["responseData"];
+    ObsStreamStatus {
+        output_active: data["outputActive"].as_bool().unwrap_or(false),
+        output_reconnecting: data["outputReconnecting"].as_bool().unwrap_or(false),
+    }
+}
+
+fn rewrite_stream_server_host(server: &str, next_host: &str) -> Option<String> {
+    let trimmed = server.trim();
+    if trimmed.is_empty() || next_host.trim().is_empty() {
+        return None;
+    }
+
+    if let Ok(mut url) = Url::parse(trimmed) {
+        let current_host = url.host_str()?.to_string();
+        if current_host.eq_ignore_ascii_case(next_host) {
+            return None;
+        }
+        if url.set_host(Some(next_host)).is_err() {
+            return None;
+        }
+        let _ = url.set_port(None);
+        return Some(url.to_string());
+    }
+
+    let (scheme, rest) = trimmed.split_once("://")?;
+    if scheme.trim().is_empty() || rest.trim().is_empty() {
+        return None;
+    }
+    let slash_index = rest.find('/').unwrap_or(rest.len());
+    let suffix = &rest[slash_index..];
+    let authority = &rest[..slash_index];
+    if authority.is_empty() {
+        return None;
+    }
+    let host_with_port = authority.rsplit('@').next().unwrap_or(authority);
+    let host_only = host_with_port.split(':').next().unwrap_or(host_with_port);
+    if host_only.eq_ignore_ascii_case(next_host) {
+        return None;
+    }
+    Some(format!("{scheme}://{next_host}{suffix}"))
 }
 
 fn obs_compute_auth(password: &str, salt: &str, challenge: &str) -> String {
@@ -228,6 +338,94 @@ where
     }
 }
 
+async fn obs_get_stream_status<S1, S2>(
+    write: &mut S1,
+    read: &mut S2,
+) -> Result<ObsStreamStatus, String>
+where
+    S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
+    S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    let req_id = obs_send_request(write, "GetStreamStatus", json!({})).await?;
+    let response = obs_wait_request_response(read, &req_id, "GetStreamStatus").await?;
+    Ok(obs_parse_stream_status(&response))
+}
+
+async fn obs_try_bili_primary_server_fallback<S1, S2>(
+    write: &mut S1,
+    read: &mut S2,
+    context: &CommandTemplateContext,
+) where
+    S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
+    S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    let mut disconnected_while_streaming = false;
+    for attempt in 0..OBS_STREAM_STATUS_CHECK_RETRY {
+        match obs_get_stream_status(write, read).await {
+            Ok(status) => {
+                if status.output_active && status.output_reconnecting {
+                    disconnected_while_streaming = true;
+                    break;
+                }
+                if !status.output_active {
+                    // OBS may need a short time to flip to active state after StartStream.
+                    if attempt + 1 < OBS_STREAM_STATUS_CHECK_RETRY {
+                        sleep(Duration::from_millis(OBS_STREAM_STATUS_CHECK_DELAY_MS)).await;
+                    }
+                    continue;
+                }
+                break;
+            }
+            Err(error) => {
+                crate::runtime_warn!(
+                    "[live][obs] GetStreamStatus failed during fallback probe: {error}"
+                );
+                return;
+            }
+        }
+    }
+
+    if !disconnected_while_streaming {
+        return;
+    }
+
+    let Some(primary_server) = rewrite_stream_server_host(&context.server, OBS_PRIMARY_PUSH_HOST)
+    else {
+        return;
+    };
+
+    let set_req_id = match obs_send_request(
+        write,
+        "SetStreamServiceSettings",
+        json!({
+            "streamServiceType": "rtmp_custom",
+            "streamServiceSettings": {
+                "server": primary_server,
+                "key": context.stream_code
+            }
+        }),
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(error) => {
+            crate::runtime_warn!("[live][obs] send fallback stream settings failed: {error}");
+            return;
+        }
+    };
+    if let Err(error) =
+        obs_wait_request_response(read, &set_req_id, "SetStreamServiceSettings").await
+    {
+        crate::runtime_warn!("[live][obs] apply fallback stream settings failed: {error}");
+        return;
+    }
+
+    crate::runtime_log!(
+        "[live][obs] stream reconnecting detected, switched push host to primary {}",
+        OBS_PRIMARY_PUSH_HOST
+    );
+}
+
 async fn obs_identify<S1, S2>(write: &mut S1, read: &mut S2, password: &str) -> Result<(), String>
 where
     S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
@@ -296,6 +494,7 @@ pub(crate) async fn obs_ws_start_stream(
 
     let start_req_id = obs_send_request(&mut write, "StartStream", json!({})).await?;
     obs_wait_request_response(&mut read, &start_req_id, "StartStream").await?;
+    obs_try_bili_primary_server_fallback(&mut write, &mut read, context).await;
     Ok(())
 }
 
@@ -325,7 +524,11 @@ pub(crate) async fn obs_ws_probe(url: &str, password: &str) -> Result<(), String
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_command_template, build_command_template_context, CommandTemplateContext, StreamEndpoint};
+    use super::{
+        apply_command_template, build_command_template_context,
+        build_primary_push_fallback_context, rewrite_stream_server_host, CommandTemplateContext,
+        StreamEndpoint,
+    };
 
     fn demo_context() -> CommandTemplateContext {
         CommandTemplateContext {
@@ -374,5 +577,41 @@ mod tests {
         };
         let context = build_command_template_context(&endpoint);
         assert_eq!(context.stream_code, endpoint.code);
+    }
+
+    #[test]
+    fn rewrite_stream_server_host_replaces_host_keeps_scheme_and_path() {
+        let result = rewrite_stream_server_host(
+            "rtmp://tx-push-live.bilivideo.com/live-bvc",
+            "live-push.bilivideo.com",
+        )
+        .expect("fallback server should be built");
+        assert_eq!(result, "rtmp://live-push.bilivideo.com/live-bvc");
+    }
+
+    #[test]
+    fn rewrite_stream_server_host_returns_none_when_host_unchanged() {
+        let result =
+            rewrite_stream_server_host("rtmps://live-push.bilivideo.com/live-bvc", "live-push.bilivideo.com");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn build_primary_push_fallback_context_rewrites_server_and_stream_url() {
+        let context = CommandTemplateContext {
+            server: "rtmp://tx-push-live.bilivideo.com/live-bvc".to_string(),
+            stream_code: "?streamname=live_1_2&key=abc".to_string(),
+            stream_url: "rtmp://tx-push-live.bilivideo.com/live-bvc?streamname=live_1_2&key=abc"
+                .to_string(),
+            protocol: "rtmp".to_string(),
+        };
+        let fallback =
+            build_primary_push_fallback_context(&context).expect("fallback context should exist");
+        assert_eq!(fallback.server, "rtmp://live-push.bilivideo.com/live-bvc");
+        assert_eq!(
+            fallback.stream_url,
+            "rtmp://live-push.bilivideo.com/live-bvc?streamname=live_1_2&key=abc"
+        );
+        assert_eq!(fallback.stream_code, context.stream_code);
     }
 }
