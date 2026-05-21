@@ -119,15 +119,15 @@ fn history_sender_guard_level(entry: &serde_json::Value) -> i64 {
         .max(0)
 }
 
-fn history_sender_role(entry: &serde_json::Value, sender_uid: Option<u64>, anchor_uid: u64) -> &'static str {
+fn history_sender_role(
+    entry: &serde_json::Value,
+    sender_uid: Option<u64>,
+    anchor_uid: u64,
+) -> &'static str {
     if anchor_uid > 0 && sender_uid == Some(anchor_uid) {
         return "anchor";
     }
-    let is_admin = entry
-        .get("isadmin")
-        .and_then(parse_i64_maybe)
-        .unwrap_or(0)
-        > 0;
+    let is_admin = entry.get("isadmin").and_then(parse_i64_maybe).unwrap_or(0) > 0;
     if is_admin {
         return "admin";
     }
@@ -196,9 +196,7 @@ fn map_history_entry_to_danmu(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string);
-    let danmu_rnd = entry
-        .get("rnd")
-        .and_then(parse_i64_maybe);
+    let danmu_rnd = entry.get("rnd").and_then(parse_i64_maybe);
     let sender_guard_level = history_sender_guard_level(entry);
     let id = danmu_id_str.clone().unwrap_or_else(|| {
         if let Some(rnd) = danmu_rnd {
@@ -230,7 +228,9 @@ fn map_history_entry_to_danmu(
     })
 }
 
-pub(crate) async fn fetch_recent_danmu_messages_inner(state: &AppState) -> Result<Vec<serde_json::Value>, String> {
+pub(crate) async fn fetch_recent_danmu_messages_inner(
+    state: &AppState,
+) -> Result<Vec<serde_json::Value>, String> {
     let (room_id, cookie, anchor_uid, config_path, client) = {
         let runtime = state.runtime.lock().await;
         let Some(uid) = runtime.config.current_uid.clone() else {
@@ -268,7 +268,10 @@ pub(crate) async fn fetch_recent_danmu_messages_inner(state: &AppState) -> Resul
         )
         .await
         .map_err(|error| error.to_string())?;
-    let code = value.get("code").and_then(serde_json::Value::as_i64).unwrap_or(-1);
+    let code = value
+        .get("code")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(-1);
     if code != 0 {
         let message = value
             .get("message")
@@ -301,7 +304,9 @@ pub(crate) async fn fetch_recent_danmu_messages_inner(state: &AppState) -> Resul
     let avatar_requests = rows
         .iter()
         .filter_map(|(_, message)| {
-            let uid = message.get("sender_uid").and_then(serde_json::Value::as_u64)?;
+            let uid = message
+                .get("sender_uid")
+                .and_then(serde_json::Value::as_u64)?;
             if uid == 0 {
                 return None;
             }
@@ -321,7 +326,10 @@ pub(crate) async fn fetch_recent_danmu_messages_inner(state: &AppState) -> Resul
                 .await
         {
             for (_, message) in &mut rows {
-                let Some(uid) = message.get("sender_uid").and_then(serde_json::Value::as_u64) else {
+                let Some(uid) = message
+                    .get("sender_uid")
+                    .and_then(serde_json::Value::as_u64)
+                else {
                     continue;
                 };
                 let uid_key = uid.to_string();

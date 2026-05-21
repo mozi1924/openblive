@@ -350,7 +350,8 @@ fn toggle_main_window_inner(app: &AppHandle) {
     };
     if window.is_visible().unwrap_or(true) {
         let _ = window.hide();
-        let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+        let _ =
+            app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
         apply_hidden_window_dock_policy(app);
     } else {
         reveal_main_window_inner(app);
@@ -507,9 +508,9 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             if should_min_to_tray {
                 api.prevent_close();
                 let _ = window.hide();
-                let _ = window
-                    .app_handle()
-                    .save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+                let _ = window.app_handle().save_window_state(
+                    StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED,
+                );
                 apply_hidden_window_dock_policy(window.app_handle());
             }
         }

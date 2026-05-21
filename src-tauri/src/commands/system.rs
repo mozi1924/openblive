@@ -14,11 +14,13 @@ use qrcode_generator::QrCodeEcc;
 use serde_json::json;
 use std::fs;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, Manager, State, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, PhysicalPosition, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
 use tauri_plugin_positioner::{Position, WindowExt};
-use tauri_plugin_window_state::AppHandleExt as WindowStateAppHandleExt;
+use tauri_plugin_window_state::{
+    AppHandleExt as WindowStateAppHandleExt, StateFlags, WindowExt as WindowStateWindowExt,
+};
 use tokio::time::Duration;
 
 const OBS_KEEPALIVE_INTERVAL_SECS: u64 = 15;
@@ -30,6 +32,7 @@ const DANMU_OVERLAY_WIDTH: f64 = 420.0;
 const DANMU_OVERLAY_HEIGHT: f64 = 360.0;
 const DANMU_OVERLAY_MIN_WIDTH: f64 = 360.0;
 const DANMU_OVERLAY_MIN_HEIGHT: f64 = 260.0;
+const WINDOW_STATE_SYNC_DELAY_MS: u64 = 120;
 
 fn normalize_live_control_mode(mode: &str) -> &'static str {
     match mode.trim() {
@@ -62,7 +65,11 @@ fn emit_overlay_settings(window: &WebviewWindow, config: &PersistConfig) {
     );
 }
 
-fn build_overlay_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+fn managed_window_state_flags() -> StateFlags {
+    StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED
+}
+
+fn build_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<WebviewWindow, String> {
     WebviewWindowBuilder::new(
         app,
         DANMU_OVERLAY_LABEL,
@@ -77,18 +84,22 @@ fn build_overlay_window(app: &AppHandle) -> Result<WebviewWindow, String> {
     .shadow(false)
     .inner_size(DANMU_OVERLAY_WIDTH, DANMU_OVERLAY_HEIGHT)
     .min_inner_size(DANMU_OVERLAY_MIN_WIDTH, DANMU_OVERLAY_MIN_HEIGHT)
+    .always_on_top(config.danmu_overlay_always_on_top)
     .build()
     .map_err(|error| format!("create overlay window failed: {error}"))
 }
 
-pub(crate) fn ensure_overlay_window(app: &AppHandle) -> Result<(WebviewWindow, bool), String> {
+pub(crate) fn ensure_overlay_window(
+    app: &AppHandle,
+    config: &PersistConfig,
+) -> Result<(WebviewWindow, bool), String> {
     if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
         return Ok((window, false));
     }
-    build_overlay_window(app).map(|window| (window, true))
+    build_overlay_window(app, config).map(|window| (window, true))
 }
 
-fn overlay_has_saved_window_state(app: &AppHandle) -> bool {
+fn window_has_saved_state(app: &AppHandle, label: &str) -> bool {
     let Ok(app_dir) = app.path().app_config_dir() else {
         return false;
     };
@@ -100,7 +111,28 @@ fn overlay_has_saved_window_state(app: &AppHandle) -> bool {
         return false;
     };
 
-    saved_state.get(DANMU_OVERLAY_LABEL).is_some()
+    saved_state.get(label).is_some()
+}
+
+fn restore_window_state(window: &WebviewWindow) -> Result<bool, String> {
+    if !window_has_saved_state(&window.app_handle(), window.label()) {
+        return Ok(false);
+    }
+
+    window
+        .restore_state(managed_window_state_flags())
+        .map_err(|error| format!("restore {} window state failed: {error}", window.label()))?;
+
+    Ok(true)
+}
+
+fn schedule_restore_window_state(window: WebviewWindow) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
+        if let Err(error) = restore_window_state(&window) {
+            crate::runtime_warn!("{error}");
+        }
+    });
 }
 
 fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
@@ -110,17 +142,27 @@ fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<()
         .primary_monitor()
         .map_err(|error| format!("read primary monitor failed: {error}"))?
     {
-        LogicalPosition::new(
-            (monitor.position().x as f64 / monitor.scale_factor()) + DANMU_OVERLAY_MARGIN_PX,
-            (monitor.position().y as f64 / monitor.scale_factor()) + DANMU_OVERLAY_MARGIN_PX,
-        )
+        let margin = (DANMU_OVERLAY_MARGIN_PX * monitor.scale_factor()).round() as i32;
+        PhysicalPosition::new(monitor.position().x + margin, monitor.position().y + margin)
     } else {
-        LogicalPosition::new(DANMU_OVERLAY_MARGIN_PX, DANMU_OVERLAY_MARGIN_PX)
+        PhysicalPosition::new(
+            DANMU_OVERLAY_MARGIN_PX.round() as i32,
+            DANMU_OVERLAY_MARGIN_PX.round() as i32,
+        )
     };
 
     window
         .set_position(target_position)
         .map_err(|error| format!("position overlay window failed: {error}"))
+}
+
+fn schedule_overlay_position(app: AppHandle, window: WebviewWindow) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
+        if let Err(error) = position_overlay_window(&app, &window) {
+            crate::runtime_warn!("{error}");
+        }
+    });
 }
 
 fn apply_overlay_window_config(
@@ -134,6 +176,29 @@ fn apply_overlay_window_config(
     Ok(())
 }
 
+fn schedule_overlay_config_reapply(window: WebviewWindow, config: PersistConfig) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
+        if let Err(error) = apply_overlay_window_config(&window, &config) {
+            crate::runtime_warn!("{error}");
+        }
+    });
+}
+
+pub(crate) fn restore_main_window_state(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+
+        if let Err(error) = restore_window_state(&window) {
+            crate::runtime_warn!("{error}");
+        }
+        schedule_restore_window_state(window);
+    });
+}
+
 fn emit_overlay_visibility(app: &AppHandle, visible: bool) {
     emit_studio_state_event(
         app,
@@ -144,22 +209,33 @@ fn emit_overlay_visibility(app: &AppHandle, visible: bool) {
 }
 
 fn show_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<(), String> {
-    let (window, created_now) = ensure_overlay_window(app)?;
+    let (window, created_now) = ensure_overlay_window(app, config)?;
+    let has_saved_state = window_has_saved_state(app, DANMU_OVERLAY_LABEL);
+
     apply_overlay_window_config(&window, config)?;
-    if created_now && !overlay_has_saved_window_state(app) {
+    if created_now && !has_saved_state {
         position_overlay_window(app, &window)?;
     }
     if window.is_minimized().unwrap_or(false) {
         let _ = window.unminimize();
     }
     let _ = window.show();
-    // On some platforms, applying top-most before showing the window can be ignored.
+    if created_now {
+        if has_saved_state {
+            schedule_restore_window_state(window.clone());
+        } else {
+            schedule_overlay_position(app.clone(), window.clone());
+        }
+    }
+    // Some window managers ignore top-most changes until the window is mapped.
     apply_overlay_window_config(&window, config)?;
+    schedule_overlay_config_reapply(window.clone(), config.clone());
     emit_overlay_visibility(app, true);
     Ok(())
 }
 
 fn hide_overlay_window(app: &AppHandle) {
+    let _ = app.save_window_state(managed_window_state_flags());
     if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
         let _ = window.hide();
     }
@@ -585,6 +661,9 @@ pub async fn set_danmu_overlay_pinned(
 
     if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
         apply_overlay_window_config(&window, &config)?;
+        if window.is_visible().unwrap_or(false) {
+            schedule_overlay_config_reapply(window, config.clone());
+        }
     }
 
     Ok(wrap_ok(json!({ "always_on_top": pinned })))
