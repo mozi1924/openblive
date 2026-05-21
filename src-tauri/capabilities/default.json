@@ -15,6 +15,7 @@
     "clipboard-manager:allow-write-text",
     "window-state:default",
     "log:default",
-    "positioner:default"
+    "positioner:default",
+    "updater:default"
   ]
 }

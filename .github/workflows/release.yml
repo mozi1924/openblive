@@ -5,6 +5,12 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Create GitHub pre-release (yellow label)"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   tauri-release:
@@ -57,11 +63,15 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v__VERSION__' }}
+          tauriScript: pnpm tauri
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v__VERSION__-dev.{0}', github.run_number) }}
           releaseName: "OpenBlive Studio v__VERSION__"
           releaseBody: "Automated release built by GitHub Actions."
           releaseDraft: false
-          prerelease: false
-          uploadUpdaterJson: false
+          prerelease: ${{ (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-')) || (github.event_name == 'workflow_dispatch' && (inputs.prerelease == true || inputs.prerelease == 'true')) }}
+          uploadUpdaterJson: true
+          uploadUpdaterSignatures: true
           args: ${{ matrix.args }}
