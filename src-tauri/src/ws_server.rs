@@ -26,6 +26,7 @@ const CHAT_DANMU_MAX_BUFFER: usize = 512;
 const RAW_DANMU_MAX_BUFFER: usize = 512;
 const RAW_EVENT_DANMU: &str = "danmu.message";
 const OVERLAY_FALLBACK_INDEX: &str = "overlay/index.html";
+const COMPAT_DEFAULT_AVATAR_URL: &str = "//static.hdslb.com/images/member/noface.gif";
 
 #[derive(Clone)]
 struct WsServerRuntimeState {
@@ -592,6 +593,10 @@ fn map_danmu_to_compat_frame(payload: &Value) -> Option<Value> {
             "cmd": 2,
             "data": build_compat_text_data(payload),
         })),
+        "interact" => Some(json!({
+            "cmd": 2,
+            "data": build_compat_interact_text_data(payload),
+        })),
         "gift" => Some(json!({
             "cmd": 3,
             "data": build_compat_gift_data(payload),
@@ -619,6 +624,24 @@ fn map_danmu_to_compat_frame(payload: &Value) -> Option<Value> {
                 }))
             }
         }
+        "recall" => {
+            let target = payload
+                .get("recall_target_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .filter(|value| !value.trim().is_empty());
+            if let Some(target) = target {
+                Some(json!({
+                    "cmd": 6,
+                    "data": { "ids": [target] },
+                }))
+            } else {
+                Some(json!({
+                    "cmd": 2,
+                    "data": build_compat_system_text_data(payload),
+                }))
+            }
+        }
         _ => Some(json!({
             "cmd": 2,
             "data": build_compat_system_text_data(payload),
@@ -627,11 +650,12 @@ fn map_danmu_to_compat_frame(payload: &Value) -> Option<Value> {
 }
 
 fn build_compat_text_data(payload: &Value) -> Value {
-    let avatar = payload
-        .get("sender_face")
-        .and_then(Value::as_str)
-        .unwrap_or("//static.hdslb.com/images/member/noface.gif")
-        .to_string();
+    let avatar = normalize_avatar_url(
+        payload
+            .get("sender_face")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+    );
     let sender = payload
         .get("sender")
         .and_then(Value::as_str)
@@ -690,11 +714,83 @@ fn build_compat_text_data(payload: &Value) -> Value {
     ])
 }
 
+fn build_compat_interact_text_data(payload: &Value) -> Value {
+    let avatar = normalize_avatar_url(
+        payload
+            .get("sender_face")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+    );
+    let sender = payload
+        .get("sender")
+        .and_then(Value::as_str)
+        .unwrap_or("i18n.live.event.fallback.viewer")
+        .to_string();
+    let role = payload
+        .get("sender_role")
+        .and_then(Value::as_str)
+        .unwrap_or("viewer");
+    let author_type = match role {
+        "anchor" => 3,
+        "admin" | "system" => 2,
+        "guard" => 1,
+        _ => 0,
+    };
+    let sender_guard_level = payload
+        .get("sender_guard_level")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let uid = payload
+        .get("sender_uid")
+        .and_then(Value::as_u64)
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let id = payload
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("compat-interact-{}", now_unix_secs()));
+    let mut content = payload
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let sender_prefix = format!("{sender} ");
+    if content.starts_with(&sender_prefix) {
+        content = content[sender_prefix.len()..].to_string();
+    }
+
+    json!([
+        avatar,
+        now_unix_secs(),
+        sender,
+        author_type,
+        content,
+        sender_guard_level,
+        0,
+        1,
+        0,
+        1,
+        0,
+        id,
+        "",
+        0,
+        [],
+        [],
+        uid,
+        "",
+        0,
+    ])
+}
+
 fn build_compat_system_text_data(payload: &Value) -> Value {
     json!([
-        "//static.hdslb.com/images/member/noface.gif",
+        COMPAT_DEFAULT_AVATAR_URL,
         now_unix_secs(),
-        "openblive",
+        payload
+            .get("sender")
+            .and_then(Value::as_str)
+            .unwrap_or("openblive"),
         2,
         payload.get("content").and_then(Value::as_str).unwrap_or(""),
         0,
@@ -715,13 +811,27 @@ fn build_compat_system_text_data(payload: &Value) -> Value {
 }
 
 fn build_compat_gift_data(payload: &Value) -> Value {
+    let total_coin = payload
+        .get("gift_total_coin")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let is_paid = payload
+        .get("gift_coin_type")
+        .and_then(Value::as_str)
+        .map(|kind| kind.eq_ignore_ascii_case("gold"))
+        .unwrap_or(true);
     json!({
         "id": payload.get("id").and_then(Value::as_str).unwrap_or(""),
-        "avatarUrl": payload.get("sender_face").and_then(Value::as_str).unwrap_or("//static.hdslb.com/images/member/noface.gif"),
+        "avatarUrl": normalize_avatar_url(
+            payload
+                .get("sender_face")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        ),
         "timestamp": now_unix_secs(),
         "authorName": payload.get("sender").and_then(Value::as_str).unwrap_or("viewer"),
-        "totalCoin": payload.get("gift_total_coin").and_then(Value::as_i64).unwrap_or(0),
-        "totalFreeCoin": 0,
+        "totalCoin": if is_paid { total_coin } else { 0 },
+        "totalFreeCoin": if is_paid { 0 } else { total_coin },
         "giftName": payload.get("gift_name").and_then(Value::as_str).unwrap_or("Gift"),
         "num": payload.get("gift_count").and_then(Value::as_i64).unwrap_or(1),
         "giftId": 0,
@@ -746,7 +856,12 @@ fn build_compat_member_data(payload: &Value) -> Value {
 
     json!({
         "id": payload.get("id").and_then(Value::as_str).unwrap_or(""),
-        "avatarUrl": payload.get("sender_face").and_then(Value::as_str).unwrap_or("//static.hdslb.com/images/member/noface.gif"),
+        "avatarUrl": normalize_avatar_url(
+            payload
+                .get("sender_face")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        ),
         "timestamp": now_unix_secs(),
         "authorName": payload.get("sender").and_then(Value::as_str).unwrap_or("viewer"),
         "privilegeType": payload.get("sender_guard_level").and_then(Value::as_i64).unwrap_or(0),
@@ -762,7 +877,12 @@ fn build_compat_member_data(payload: &Value) -> Value {
 fn build_compat_super_chat_data(payload: &Value) -> Value {
     json!({
         "id": payload.get("superchat_id").and_then(Value::as_i64).map(|v| v.to_string()).unwrap_or_else(|| payload.get("id").and_then(Value::as_str).unwrap_or("").to_string()),
-        "avatarUrl": payload.get("sender_face").and_then(Value::as_str).unwrap_or("//static.hdslb.com/images/member/noface.gif"),
+        "avatarUrl": normalize_avatar_url(
+            payload
+                .get("sender_face")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        ),
         "timestamp": now_unix_secs(),
         "authorName": payload.get("sender").and_then(Value::as_str).unwrap_or("viewer"),
         "price": payload.get("superchat_price").and_then(Value::as_i64).unwrap_or(0),
@@ -773,6 +893,20 @@ fn build_compat_super_chat_data(payload: &Value) -> Value {
         "medalLevel": 0,
         "medalName": "",
     })
+}
+
+fn normalize_avatar_url(avatar_url: &str) -> String {
+    let trimmed = avatar_url.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if let Some(without_scheme) = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"))
+    {
+        return format!("//{without_scheme}");
+    }
+    trimmed.to_string()
 }
 
 fn now_unix_secs() -> i64 {
@@ -816,6 +950,10 @@ fn overlay_roots(app: &AppHandle) -> Vec<PathBuf> {
     if let Ok(cwd) = std::env::current_dir() {
         roots.push(cwd.join("dist"));
         roots.push(cwd.join("overlay-compat").join("dist"));
+        if let Some(parent) = cwd.parent() {
+            roots.push(parent.join("dist"));
+            roots.push(parent.join("overlay-compat").join("dist"));
+        }
     }
     roots
 }

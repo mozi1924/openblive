@@ -1,3 +1,5 @@
+import MD5 from 'crypto-js/md5'
+
 import { apiClient as axios } from '@/api/base'
 
 export function getDefaultMsgHandler() {
@@ -16,6 +18,39 @@ export function getDefaultMsgHandler() {
 }
 
 export const DEFAULT_AVATAR_URL = '//static.hdslb.com/images/member/noface.gif'
+
+export function processAvatarUrl(avatarUrl) {
+  if (typeof avatarUrl !== 'string') {
+    return ''
+  }
+  const m = avatarUrl.match(/(?:https?:)?(.*)/)
+  if (m && m[1]) {
+    return m[1]
+  }
+  return avatarUrl
+}
+
+export function getDefaultAvatarUrl(uid, username = '') {
+  let source = ''
+  if (uid !== null && uid !== undefined && `${uid}` !== '' && `${uid}` !== '0') {
+    source = `${uid}`
+  } else if (username && username !== '') {
+    source = username
+  }
+  if (source === '') {
+    return DEFAULT_AVATAR_URL
+  }
+  const hash = MD5(source).toString()
+  return `//cravatar.cn/avatar/${hash}?s=256&d=robohash&f=y`
+}
+
+export function resolveAvatarUrl(avatarUrl, uid, username = '') {
+  const processed = processAvatarUrl(avatarUrl)
+  if (!processed || processed === '' || processed === '//') {
+    return getDefaultAvatarUrl(uid, username)
+  }
+  return processed
+}
 
 export async function getTextEmoticons() {
   let res

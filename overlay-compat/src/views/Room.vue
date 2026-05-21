@@ -207,19 +207,22 @@ export default {
       if (!this.config.showDanmaku || !this.filterTextMessage(data)) {
         return
       }
-      const contentParts = await this.parseContentParts(data)
-      if (this.mergeSimilarText(data.content)) {
+      const authorName = this.resolveBackendI18nText(data.authorName)
+      const content = this.resolveBackendI18nText(data.content)
+      const normalizedData = { ...data, authorName, content }
+      const contentParts = await this.parseContentParts(normalizedData)
+      if (this.mergeSimilarText(content)) {
         return
       }
 
       const message = {
         id: data.id,
         type: constants.MESSAGE_TYPE_TEXT,
-        avatarUrl: data.avatarUrl,
+        avatarUrl: chat.resolveAvatarUrl(data.avatarUrl, data.uid, authorName),
         time: new Date(data.timestamp * 1000),
-        authorName: data.authorName,
+        authorName,
         authorType: data.authorType,
-        content: data.content,
+        content,
         contentParts,
         privilegeType: data.privilegeType,
         repeated: 1,
@@ -235,8 +238,10 @@ export default {
       if (!this.config.showGift) {
         return
       }
+      const authorName = this.resolveBackendI18nText(data.authorName)
+      const giftName = this.resolveBackendI18nText(data.giftName)
       const price = data.totalCoin / 1000
-      if (this.mergeSimilarGift(data.authorName, price, data.totalFreeCoin, data.giftName, data.num)) {
+      if (this.mergeSimilarGift(authorName, price, data.totalFreeCoin, giftName, data.num)) {
         return
       }
       if (price < this.config.minGiftPrice) {
@@ -246,12 +251,12 @@ export default {
       const message = {
         id: data.id,
         type: constants.MESSAGE_TYPE_GIFT,
-        avatarUrl: data.avatarUrl,
+        avatarUrl: chat.resolveAvatarUrl(data.avatarUrl, data.uid, authorName),
         time: new Date(data.timestamp * 1000),
-        authorName: data.authorName,
+        authorName,
         authorNamePronunciation: '',
         price,
-        giftName: data.giftName,
+        giftName,
         num: data.num,
         totalFreeCoin: data.totalFreeCoin,
         giftId: data.giftId,
@@ -267,13 +272,14 @@ export default {
       if (!this.config.showGift || !this.filterNewMemberMessage(data)) {
         return
       }
+      const authorName = this.resolveBackendI18nText(data.authorName)
 
       const message = {
         id: data.id,
         type: constants.MESSAGE_TYPE_MEMBER,
-        avatarUrl: data.avatarUrl,
+        avatarUrl: chat.resolveAvatarUrl(data.avatarUrl, data.uid, authorName),
         time: new Date(data.timestamp * 1000),
-        authorName: data.authorName,
+        authorName,
         authorNamePronunciation: '',
         privilegeType: data.privilegeType,
         title: this.$t('chat.membershipTitle'),
@@ -293,16 +299,18 @@ export default {
       if (data.price < this.config.minGiftPrice) {
         return
       }
+      const authorName = this.resolveBackendI18nText(data.authorName)
+      const content = this.resolveBackendI18nText(data.content.trim())
 
       const message = {
         id: data.id,
         type: constants.MESSAGE_TYPE_SUPER_CHAT,
-        avatarUrl: data.avatarUrl,
-        authorName: data.authorName,
+        avatarUrl: chat.resolveAvatarUrl(data.avatarUrl, data.uid, authorName),
+        authorName,
         authorNamePronunciation: '',
         price: data.price,
         time: new Date(data.timestamp * 1000),
-        content: data.content.trim(),
+        content,
         translation: this.config.autoTranslate ? data.translation : '',
         uid: data.uid,
         privilegeType: data.privilegeType,
@@ -389,6 +397,29 @@ export default {
         return false
       }
       return this.renderer.mergeSimilarGift(authorName, price, freePrice, giftName, num)
+    },
+    resolveBackendI18nText(rawText) {
+      if (typeof rawText !== 'string' || rawText === '') {
+        return rawText
+      }
+      if (rawText === 'i18n.live.event.room_change') {
+        return this.$t('i18n.live.event.room_change.full')
+      }
+
+      if (rawText.startsWith('i18n.')) {
+        const splitIndex = rawText.indexOf(':')
+        if (splitIndex > 0) {
+          const key = rawText.slice(0, splitIndex)
+          const suffix = rawText.slice(splitIndex + 1).split(':').join(' ')
+          if (this.$te(key)) {
+            return suffix.trim() === '' ? this.$t(key) : `${this.$t(key)} ${suffix}`
+          }
+        } else if (this.$te(rawText)) {
+          return this.$t(rawText)
+        }
+      }
+
+      return rawText.replace(/i18n\.[a-z0-9_.]+/gi, token => (this.$te(token) ? this.$t(token) : token))
     },
     async parseContentParts(data) {
       const contentParts = []
