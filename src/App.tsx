@@ -9,6 +9,7 @@ import { AccountTab } from "./features/account/AccountTab";
 import { DanmuTab } from "./features/danmu/DanmuTab";
 import { LiveOnlineRankPanel } from "./features/danmu/LiveOnlineRankPanel";
 import { SettingsTab } from "./features/settings/SettingsTab";
+import { ProjectTab } from "./features/project/ProjectTab";
 import { StreamTab } from "./features/stream/StreamTab";
 import { useStudioController } from "./hooks/useStudioController";
 import type { LocaleSetting } from "./utils/i18n";
@@ -163,6 +164,10 @@ function App() {
               onTerminateLiveVote={actions.terminateLiveVote}
               onSendDanmu={actions.submitDanmu}
             />
+          )}
+
+          {state.activeTab === "project" && (
+            <ProjectTab locale={locale} />
           )}
 
           {state.activeTab === "settings" && (

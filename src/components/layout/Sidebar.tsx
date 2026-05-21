@@ -3,6 +3,7 @@ import {
   Compass,
   ExternalLink,
   MessageSquare,
+  FolderGit2,
   Settings,
   Terminal,
   User as UserIcon,
@@ -35,6 +36,7 @@ const tabs: Array<{
   { key: "dashboard", labelKey: "ui.sidebar.tab.dashboard", icon: ChartNoAxesCombined },
   { key: "stream", labelKey: "ui.sidebar.tab.stream", icon: Compass },
   { key: "danmu", labelKey: "ui.sidebar.tab.danmu", icon: MessageSquare },
+  { key: "project", labelKey: "ui.sidebar.tab.project", icon: FolderGit2 },
   { key: "settings", labelKey: "ui.sidebar.tab.settings", icon: Settings },
 ];
 

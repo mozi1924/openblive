@@ -5,7 +5,7 @@ export type Resp<T> = {
   qr?: string;
 };
 
-export type ActiveTab = "account" | "dashboard" | "stream" | "danmu" | "settings";
+export type ActiveTab = "account" | "dashboard" | "stream" | "danmu" | "project" | "settings";
 
 export type TransportStatus = "idle" | "saving" | "synced" | "conflict" | "failed";
 
