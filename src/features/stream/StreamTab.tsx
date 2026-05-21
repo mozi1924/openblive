@@ -22,7 +22,7 @@ import type {
   StreamInfo,
 } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
-import { t, tf } from "../../utils/i18n";
+import { resolveBackendMessage, t, tf } from "../../utils/i18n";
 
 type StreamTabProps = {
   locale: LocaleSetting;
@@ -618,7 +618,7 @@ export function StreamTab({
                       </p>
                       {obsStatus?.last_error && (
                         <p className="truncate text-[9px] text-rose-400 leading-tight">
-                          ERR: {obsStatus.last_error}
+                          ERR: {resolveBackendMessage(obsStatus.last_error, locale)}
                         </p>
                       )}
                     </div>

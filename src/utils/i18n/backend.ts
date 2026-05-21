@@ -34,6 +34,9 @@ export const backendZhCN: Record<string, string> = {
   "i18n.live.error.command_stop_template_missing": "停播联动命令未配置，请先填写停播命令",
   "i18n.live.error.command_template_stream_key_removed":
     "命令模板中的 {stream_key} 已废弃，请改用 {stream_code}",
+  "i18n.live.error.command_process_wait_failed": "等待命令执行结束失败",
+  "i18n.live.error.command_process_exit_non_zero": "命令执行失败，退出码非 0",
+  "i18n.live.error.command_fallback_failed": "主命令与回退命令均执行失败",
   "i18n.live.error.obs_ws_closed": "OBS WS 连接已关闭",
   "i18n.live.error.obs_ws_receive_failed": "OBS WS 收包失败",
   "i18n.live.error.obs_ws_json_parse_failed": "OBS WS JSON 解析失败",
@@ -45,6 +48,7 @@ export const backendZhCN: Record<string, string> = {
   "i18n.live.error.obs_ws_protocol_hello_missing": "OBS WS 协议错误：未收到 Hello",
   "i18n.live.error.obs_ws_identify_send_failed": "发送 OBS Identify 失败",
   "i18n.live.error.obs_ws_connect_failed": "连接 OBS WS 失败",
+  "i18n.live.error.fetch_recent_danmu_failed": "获取最近弹幕失败",
   "i18n.live.event.fallback.anonymous_user": "匿名用户",
   "i18n.live.event.fallback.viewer": "观众",
   "i18n.live.event.fallback.gift_user": "礼物用户",
@@ -81,6 +85,7 @@ export const backendZhCN: Record<string, string> = {
   "i18n.live.event.reenter_requested": "服务端请求重进直播间",
   "i18n.live.event.parse_failed": "事件解析失败",
   "i18n.system.obs_ws_not_enabled": "OBS 联动未启用",
+  "i18n.system.error.qrcode_render_failed": "二维码渲染失败",
   "i18n.system.error.unknown_config_key": "未知设置项",
   "i18n.account.error.load_refresh_pubkey_failed": "加载刷新公钥失败",
   "i18n.account.error.build_correspond_path_failed": "生成 correspondPath 失败",
@@ -128,6 +133,12 @@ export const backendEnUS: Record<string, string> = {
     "Stop-live linkage command is not configured. Please set a stop command first.",
   "i18n.live.error.command_template_stream_key_removed":
     "{stream_key} is deprecated in command templates. Please use {stream_code}.",
+  "i18n.live.error.command_process_wait_failed": "Failed to wait for command process",
+  "i18n.live.error.command_process_exit_non_zero":
+    "Command exited with a non-zero status code",
+  "i18n.live.error.command_fallback_failed":
+    "Both the primary command and fallback command failed",
+  "i18n.live.error.fetch_recent_danmu_failed": "Failed to fetch recent danmu messages",
   "i18n.live.event.fallback.anonymous_user": "Anonymous User",
   "i18n.live.event.fallback.viewer": "Viewer",
   "i18n.live.event.fallback.gift_user": "Gift User",
@@ -164,6 +175,7 @@ export const backendEnUS: Record<string, string> = {
   "i18n.live.event.reenter_requested": "Server requested re-entering the room",
   "i18n.live.event.parse_failed": "Event parse failed",
   "i18n.system.obs_ws_not_enabled": "OBS linkage is not enabled",
+  "i18n.system.error.qrcode_render_failed": "Failed to render QR code",
   "i18n.system.error.unknown_config_key": "Unknown config key",
   "i18n.account.error.account_not_found": "Account not found",
   "i18n.account.error.account_login_invalid": "Account session is invalid, please log in again",
