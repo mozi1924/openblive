@@ -7,6 +7,68 @@ use super::parser_helpers::{next_msg_id, now_hms, parse_dm_interaction_detail};
 use rand::Rng;
 use serde_json::{json, Value};
 
+fn parse_danmu_emoticon(
+    meta: &[Value],
+    extra_json: Option<&Value>,
+    content: &str,
+) -> Option<Value> {
+    let dm_type = extra_json
+        .and_then(|extra| extra.get("dm_type"))
+        .and_then(parse_i64)
+        .unwrap_or(0);
+    let emoticon_meta = meta.get(13).filter(|value| value.is_object())?;
+    let source_url = emoticon_meta
+        .get("url")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            extra_json
+                .and_then(|extra| extra.get("emots"))
+                .and_then(|emots| emots.get(content))
+                .and_then(|entry| entry.get("url"))
+                .and_then(Value::as_str)
+        })
+        .and_then(normalize_asset_url)?;
+    let emoticon_unique = emoticon_meta
+        .get("emoticon_unique")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            extra_json
+                .and_then(|extra| extra.get("emoticon_unique"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let emoticon_id = emoticon_meta
+        .get("emoticon_id")
+        .or_else(|| emoticon_meta.get("id"))
+        .and_then(parse_u64)
+        .unwrap_or(0);
+    let width = emoticon_meta
+        .get("width")
+        .and_then(parse_u64)
+        .unwrap_or_default();
+    let height = emoticon_meta
+        .get("height")
+        .and_then(parse_u64)
+        .unwrap_or_default();
+    let is_dynamic = emoticon_meta
+        .get("is_dynamic")
+        .and_then(parse_i64)
+        .unwrap_or(0)
+        > 0;
+    Some(json!({
+        "text": content,
+        "url": source_url,
+        "emoticon_unique": emoticon_unique,
+        "emoticon_id": emoticon_id,
+        "width": width,
+        "height": height,
+        "is_dynamic": is_dynamic,
+        "dm_type": dm_type,
+    }))
+}
+
 pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
     let cmd = payload["cmd"].as_str().unwrap_or("UNKNOWN");
     let id = next_msg_id();
@@ -127,6 +189,10 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
             .and_then(|value| value.as_str())
             .unwrap_or("")
             .to_string();
+        let emoticon = info
+            .first()
+            .and_then(Value::as_array)
+            .and_then(|meta| parse_danmu_emoticon(meta, extra_json.as_ref(), &content));
         let sender = info
             .get(2)
             .and_then(|value| value.as_array())
@@ -146,6 +212,8 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
             "sender_name_color": sender_name_color,
             "sender_guard_level": sender_guard_level,
             "sender_face": sender_face,
+            "content_type": if emoticon.is_some() { 1 } else { 0 },
+            "emoticon": emoticon,
             "danmu_msg_id": danmu_msg_id,
             "danmu_id_str": danmu_id_str,
             "danmu_rnd": danmu_rnd,
@@ -897,4 +965,50 @@ pub fn parse_danmu_message(payload: &Value) -> (Option<Value>, Option<u64>) {
     }
 
     (None, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_danmu_message;
+    use serde_json::json;
+
+    #[test]
+    fn parse_danmu_message_extracts_emoticon_payload() {
+        let payload = json!({
+            "cmd": "DANMU_MSG",
+            "info": [
+                [
+                    0, 1, 25, 16777215, 1710000000000_i64, 123456_i64, 0, "abc", 0, 0, 0, "", 1,
+                    {
+                        "emoticon_unique": "official_120",
+                        "height": 60,
+                        "is_dynamic": 1,
+                        "url": "http://i0.hdslb.com/bfs/live/test.png",
+                        "width": 159
+                    },
+                    "{}",
+                    {
+                        "extra": "{\"dm_type\":1,\"emoticon_unique\":\"official_120\",\"id_str\":\"abc\"}"
+                    }
+                ],
+                "离谱",
+                [1741226472, "测试用户", 0, 0, 0, 10000, 1, ""],
+                []
+            ]
+        });
+
+        let (message, _) = parse_danmu_message(&payload);
+        let message = message.expect("message should be parsed");
+        assert_eq!(
+            message.get("content_type").and_then(|value| value.as_i64()),
+            Some(1)
+        );
+        assert_eq!(
+            message
+                .get("emoticon")
+                .and_then(|value| value.get("url"))
+                .and_then(|value| value.as_str()),
+            Some("https://i0.hdslb.com/bfs/live/test.png")
+        );
+    }
 }

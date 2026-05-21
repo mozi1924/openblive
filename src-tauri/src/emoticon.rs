@@ -26,7 +26,7 @@ pub struct LiveEmoticonPackage {
     pub emoticons: Vec<LiveEmoticonResource>,
 }
 
-fn normalize_image_url(url: &str) -> String {
+pub(crate) fn normalize_image_url(url: &str) -> String {
     let trimmed = url.trim();
     if trimmed.starts_with("//") {
         format!("https:{trimmed}")
@@ -37,7 +37,7 @@ fn normalize_image_url(url: &str) -> String {
     }
 }
 
-fn normalize_emoticon_text(text: &str) -> String {
+pub(crate) fn normalize_emoticon_text(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         String::new()
@@ -64,6 +64,26 @@ fn sanitize_cache_key(key: &str) -> String {
     } else {
         sanitized
     }
+}
+
+pub(crate) fn build_emoticon_cache_key(
+    emoticon_unique: &str,
+    emoticon_id: u64,
+    image_url: &str,
+    fallback_seed: &str,
+) -> String {
+    let unique = emoticon_unique.trim();
+    if !unique.is_empty() {
+        return sanitize_cache_key(unique);
+    }
+    if emoticon_id > 0 {
+        return sanitize_cache_key(&format!("emoji_{emoticon_id}"));
+    }
+    let normalized_url = normalize_image_url(image_url);
+    if !normalized_url.is_empty() {
+        return sanitize_cache_key(&format!("{:x}", md5::compute(normalized_url.as_bytes())));
+    }
+    sanitize_cache_key(fallback_seed)
 }
 
 fn emoticon_dir(config_path: &Path) -> PathBuf {
@@ -101,7 +121,14 @@ fn load_cached_emoticon_data_url(config_path: &Path, cache_key: &str) -> Option<
     Some(format!("data:{mime};base64,{encoded}"))
 }
 
-async fn refresh_emoticon_cache(
+pub(crate) fn resolve_cached_emoticon_data_url(
+    config_path: &Path,
+    cache_key: &str,
+) -> Option<String> {
+    load_cached_emoticon_data_url(config_path, cache_key)
+}
+
+pub(crate) async fn refresh_emoticon_cache(
     client: &BiliClient,
     config_path: &Path,
     cache_key: &str,
@@ -197,15 +224,12 @@ pub async fn parse_live_emoticon_packages(
             }
 
             let source_url = item["url"].as_str().unwrap_or_default();
-            let cache_key = if !emoticon_unique.is_empty() {
-                emoticon_unique.clone()
-            } else if emoticon_id > 0 {
-                format!("emoji_{emoticon_id}")
-            } else if !source_url.trim().is_empty() {
-                format!("{:x}", md5::compute(source_url.as_bytes()))
-            } else {
-                format!("pkg_{pkg_id}_{}", emoticons.len())
-            };
+            let cache_key = build_emoticon_cache_key(
+                &emoticon_unique,
+                emoticon_id,
+                source_url,
+                &format!("pkg_{pkg_id}_{}", emoticons.len()),
+            );
 
             emoticons.push(LiveEmoticonResource {
                 emoticon_id,

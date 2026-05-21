@@ -1,4 +1,4 @@
-use crate::{avatar, state::AppState};
+use crate::{avatar, emoticon, state::AppState};
 use bytes::Buf;
 use serde_json::{json, Value};
 use std::{
@@ -20,6 +20,7 @@ use parsers::{build_parse_failed_system_message, is_supported_cmd, parse_danmu_m
 static AVATAR_CACHE_PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static AVATAR_BATCH_QUEUE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 static AVATAR_BATCH_FLUSH_SCHEDULED: OnceLock<Mutex<bool>> = OnceLock::new();
+static EMOTICON_CACHE_PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 const DANMU_AVATAR_RESOLVED_EVENT: &str = "danmu-avatar-resolved";
 const AVATAR_BATCH_MAX_SIZE: usize = 50;
 const AVATAR_BATCH_WINDOW_MS: u64 = 80;
@@ -34,6 +35,10 @@ fn avatar_batch_queue() -> &'static Mutex<HashMap<String, Option<String>>> {
 
 fn avatar_batch_flush_scheduled() -> &'static Mutex<bool> {
     AVATAR_BATCH_FLUSH_SCHEDULED.get_or_init(|| Mutex::new(false))
+}
+
+fn emoticon_cache_pending() -> &'static Mutex<HashSet<String>> {
+    EMOTICON_CACHE_PENDING.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 fn emit_avatar_resolved(app: &AppHandle, uid: &str, sender_face: &str) {
@@ -185,6 +190,81 @@ fn enrich_sender_face_with_cache(app: &AppHandle, message: &mut Value) {
     enqueue_avatar_resolution(app, &uid_key, sender_face_hint);
 }
 
+fn enqueue_emoticon_refresh(app: &AppHandle, cache_key: String, source_url: String) {
+    if source_url.trim().is_empty() {
+        return;
+    }
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app_handle.state::<AppState>();
+        let client = state.client.clone();
+        let config_path = state.config_path.clone();
+        if let Err(error) =
+            emoticon::refresh_emoticon_cache(&client, &config_path, &cache_key, &source_url).await
+        {
+            crate::runtime_log!(
+                "[danmu] refresh emoticon cache failed key={} err={}",
+                cache_key,
+                error
+            );
+        }
+        let pending = emoticon_cache_pending();
+        let mut pending_guard = pending.lock().unwrap_or_else(|poison| poison.into_inner());
+        pending_guard.remove(&cache_key);
+    });
+}
+
+fn enrich_emoticon_with_cache(app: &AppHandle, message: &mut Value) {
+    let Some(raw_emoticon) = message.get("emoticon").and_then(Value::as_object) else {
+        return;
+    };
+    let emoticon_unique = raw_emoticon
+        .get("emoticon_unique")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let emoticon_id = raw_emoticon
+        .get("emoticon_id")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let source_url = raw_emoticon
+        .get("url")
+        .and_then(Value::as_str)
+        .map(emoticon::normalize_image_url)
+        .unwrap_or_default();
+    if source_url.trim().is_empty() {
+        return;
+    }
+    let cache_key = emoticon::build_emoticon_cache_key(
+        emoticon_unique,
+        emoticon_id,
+        &source_url,
+        raw_emoticon
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or("danmu_emoticon"),
+    );
+    let state = app.state::<AppState>();
+    if let Some(cached) = emoticon::resolve_cached_emoticon_data_url(&state.config_path, &cache_key)
+    {
+        message["emoticon"]["url"] = Value::String(cached);
+        return;
+    }
+    message["emoticon"]["url"] = Value::String(source_url.clone());
+    let should_refresh = {
+        let pending = emoticon_cache_pending();
+        let mut pending_guard = pending.lock().unwrap_or_else(|poison| poison.into_inner());
+        if pending_guard.contains(&cache_key) {
+            false
+        } else {
+            pending_guard.insert(cache_key.clone());
+            true
+        }
+    };
+    if should_refresh {
+        enqueue_emoticon_refresh(app, cache_key, source_url);
+    }
+}
+
 pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
     let mut offset = 0usize;
     let mut reenter_delay_secs: Option<u64> = None;
@@ -239,6 +319,7 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                 let (message, reenter_delay) = parse_danmu_message(&value);
                 if let Some(mut message) = message {
                     enrich_sender_face_with_cache(app, &mut message);
+                    enrich_emoticon_with_cache(app, &mut message);
                     crate::ws_server::broadcast_danmu_message(app, &message);
                     let _ = app.emit("danmu-message", message);
                 } else if is_supported_cmd(raw_cmd) {

@@ -826,6 +826,17 @@ fn build_compat_text_data(payload: &Value) -> Value {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
+    let emoticon_url = payload
+        .get("emoticon")
+        .and_then(|value| value.get("url"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let content_type = if emoticon_url.is_some() { 1 } else { 0 };
+    let content_type_params = emoticon_url
+        .map(|url| json!([url]))
+        .unwrap_or_else(|| json!([]));
 
     json!([
         avatar,
@@ -841,8 +852,8 @@ fn build_compat_text_data(payload: &Value) -> Value {
         0,
         id,
         "",
-        0,
-        [],
+        content_type,
+        content_type_params,
         [],
         uid,
         "",
