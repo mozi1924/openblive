@@ -349,6 +349,31 @@ describe("useStudioController multi-account regressions", () => {
     await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("2"));
   });
 
+  it("treats login-invalid current user as unauthenticated for live control polling", async () => {
+    const invalidUser = {
+      ...makeUser("1", "A", "A-old"),
+      login_invalid: true,
+    };
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(invalidUser));
+    mockStudioApi.getAccountList.mockResolvedValue(
+      ok({ list: [invalidUser], current_uid: invalidUser.uid }),
+    );
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.login_invalid).toBe(true));
+    await act(async () => {
+      await flush();
+    });
+
+    expect(mockStudioApi.syncLiveStatus).not.toHaveBeenCalled();
+    expect(mockStudioApi.syncLiveRoomProfile).not.toHaveBeenCalled();
+    expect(mockStudioApi.getLiveEmoticons).not.toHaveBeenCalled();
+    expect(mockStudioApi.getLiveVotePanel).not.toHaveBeenCalled();
+    expect(mockStudioApi.getLiveVoteHistory).not.toHaveBeenCalled();
+    expect(result.current.state.session).toBeNull();
+  });
+
   it("keeps danmu listening state while clearing messages after switching account", async () => {
     const userA = makeUser("1", "A", "A-old");
     const userB = makeUser("2", "B", "B-old");

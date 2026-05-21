@@ -27,6 +27,7 @@ type UseStudioControllerEffectsParams = {
   loadAppConfig: () => Promise<void>;
   loadLinkageStatus: () => Promise<void>;
   currentUserUid: string | undefined;
+  hasLiveAuth: boolean;
   clearDanmuAssetsAndVoteState: () => void;
   syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<void>;
   loadLiveEmoticons: () => Promise<void>;
@@ -76,6 +77,7 @@ export function useStudioControllerEffects({
   loadAppConfig,
   loadLinkageStatus,
   currentUserUid,
+  hasLiveAuth,
   clearDanmuAssetsAndVoteState,
   syncLiveRoomProfile,
   loadLiveEmoticons,
@@ -129,20 +131,22 @@ export function useStudioControllerEffects({
     void loadAccounts();
     void loadPartitions();
     void loadAppConfig();
-    void loadRecentDanmu();
-    void refreshSession();
     void loadLinkageStatus();
   }, [
     loadAccounts,
     loadAppConfig,
     loadLinkageStatus,
     loadPartitions,
-    loadRecentDanmu,
     loadSavedUser,
-    refreshSession,
   ]);
 
   useEffect(() => {
+    if (!hasLiveAuth) {
+      setSession(null);
+      setRtmp(null);
+      setDanmuListening(false);
+      return;
+    }
     void refreshSession();
     void loadLinkageStatus();
     const timer = window.setInterval(() => {
@@ -150,7 +154,7 @@ export function useStudioControllerEffects({
       void loadLinkageStatus();
     }, LIVE_CONTROL_STATUS_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [loadLinkageStatus, refreshSession]);
+  }, [hasLiveAuth, loadLinkageStatus, refreshSession, setDanmuListening, setRtmp, setSession]);
 
   useEffect(() => {
     if (!currentUserUid?.trim()) {
@@ -248,6 +252,9 @@ export function useStudioControllerEffects({
   useTauriEvent(studioApi.listenStudioState, (event) => {
     switch (event.kind) {
       case "runtime.snapshot": {
+        if (!hasLiveAuth) {
+          break;
+        }
         const nextSession = event.data?.session;
         if (nextSession) {
           setSession(nextSession);

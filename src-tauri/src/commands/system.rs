@@ -153,6 +153,8 @@ fn show_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<(), St
         let _ = window.unminimize();
     }
     let _ = window.show();
+    // On some platforms, applying top-most before showing the window can be ignored.
+    apply_overlay_window_config(&window, config)?;
     emit_overlay_visibility(app, true);
     Ok(())
 }

@@ -1,9 +1,14 @@
 use crate::state::AppState;
-use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
+use tauri::menu::MenuEvent;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
 use tauri::{App, AppHandle, Manager, Window, WindowEvent};
+use tauri_plugin_window_state::{AppHandleExt as WindowStateAppHandleExt, StateFlags};
 
 const TRAY_ID: &str = "main-tray";
 const MENU_ACCOUNT_INFO: &str = "tray.account_info";
@@ -13,19 +18,34 @@ const MENU_START_LIVE: &str = "tray.start_live";
 const MENU_STOP_LIVE: &str = "tray.stop_live";
 const MENU_QUIT: &str = "tray.quit";
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 const TRAY_BLACK: &[u8] = include_bytes!("../icons/tray_black.png");
 #[cfg(not(target_os = "macos"))]
 const TRAY_WHITE: &[u8] = include_bytes!("../icons/tray_white.png");
 #[cfg(target_os = "macos")]
 const TRAY_TEMPLATE: &[u8] = include_bytes!("../icons/trayTemplate.png");
 
+#[derive(Clone, PartialEq, Eq)]
 struct TrayMenuSnapshot {
     locale: String,
     account_label: String,
     live_status_label: String,
     logged_in: bool,
 }
+
+#[derive(Default)]
+struct TrayRefreshCoordinator {
+    pending: bool,
+    running: bool,
+    last_applied_at: Option<Instant>,
+    last_snapshot: Option<TrayMenuSnapshot>,
+}
+
+static TRAY_REFRESH_COORDINATOR: LazyLock<Mutex<TrayRefreshCoordinator>> =
+    LazyLock::new(|| Mutex::new(TrayRefreshCoordinator::default()));
+
+const TRAY_REFRESH_MIN_INTERVAL: Duration = Duration::from_millis(350);
+const TRAY_REFRESH_LOCK_BUSY_RETRY_INTERVAL: Duration = Duration::from_millis(120);
 
 impl TrayMenuSnapshot {
     fn fallback() -> Self {
@@ -38,7 +58,7 @@ impl TrayMenuSnapshot {
     }
 }
 
-fn get_tray_icon(app: &AppHandle) -> tauri::image::Image<'static> {
+fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
     #[cfg(target_os = "macos")]
     {
         tauri::image::Image::from_bytes(TRAY_TEMPLATE)
@@ -46,7 +66,7 @@ fn get_tray_icon(app: &AppHandle) -> tauri::image::Image<'static> {
     }
     #[cfg(target_os = "windows")]
     {
-        if let Some(tauri::Theme::Dark) = app.theme() {
+        if let Some(tauri::Theme::Dark) = _app.theme() {
             tauri::image::Image::from_bytes(TRAY_WHITE).expect("failed to load white tray icon")
         } else {
             tauri::image::Image::from_bytes(TRAY_BLACK).expect("failed to load black tray icon")
@@ -62,24 +82,34 @@ fn read_tray_menu_snapshot(app: &AppHandle) -> Option<TrayMenuSnapshot> {
     let state = app.state::<AppState>();
     let runtime = state.runtime.try_lock().ok()?;
     let locale = runtime.config.locale.clone();
-    let account_label = match runtime.config.current_uid.as_ref() {
-        Some(uid) => match runtime.config.users.get(uid) {
-            Some(user) => format!(
-                "{}: {} ({})",
-                crate::i18n::tr_config(&runtime.config, "tray.account.current"),
-                user.uname,
-                user.uid
-            ),
-            None => crate::i18n::tr_config(&runtime.config, "tray.account.logged_out"),
-        },
-        None => crate::i18n::tr_config(&runtime.config, "tray.account.logged_out"),
+    let current_user = runtime
+        .config
+        .current_uid
+        .as_ref()
+        .and_then(|uid| runtime.config.users.get(uid));
+    let logged_in = current_user
+        .map(|user| !user.login_invalid)
+        .unwrap_or(false);
+
+    let account_label = match current_user {
+        Some(user) if !user.login_invalid => format!(
+            "{}: {} ({})",
+            crate::i18n::tr_config(&runtime.config, "tray.account.current"),
+            user.uname,
+            user.uid
+        ),
+        _ => crate::i18n::tr_config(&runtime.config, "tray.account.logged_out"),
     };
-    let live_status_label = match runtime.session.live_status.unwrap_or(0) {
-        1 => crate::i18n::tr_config(&runtime.config, "tray.live.on"),
-        2 => crate::i18n::tr_config(&runtime.config, "tray.live.round"),
-        _ => crate::i18n::tr_config(&runtime.config, "tray.live.off"),
+    let live_status_label = if !logged_in {
+        crate::i18n::tr_config(&runtime.config, "tray.live.off")
+    } else {
+        match runtime.session.live_status.unwrap_or(0) {
+            1 => crate::i18n::tr_config(&runtime.config, "tray.live.on"),
+            2 => crate::i18n::tr_config(&runtime.config, "tray.live.round"),
+            _ => crate::i18n::tr_config(&runtime.config, "tray.live.off"),
+        }
     };
-    let logged_in = runtime.config.current_uid.is_some();
+
     Some(TrayMenuSnapshot {
         locale,
         account_label,
@@ -156,16 +186,131 @@ pub fn has_tray(app: &AppHandle) -> bool {
     app.tray_by_id(TRAY_ID).is_some()
 }
 
-pub fn refresh_tray_menu(app: &AppHandle) {
+fn apply_tray_menu_snapshot(app: &AppHandle, snapshot: &TrayMenuSnapshot) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let Some(snapshot) = read_tray_menu_snapshot(app) else {
-        crate::runtime_log!("[tray] skip menu refresh: runtime lock busy");
-        return;
-    };
-    if let Ok(menu) = build_tray_menu(app, &snapshot) {
+    if let Ok(menu) = build_tray_menu(app, snapshot) {
         let _ = tray.set_menu(Some(menu));
+    }
+}
+
+fn schedule_tray_refresh_worker(app: &AppHandle) {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let (has_pending, delay) = {
+                let coordinator = TRAY_REFRESH_COORDINATOR
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                let has_pending = coordinator.pending;
+                let delay = if !has_pending {
+                    Duration::from_millis(0)
+                } else {
+                    coordinator
+                        .last_applied_at
+                        .map(|instant| instant.elapsed())
+                        .filter(|elapsed| *elapsed < TRAY_REFRESH_MIN_INTERVAL)
+                        .map(|elapsed| TRAY_REFRESH_MIN_INTERVAL - elapsed)
+                        .unwrap_or(Duration::from_millis(0))
+                };
+                (has_pending, delay)
+            };
+
+            if !has_pending {
+                let mut coordinator = TRAY_REFRESH_COORDINATOR
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                if coordinator.pending {
+                    continue;
+                }
+                coordinator.running = false;
+                break;
+            }
+
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+
+            {
+                let mut coordinator = TRAY_REFRESH_COORDINATOR
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                if !coordinator.pending {
+                    continue;
+                }
+                coordinator.pending = false;
+            }
+
+            let Some(snapshot) = read_tray_menu_snapshot(&app_handle) else {
+                {
+                    let mut coordinator = TRAY_REFRESH_COORDINATOR
+                        .lock()
+                        .unwrap_or_else(|poison| poison.into_inner());
+                    coordinator.pending = true;
+                }
+                tokio::time::sleep(TRAY_REFRESH_LOCK_BUSY_RETRY_INTERVAL).await;
+                continue;
+            };
+
+            let should_apply = {
+                let coordinator = TRAY_REFRESH_COORDINATOR
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                coordinator.last_snapshot.as_ref() != Some(&snapshot)
+            };
+
+            if !should_apply {
+                continue;
+            }
+
+            let app_for_main = app_handle.clone();
+            let snapshot_for_main = snapshot.clone();
+            let scheduled = app_handle
+                .run_on_main_thread(move || {
+                    apply_tray_menu_snapshot(&app_for_main, &snapshot_for_main);
+                })
+                .is_ok();
+
+            let should_retry = {
+                let mut coordinator = TRAY_REFRESH_COORDINATOR
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner());
+                if scheduled {
+                    coordinator.last_snapshot = Some(snapshot);
+                    coordinator.last_applied_at = Some(Instant::now());
+                    false
+                } else {
+                    coordinator.pending = true;
+                    true
+                }
+            };
+
+            if should_retry {
+                tokio::time::sleep(TRAY_REFRESH_LOCK_BUSY_RETRY_INTERVAL).await;
+            }
+        }
+    });
+}
+
+pub fn refresh_tray_menu(app: &AppHandle) {
+    if !has_tray(app) {
+        return;
+    }
+    let should_start_worker = {
+        let mut coordinator = TRAY_REFRESH_COORDINATOR
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        coordinator.pending = true;
+        if coordinator.running {
+            false
+        } else {
+            coordinator.running = true;
+            true
+        }
+    };
+    if should_start_worker {
+        schedule_tray_refresh_worker(app);
     }
 }
 
@@ -199,19 +344,27 @@ fn apply_hidden_window_dock_policy(app: &AppHandle) {
 #[cfg(not(target_os = "macos"))]
 fn apply_hidden_window_dock_policy(_app: &AppHandle) {}
 
-pub fn toggle_main_window(app: &AppHandle) {
+fn toggle_main_window_inner(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
     if window.is_visible().unwrap_or(true) {
         let _ = window.hide();
+        let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
         apply_hidden_window_dock_policy(app);
     } else {
-        reveal_main_window(app);
+        reveal_main_window_inner(app);
     }
 }
 
-pub fn reveal_main_window(app: &AppHandle) {
+pub fn toggle_main_window(app: &AppHandle) {
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        toggle_main_window_inner(&app_handle);
+    });
+}
+
+fn reveal_main_window_inner(app: &AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
@@ -222,6 +375,13 @@ pub fn reveal_main_window(app: &AppHandle) {
     }
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+pub fn reveal_main_window(app: &AppHandle) {
+    let app_handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        reveal_main_window_inner(&app_handle);
+    });
 }
 
 #[cfg(target_os = "macos")]
@@ -268,6 +428,15 @@ pub fn setup_tray(app: &mut App) -> tauri::Result<()> {
     }
 
     let _tray = builder.build(app)?;
+    {
+        let mut coordinator = TRAY_REFRESH_COORDINATOR
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        coordinator.last_snapshot = Some(snapshot);
+        coordinator.last_applied_at = Some(Instant::now());
+        coordinator.pending = false;
+        coordinator.running = false;
+    }
     Ok(())
 }
 
@@ -338,10 +507,13 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             if should_min_to_tray {
                 api.prevent_close();
                 let _ = window.hide();
+                let _ = window
+                    .app_handle()
+                    .save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
                 apply_hidden_window_dock_policy(window.app_handle());
             }
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "windows")]
         WindowEvent::ThemeChanged(theme) => {
             let app = window.app_handle();
             if let Some(tray) = app.tray_by_id(TRAY_ID) {

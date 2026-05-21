@@ -35,6 +35,8 @@ use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
 use state::{restore_session_from_current, AppState, RuntimeState};
 use tauri::{webview::PageLoadEvent, Manager};
+#[cfg(desktop)]
+use tauri_plugin_window_state::StateFlags;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
 
@@ -93,7 +95,11 @@ pub fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_window_state::Builder::new().build());
+        builder = builder.plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED)
+                .build(),
+        );
     }
 
     let app = builder
