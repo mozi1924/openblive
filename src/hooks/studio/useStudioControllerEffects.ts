@@ -27,7 +27,6 @@ type UseStudioControllerEffectsParams = {
   loadAppConfig: () => Promise<void>;
   loadLinkageStatus: () => Promise<void>;
   currentUserUid: string | undefined;
-  sessionRoomId: string | undefined;
   clearDanmuAssetsAndVoteState: () => void;
   syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<void>;
   loadLiveEmoticons: () => Promise<void>;
@@ -56,6 +55,7 @@ type UseStudioControllerEffectsParams = {
 };
 
 const QR_LOGIN_POLL_INTERVAL_MS = 2000;
+const LIVE_CONTROL_STATUS_POLL_INTERVAL_MS = 10_000;
 
 export function useStudioControllerEffects({
   title,
@@ -76,7 +76,6 @@ export function useStudioControllerEffects({
   loadAppConfig,
   loadLinkageStatus,
   currentUserUid,
-  sessionRoomId,
   clearDanmuAssetsAndVoteState,
   syncLiveRoomProfile,
   loadLiveEmoticons,
@@ -126,13 +125,13 @@ export function useStudioControllerEffects({
   }, [danmuEndRef, danmus]);
 
   useEffect(() => {
-    void refreshSession();
     void loadSavedUser();
     void loadAccounts();
     void loadPartitions();
     void loadAppConfig();
-    void loadLinkageStatus();
     void loadRecentDanmu();
+    void refreshSession();
+    void loadLinkageStatus();
   }, [
     loadAccounts,
     loadAppConfig,
@@ -144,15 +143,17 @@ export function useStudioControllerEffects({
   ]);
 
   useEffect(() => {
+    void refreshSession();
     void loadLinkageStatus();
     const timer = window.setInterval(() => {
+      void refreshSession();
       void loadLinkageStatus();
-    }, 10_000);
+    }, LIVE_CONTROL_STATUS_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [loadLinkageStatus]);
+  }, [loadLinkageStatus, refreshSession]);
 
   useEffect(() => {
-    if (!currentUserUid) {
+    if (!currentUserUid?.trim()) {
       clearDanmuAssetsAndVoteState();
       return;
     }
@@ -160,34 +161,34 @@ export function useStudioControllerEffects({
   }, [clearDanmuAssetsAndVoteState, currentUserUid, syncLiveRoomProfile]);
 
   useEffect(() => {
-    if (!currentUserUid || !sessionRoomId) {
+    if (!currentUserUid?.trim()) {
       clearDanmuAssetsAndVoteState();
       return;
     }
     void loadLiveEmoticons();
-  }, [clearDanmuAssetsAndVoteState, currentUserUid, loadLiveEmoticons, sessionRoomId]);
+  }, [clearDanmuAssetsAndVoteState, currentUserUid, loadLiveEmoticons]);
 
   useEffect(() => {
-    if (!currentUserUid) {
+    if (!currentUserUid?.trim()) {
       return;
     }
     void loadRecentDanmu();
   }, [currentUserUid, loadRecentDanmu]);
 
   useEffect(() => {
-    if (!currentUserUid || !sessionRoomId) {
+    if (!currentUserUid?.trim()) {
       clearLiveVoteState();
       return;
     }
     void loadLiveVoteData();
-  }, [clearLiveVoteState, currentUserUid, loadLiveVoteData, sessionRoomId]);
+  }, [clearLiveVoteState, currentUserUid, loadLiveVoteData]);
 
   useEffect(() => {
-    if (!currentUserUid || !sessionRoomId) {
+    if (!currentUserUid?.trim()) {
       return;
     }
     void loadLiveOnlineRank({ silent: true });
-  }, [currentUserUid, loadLiveOnlineRank, sessionRoomId]);
+  }, [currentUserUid, loadLiveOnlineRank]);
 
   useEffect(() => {
     if (!qrcodeKey || !qrLoginExpiresAt) {

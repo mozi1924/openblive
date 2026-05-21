@@ -45,7 +45,7 @@ use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
     sync_live_status as sync_live_status_inner,
 };
-use session::resolve_current_auth_context;
+use session::resolve_room_scoped_auth_context;
 
 pub async fn start_danmu_monitor_for_ws(app: &AppHandle, state: &AppState) -> CmdResult {
     start_danmu_monitor_inner(app, state).await
@@ -205,17 +205,8 @@ pub async fn stop_live_flow(app: AppHandle, state: State<'_, AppState>) -> CmdRe
 pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult {
     let (_uid, room_id, csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        resolve_room_scoped_auth_context(&runtime, true)?
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if csrf.is_empty() {
-        return Err("i18n.live.error.csrf_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let mut params = BTreeMap::new();
     params.insert("web_location".into(), "444.8".into());
@@ -271,14 +262,8 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
 pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
     let (_uid, room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        resolve_room_scoped_auth_context(&runtime, false)?
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let value = state
         .client
@@ -329,14 +314,8 @@ pub async fn get_live_dashboard_snapshot(state: State<'_, AppState>) -> CmdResul
 pub async fn get_live_vote_panel(state: State<'_, AppState>) -> CmdResult {
     let (_uid, room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        resolve_room_scoped_auth_context(&runtime, false)?
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let value = state
         .client
@@ -380,14 +359,8 @@ pub async fn get_live_vote_panel(state: State<'_, AppState>) -> CmdResult {
 pub async fn get_live_vote_history(state: State<'_, AppState>) -> CmdResult {
     let (_uid, room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        resolve_room_scoped_auth_context(&runtime, false)?
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let value = state
         .client
@@ -431,14 +404,8 @@ pub async fn get_live_vote_history(state: State<'_, AppState>) -> CmdResult {
 pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
     let (anchor_uid, room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        resolve_room_scoped_auth_context(&runtime, false)?
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let value = state
         .client
@@ -611,7 +578,7 @@ pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>
 
     let (room_id, csrf, cookie, live_key, sub_session_key) = {
         let runtime = state.runtime.lock().await;
-        let (_uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        let (_uid, room_id, csrf, cookie) = resolve_room_scoped_auth_context(&runtime, true)?;
         (
             room_id,
             csrf,
@@ -620,15 +587,6 @@ pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>
             runtime.session.sub_session_key.clone(),
         )
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if csrf.is_empty() {
-        return Err("i18n.live.error.csrf_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let mut form = BTreeMap::new();
     form.insert("room_id".into(), room_id);
@@ -695,17 +653,8 @@ pub async fn terminate_live_vote(
 ) -> CmdResult {
     let (_uid, room_id, csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        resolve_current_auth_context(&runtime)?
+        resolve_room_scoped_auth_context(&runtime, true)?
     };
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
-    if csrf.is_empty() {
-        return Err("i18n.live.error.csrf_missing".into());
-    }
-    if cookie.trim().is_empty() {
-        return Err("i18n.account.error.local_credential_empty".into());
-    }
 
     let mut form = BTreeMap::new();
     form.insert("interaction_id".into(), req.interaction_id.to_string());

@@ -115,3 +115,21 @@ pub(crate) fn resolve_current_auth_context(
     };
     Ok((uid, room_id, csrf, user.cookie.clone()))
 }
+
+pub(crate) fn resolve_room_scoped_auth_context(
+    runtime: &RuntimeState,
+    require_csrf: bool,
+) -> Result<(String, String, String, String), String> {
+    let (uid, room_id, csrf, cookie) = resolve_current_auth_context(runtime)?;
+    let normalized_room_id = room_id.trim().to_string();
+    if normalized_room_id.is_empty() || normalized_room_id.parse::<u64>().unwrap_or(0) == 0 {
+        return Err("i18n.live.error.room_id_missing".to_string());
+    }
+    if require_csrf && csrf.trim().is_empty() {
+        return Err("i18n.live.error.csrf_missing".to_string());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".to_string());
+    }
+    Ok((uid, normalized_room_id, csrf, cookie))
+}

@@ -27,7 +27,6 @@ type RequestConfirmPayload = {
 
 type UseDanmuVoteControllerParams = {
   activeUidRef: MutableRefObject<string | null>;
-  sessionRoomId: string | null | undefined;
   localeSetting: LocaleSetting;
   append: (line: string) => void;
   requestConfirm: (payload: RequestConfirmPayload) => Promise<boolean>;
@@ -35,7 +34,6 @@ type UseDanmuVoteControllerParams = {
 
 export function useDanmuVoteController({
   activeUidRef,
-  sessionRoomId,
   localeSetting,
   append,
   requestConfirm,
@@ -90,11 +88,6 @@ export function useDanmuVoteController({
   }, [clearLiveVoteState]);
 
   const loadLiveEmoticons = useCallback(async () => {
-    if (!activeUidRef.current || !sessionRoomId) {
-      setLiveEmoticonPackages([]);
-      return;
-    }
-
     const requestUid = activeUidRef.current;
     setLiveEmoticonsLoading(true);
     try {
@@ -127,16 +120,10 @@ export function useDanmuVoteController({
         setLiveEmoticonsLoading(false);
       }
     }
-  }, [activeUidRef, append, localeSetting, sessionRoomId]);
+  }, [activeUidRef, append, localeSetting]);
 
   const loadLiveVoteData = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!activeUidRef.current || !sessionRoomId) {
-        setLiveVotePanel(null);
-        setLiveVoteHistory([]);
-        return;
-      }
-
       const requestUid = activeUidRef.current;
       if (!options?.silent) {
         setLiveVoteLoading(true);
@@ -195,16 +182,11 @@ export function useDanmuVoteController({
         setLiveVoteLoading(false);
       }
     },
-    [activeUidRef, append, localeSetting, sessionRoomId],
+    [activeUidRef, append, localeSetting],
   );
 
   const loadLiveOnlineRank = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!activeUidRef.current || !sessionRoomId) {
-        setLiveOnlineRankData(null);
-        return;
-      }
-
       const requestUid = activeUidRef.current;
       if (!options?.silent) {
         setLiveOnlineRankLoading(true);
@@ -264,7 +246,7 @@ export function useDanmuVoteController({
         }
       }
     },
-    [activeUidRef, append, localeSetting, sessionRoomId],
+    [activeUidRef, append, localeSetting],
   );
 
   const applyLiveVoteTemplate = useCallback(

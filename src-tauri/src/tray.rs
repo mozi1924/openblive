@@ -38,19 +38,23 @@ impl TrayMenuSnapshot {
     }
 }
 
-fn get_tray_icon(_app: &AppHandle) -> tauri::image::Image<'static> {
+fn get_tray_icon(app: &AppHandle) -> tauri::image::Image<'static> {
     #[cfg(target_os = "macos")]
     {
         tauri::image::Image::from_bytes(TRAY_TEMPLATE)
             .expect("failed to load macOS tray template icon")
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        if let Some(tauri::Theme::Dark) = _app.theme() {
+        if let Some(tauri::Theme::Dark) = app.theme() {
             tauri::image::Image::from_bytes(TRAY_WHITE).expect("failed to load white tray icon")
         } else {
             tauri::image::Image::from_bytes(TRAY_BLACK).expect("failed to load black tray icon")
         }
+    }
+    #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+    {
+        tauri::image::Image::from_bytes(TRAY_WHITE).expect("failed to load default tray icon")
     }
 }
 

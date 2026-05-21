@@ -368,9 +368,37 @@ describe("useStudioController multi-account regressions", () => {
       backendCurrentUid = "2";
       return ok(userB);
     });
+    mockStudioApi.syncLiveStatus.mockResolvedValue(
+      ok({
+        uid: 1,
+        room_id: "1001",
+        csrf: "",
+        live_status: 0,
+        from_cache: false,
+        error_code: null,
+      }),
+    );
 
     const { result } = renderHook(() => useStudioController());
     await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    act(() => {
+      studioStateListener?.({
+        kind: "runtime.snapshot",
+        source: "test.bootstrap",
+        at: Date.now(),
+        data: {
+          danmu_running: false,
+          session: {
+            uid: 1,
+            room_id: "1001",
+            csrf: "",
+            live_status: 0,
+            from_cache: false,
+            error_code: null,
+          },
+        },
+      });
+    });
 
     await act(async () => {
       await result.current.actions.startDanmu();
@@ -380,6 +408,7 @@ describe("useStudioController multi-account regressions", () => {
     act(() => {
       result.current.actions.setDanmuText("hello");
     });
+    await waitFor(() => expect(result.current.state.danmuText).toBe("hello"));
     await act(async () => {
       await result.current.actions.submitDanmu(formEvent());
     });
@@ -413,9 +442,37 @@ describe("useStudioController multi-account regressions", () => {
       backendCurrentUid = "2";
       return ok(userB);
     });
+    mockStudioApi.syncLiveStatus.mockResolvedValue(
+      ok({
+        uid: 1,
+        room_id: "1001",
+        csrf: "",
+        live_status: 0,
+        from_cache: false,
+        error_code: null,
+      }),
+    );
 
     const { result } = renderHook(() => useStudioController());
     await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    act(() => {
+      studioStateListener?.({
+        kind: "runtime.snapshot",
+        source: "test.bootstrap",
+        at: Date.now(),
+        data: {
+          danmu_running: false,
+          session: {
+            uid: 1,
+            room_id: "1001",
+            csrf: "",
+            live_status: 0,
+            from_cache: false,
+            error_code: null,
+          },
+        },
+      });
+    });
 
     await act(async () => {
       await result.current.actions.startDanmu();
