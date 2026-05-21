@@ -76,6 +76,24 @@ export function ProjectTab({ locale }: ProjectTabProps) {
       </section>
 
       <section className="flat-panel rounded-2xl border border-white/5 p-6">
+        <div className="mb-4 flex items-center gap-2 text-amber-300">
+          <HeartHandshake className="h-4 w-4" />
+          <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+            {t(locale, "ui.project.sponsor.badge")}
+          </span>
+        </div>
+        <p className="mb-4 text-xs text-gray-400">{t(locale, "ui.project.sponsor.desc")}</p>
+        <div className="overflow-hidden rounded-xl border border-white/8 bg-white/2 p-2">
+          <img
+            src="/pay.webp"
+            alt={t(locale, "ui.project.sponsor.alt")}
+            className="w-full rounded-lg object-contain"
+            loading="lazy"
+          />
+        </div>
+      </section>
+
+      <section className="flat-panel rounded-2xl border border-white/5 p-6">
         <div className="mb-4 flex items-center gap-2 text-bili-pink">
           <Layers3 className="h-4 w-4" />
           <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
