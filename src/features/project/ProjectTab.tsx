@@ -47,6 +47,35 @@ export function ProjectTab({ locale }: ProjectTabProps) {
       </section>
 
       <section className="flat-panel rounded-2xl border border-white/5 p-6">
+        <div className="mb-4 flex items-center gap-2 text-cyan-300">
+          <LinkIcon className="h-4 w-4" />
+          <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+            {t(locale, "ui.project.links.badge")}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <a
+            href="https://github.com/mozi1924/openblive"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-white/8 bg-white/2 px-4 py-3 transition-colors hover:border-bili-blue/40 hover:bg-bili-blue/8"
+          >
+            <p className="text-xs font-semibold text-bili-blue">{t(locale, "ui.project.links.repo.title")}</p>
+            <p className="mt-1 text-[11px] text-gray-400">{t(locale, "ui.project.links.repo.desc")}</p>
+          </a>
+          <a
+            href="https://mozi1924.com/about/"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-white/8 bg-white/2 px-4 py-3 transition-colors hover:border-bili-blue/40 hover:bg-bili-blue/8"
+          >
+            <p className="text-xs font-semibold text-bili-blue">{t(locale, "ui.project.links.site.title")}</p>
+            <p className="mt-1 text-[11px] text-gray-400">{t(locale, "ui.project.links.site.desc")}</p>
+          </a>
+        </div>
+      </section>
+
+      <section className="flat-panel rounded-2xl border border-white/5 p-6">
         <div className="mb-4 flex items-center gap-2 text-bili-pink">
           <Layers3 className="h-4 w-4" />
           <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
