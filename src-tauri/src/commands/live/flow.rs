@@ -3,7 +3,7 @@ use super::common::{
     clear_user_auth_flags, error_message, is_auth_invalid_code, live_platform,
     mark_current_user_login_invalid,
 };
-use super::danmu::{start_danmu_monitor_inner, stop_danmu_monitor_inner};
+use super::danmu::start_danmu_monitor_inner;
 use super::linkage::{
     apply_command_template, build_command_template_context, build_primary_push_fallback_context,
     empty_command_template_context, normalize_live_control_mode, obs_ws_start_stream,
@@ -606,25 +606,10 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
                 LIVE_STATUS_OFFLINE
             });
         let synced_is_live = matches!(synced_live_status, LIVE_STATUS_LIVE | LIVE_STATUS_ROUND);
-        let danmu_result = if synced_is_live {
-            json!({
-                "stopped": false,
-                "msg": "",
-            })
-        } else {
-            stop_danmu_monitor_inner(state)
-                .await
-                .unwrap_or_else(|error| {
-                    json!({
-                        "stopped": false,
-                        "msg": format!("i18n.live.error.stop_live_failed:{error}"),
-                    })
-                })
-        };
         let response = wrap_ok(json!({
             "live_stopped": !synced_is_live,
-            "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
-            "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
+            "danmu_monitor_stopped": false,
+            "danmu_monitor_msg": "",
             "session_consistent": false,
             "sync_fallback_applied": true
         }));
@@ -638,7 +623,7 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
                 "code": 0,
                 "session_consistent": false,
                 "sync_fallback_applied": true,
-                "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
+                "danmu_monitor_stopped": false,
             }),
         );
         emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;
@@ -646,19 +631,10 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
         return Ok(response);
     }
 
-    let danmu_result = stop_danmu_monitor_inner(state)
-        .await
-        .unwrap_or_else(|error| {
-            json!({
-                "stopped": false,
-                "msg": format!("i18n.live.error.stop_live_failed:{error}"),
-            })
-        });
-
     let response = wrap_ok(json!({
         "live_stopped": true,
-        "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
-        "danmu_monitor_msg": danmu_result["msg"].as_str().unwrap_or(""),
+        "danmu_monitor_stopped": false,
+        "danmu_monitor_msg": "",
         "session_consistent": true
     }));
     emit_studio_state_event(
@@ -670,7 +646,7 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
             "ok": true,
             "code": 0,
             "session_consistent": true,
-            "danmu_monitor_stopped": danmu_result["stopped"].as_bool().unwrap_or(false),
+            "danmu_monitor_stopped": false,
         }),
     );
     emit_runtime_snapshot(app, state, "stop_live_flow_inner").await;

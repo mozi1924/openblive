@@ -30,7 +30,9 @@ pub use client_version::refresh_live_client_version_inner;
 use common::{
     clear_user_auth_flags, error_message, is_auth_invalid_code, mark_current_user_login_invalid,
 };
-use danmu::{start_danmu_monitor_inner, stop_danmu_monitor_inner};
+use danmu::{
+    fetch_recent_danmu_messages_inner, start_danmu_monitor_inner, stop_danmu_monitor_inner,
+};
 use dashboard::get_live_dashboard_snapshot_inner;
 pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 use flow::{start_live_inner, stop_live_inner};
@@ -51,6 +53,57 @@ pub async fn start_danmu_monitor_for_ws(app: &AppHandle, state: &AppState) -> Cm
 
 pub async fn stop_danmu_monitor_for_ws(state: &AppState) -> CmdResult {
     stop_danmu_monitor_inner(state).await
+}
+
+pub async fn get_recent_danmu_for_ws(state: &AppState) -> CmdResult {
+    let messages = fetch_recent_danmu_messages_inner(state).await?;
+    Ok(wrap_ok(json!({
+        "messages": messages
+    })))
+}
+
+pub async fn ensure_auto_start_danmu_monitor(app: &AppHandle, state: &AppState, source: &str) {
+    let can_start = {
+        let runtime = state.runtime.lock().await;
+        runtime.session.uid > 0
+            && runtime
+                .session
+                .room_id
+                .trim()
+                .parse::<u64>()
+                .map(|room_id| room_id > 0)
+                .unwrap_or(false)
+    };
+    if !can_start {
+        return;
+    }
+
+    let payload = match start_danmu_monitor_inner(app, state).await {
+        Ok(value) => value,
+        Err(error) => {
+            crate::runtime_warn!("[danmu][auto-start] {source} failed: {error}");
+            return;
+        }
+    };
+    let started = payload["started"].as_bool().unwrap_or(false);
+    let msg = payload["msg"].as_str().unwrap_or("").to_string();
+    emit_studio_state_event(
+        app,
+        "danmu.monitor",
+        source,
+        json!({
+            "running": started || msg == "i18n.live.danmu_monitor_already_running",
+            "started": started,
+            "msg": msg,
+        }),
+    );
+    emit_runtime_snapshot(app, state, source).await;
+}
+
+#[tauri::command]
+pub async fn get_recent_danmu(state: State<'_, AppState>) -> CmdResult {
+    let messages = fetch_recent_danmu_messages_inner(&state).await?;
+    Ok(wrap_ok(json!(messages)))
 }
 
 #[tauri::command]

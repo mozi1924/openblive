@@ -15,7 +15,6 @@ import { t } from "../../utils/i18n";
 type SidebarProps = {
   activeTab: ActiveTab;
   locale: LocaleSetting;
-  danmuListening: boolean;
   roomId?: string;
   roomBaseHost?: string;
   sessionLive: boolean;
@@ -41,7 +40,6 @@ const tabs: Array<{
 export function Sidebar({
   activeTab,
   locale,
-  danmuListening,
   roomId,
   roomBaseHost,
   sessionLive,
@@ -104,12 +102,6 @@ export function Sidebar({
               }`}
             />
             <span className="text-xs">{t(locale, labelKey)}</span>
-            {key === "danmu" && danmuListening && (
-              <span className="ml-auto flex h-2 w-2">
-                <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-            )}
           </button>
         ))}
       </nav>

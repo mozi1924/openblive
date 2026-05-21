@@ -376,7 +376,6 @@ export function useAccountController({
         activeUidRef.current = res.data.uid;
         setCurrentUser(res.data);
         applyProfileState(res.data.live_profile_state);
-        setDanmuListening(false);
         setDanmus([]);
         clearDanmuAssetsAndVoteState();
         titleDirtyRef.current = false;
@@ -459,7 +458,6 @@ export function useAccountController({
           activeUidRef.current = res.data.uid;
           setCurrentUser(res.data);
           applyProfileState(res.data.live_profile_state);
-          setDanmuListening(false);
           setDanmus([]);
           clearDanmuAssetsAndVoteState();
           setShowFaceModal(false);

@@ -90,6 +90,7 @@ export const studioApi = {
   stopLiveFlow: () => invokeCommand<LiveFlowResp>("stop_live_flow"),
   startDanmuMonitor: () => invokeCommand("start_danmu_monitor"),
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
+  getRecentDanmu: () => invokeCommand<DanmuMsg[]>("get_recent_danmu"),
   sendDanmu: (msg: string) => invokeCommand("send_danmu", { req: { msg } }),
   getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
   getLiveDashboardSnapshot: () =>

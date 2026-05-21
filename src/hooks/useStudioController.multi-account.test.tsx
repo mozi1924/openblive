@@ -38,6 +38,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     stopLiveFlow: vi.fn(),
     startDanmuMonitor: vi.fn(),
     stopDanmuMonitor: vi.fn(),
+    getRecentDanmu: vi.fn(),
     sendDanmu: vi.fn(),
     getLiveEmoticons: vi.fn(),
     getLiveOnlineRank: vi.fn(),
@@ -186,6 +187,7 @@ beforeEach(() => {
   );
   mockStudioApi.startDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.stopDanmuMonitor.mockResolvedValue(ok({}));
+  mockStudioApi.getRecentDanmu.mockResolvedValue(ok([]));
   mockStudioApi.sendDanmu.mockResolvedValue(ok({}));
   mockStudioApi.getLiveEmoticons.mockResolvedValue(ok([]));
   mockStudioApi.getLiveOnlineRank.mockResolvedValue(
@@ -347,7 +349,7 @@ describe("useStudioController multi-account regressions", () => {
     await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("2"));
   });
 
-  it("clears danmu listening state and messages after switching account", async () => {
+  it("keeps danmu listening state while clearing messages after switching account", async () => {
     const userA = makeUser("1", "A", "A-old");
     const userB = makeUser("2", "B", "B-old");
     let backendCurrentUid = "1";
@@ -388,11 +390,11 @@ describe("useStudioController multi-account regressions", () => {
     });
 
     expect(result.current.state.currentUser?.uid).toBe("2");
-    expect(result.current.state.danmuListening).toBe(false);
+    expect(result.current.state.danmuListening).toBe(true);
     expect(result.current.state.danmus).toHaveLength(0);
   });
 
-  it("restores danmu listening by runtime snapshot after account switch fallback", async () => {
+  it("keeps danmu listening state after account switch and runtime snapshot", async () => {
     const userA = makeUser("1", "A", "A-old");
     const userB = makeUser("2", "B", "B-old");
     let backendCurrentUid = "1";
@@ -423,7 +425,7 @@ describe("useStudioController multi-account regressions", () => {
     await act(async () => {
       await result.current.actions.switchAccount("2");
     });
-    expect(result.current.state.danmuListening).toBe(false);
+    expect(result.current.state.danmuListening).toBe(true);
 
     act(() => {
       studioStateListener?.({
@@ -457,7 +459,7 @@ describe("useStudioController multi-account regressions", () => {
     act(() => {
       studioStateListener?.({
         kind: "danmu.monitor",
-        source: "command.switch_account.auto_resume",
+        source: "command.switch_account.auto_start",
         at: Date.now(),
         data: {
           running: true,
@@ -475,7 +477,7 @@ describe("useStudioController multi-account regressions", () => {
     act(() => {
       studioStateListener?.({
         kind: "danmu.monitor",
-        source: "command.switch_account.auto_resume",
+        source: "command.switch_account.auto_start",
         at: Date.now(),
         data: {
           running: false,

@@ -31,6 +31,8 @@ Server emits blivechat-style frames:
 - Super Chat delete: `cmd = 6` (when deletion IDs are available)
 
 Client heartbeat (`cmd = 0`) and join (`cmd = 1`) are supported.
+After first `JOIN_ROOM` (`cmd = 1`), server will backfill recent history danmu
+from current room via compatible `cmd = 2` frames (no local persistence).
 
 ## `/api/text_emoticon_mappings` (compatible)
 For blivechat frontend compatibility, server now exposes:

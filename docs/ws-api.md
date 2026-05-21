@@ -76,10 +76,33 @@ On connect, server sends:
 - `live.stop`
 - `danmu.start`
 - `danmu.stop`
+- `danmu.recent`
 - `session.get`
 - `server.ping`
 
 `session.get` returns current session state from the running OpenBlive instance.
+
+`danmu.recent` returns a payload like:
+
+```json
+{
+  "code": 0,
+  "msg": "ok",
+  "data": {
+    "messages": [ { "type": "danmu", "sender": "...", "content": "...", "history": true } ]
+  }
+}
+```
+
+On connect, `/ws` may also push one-time recent history event:
+
+```json
+{
+  "event": "danmu.recent",
+  "data": { "messages": [] },
+  "at": 1710000000
+}
+```
 
 ## Config keys
 These app config keys control the service:

@@ -31,6 +31,7 @@ type UseStudioControllerEffectsParams = {
   clearDanmuAssetsAndVoteState: () => void;
   syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<void>;
   loadLiveEmoticons: () => Promise<void>;
+  loadRecentDanmu: () => Promise<void>;
   clearLiveVoteState: () => void;
   loadLiveVoteData: (options?: { silent?: boolean }) => Promise<void>;
   loadLiveOnlineRank: (options?: { silent?: boolean }) => Promise<void>;
@@ -79,6 +80,7 @@ export function useStudioControllerEffects({
   clearDanmuAssetsAndVoteState,
   syncLiveRoomProfile,
   loadLiveEmoticons,
+  loadRecentDanmu,
   clearLiveVoteState,
   loadLiveVoteData,
   loadLiveOnlineRank,
@@ -155,6 +157,13 @@ export function useStudioControllerEffects({
     }
     void loadLiveEmoticons();
   }, [clearDanmuAssetsAndVoteState, currentUserUid, loadLiveEmoticons, sessionRoomId]);
+
+  useEffect(() => {
+    if (!currentUserUid || !sessionRoomId) {
+      return;
+    }
+    void loadRecentDanmu();
+  }, [currentUserUid, loadRecentDanmu, sessionRoomId]);
 
   useEffect(() => {
     if (!currentUserUid || !sessionRoomId) {
@@ -306,7 +315,7 @@ export function useStudioControllerEffects({
         break;
       }
       case "danmu.monitor": {
-        if (event.source !== "command.switch_account.auto_resume") {
+        if (event.source !== "command.switch_account.auto_start") {
           break;
         }
         const running = event.data?.running === true;

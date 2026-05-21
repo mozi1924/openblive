@@ -29,7 +29,6 @@ function App() {
       <Sidebar
         activeTab={state.activeTab}
         locale={locale}
-        danmuListening={state.danmuListening}
         roomId={state.session?.room_id}
         roomBaseHost={state.appConfig?.host_live_web}
         sessionLive={state.session?.is_live ?? false}
@@ -48,11 +47,8 @@ function App() {
           onRefreshAccounts={actions.loadAccounts}
           onRefreshPartitions={actions.loadPartitions}
           danmuCount={state.danmus.length}
-          danmuListening={state.danmuListening}
           danmuOverlayVisible={state.danmuOverlayVisible}
           liveOnlineRankPanelOpen={state.showLiveOnlineRankPanel}
-          onStartDanmu={actions.startDanmu}
-          onStopDanmu={actions.stopDanmu}
           onShowDanmuOverlay={actions.showDanmuOverlay}
           onHideDanmuOverlay={actions.hideDanmuOverlay}
           onToggleLiveOnlineRankPanel={() => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pin, Send, SmilePlus, X } from "lucide-react";
 import { studioApi } from "../services/studioApi";
 import type { AppConfig, DanmuMsg, LiveEmoticonPackage, User } from "../types/studio";
@@ -47,6 +47,31 @@ export function DanmuOverlayApp() {
   const controlBorder = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.15, 0.05)})`;
   const controlButtonBg = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.1, 0.03)})`;
 
+  const resolveDanmuSegments = useCallback(
+    (message: DanmuMsg): DanmuMsg => {
+      if (message.type !== "danmu" || (message.segments && message.segments.length > 0)) {
+        return message;
+      }
+      const fallback = createSelfDanmuMessage(
+        message.content,
+        message.sender,
+        liveEmoticonMap,
+        {
+          sender_uid: message.sender_uid,
+          sender_role: message.sender_role,
+          sender_name_color: message.sender_name_color,
+          sender_guard_level: message.sender_guard_level,
+          sender_face: message.sender_face,
+        },
+      );
+      return {
+        ...message,
+        segments: fallback.segments,
+      };
+    },
+    [liveEmoticonMap],
+  );
+
   useWindowDrag(rootDragRef);
 
   useEffect(() => {
@@ -84,6 +109,33 @@ export function DanmuOverlayApp() {
   }, []);
 
   useEffect(() => {
+    if (!currentUser?.uid) {
+      return;
+    }
+    let active = true;
+    void studioApi.getRecentDanmu().then((res) => {
+      if (!active || res.code !== 0 || !Array.isArray(res.data)) {
+        return;
+      }
+      const recent = [...res.data].map(resolveDanmuSegments).reverse();
+      setDanmus((prev) => {
+        if (prev.length === 0) {
+          return recent.slice(0, 160);
+        }
+        const seen = new Set(prev.map((item) => item.id));
+        const appended = recent.filter((item) => !seen.has(item.id));
+        if (appended.length === 0) {
+          return prev;
+        }
+        return [...prev, ...appended].slice(0, 160);
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.uid, resolveDanmuSegments]);
+
+  useEffect(() => {
     let active = true;
 
     const refreshCurrentUser = async () => {
@@ -106,16 +158,9 @@ export function DanmuOverlayApp() {
   }, []);
 
   useTauriEvent(studioApi.listenDanmuMessage, (message) => {
-    const withFallbackSegments =
-      message.type === "danmu" &&
-      (!message.segments || message.segments.length === 0)
-        ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
-        : null;
-    const resolvedMessage = withFallbackSegments
-      ? { ...message, segments: withFallbackSegments.segments }
-      : message;
-
-    setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, locale).slice(0, 160));
+    setDanmus((prev) =>
+      applyIncomingRealtimeMessage(prev, resolveDanmuSegments(message), locale).slice(0, 160),
+    );
   });
 
   useTauriEvent(studioApi.listenDanmuAvatarResolved, (payload) => {
@@ -168,6 +213,13 @@ export function DanmuOverlayApp() {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [orderedDanmus.length]);
+
+  useEffect(() => {
+    if (liveEmoticonMap.size === 0) {
+      return;
+    }
+    setDanmus((prev) => prev.map(resolveDanmuSegments).slice(0, 160));
+  }, [liveEmoticonMap, resolveDanmuSegments]);
 
   const insertEmoticon = (text: string) => {
     const input = textareaRef.current;

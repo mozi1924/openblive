@@ -458,9 +458,27 @@ async fn compat_ws_session(socket: WebSocket, state: Arc<WsServerRuntimeState>) 
 
         if let Ok(frame) = serde_json::from_str::<CompatIncomingFrame>(&text) {
             if frame.cmd == 1 {
-                let mut guard = joined_state.lock().await;
-                guard.joined = true;
+                let should_send_recent = {
+                    let mut guard = joined_state.lock().await;
+                    let should_send = !guard.joined;
+                    guard.joined = true;
+                    should_send
+                };
                 // roomId / roomKey / 身份码相关字段全部兼容接收，但忽略。
+                if should_send_recent {
+                    let recent_messages = fetch_recent_danmu_messages_for_ws(&state.app).await;
+                    for payload in recent_messages {
+                        if let Some(frame) = map_danmu_to_compat_frame(&payload) {
+                            if out_tx
+                                .send(Message::Text(frame.to_string().into()))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -513,6 +531,17 @@ async fn raw_ws_session(socket: WebSocket, state: Arc<WsServerRuntimeState>) {
         "at": now_unix_secs(),
     });
     let _ = out_tx.send(Message::Text(ready.to_string().into())).await;
+    let recent_messages = fetch_recent_danmu_messages_for_ws(&state.app).await;
+    if !recent_messages.is_empty() {
+        let frame = json!({
+            "event": "danmu.recent",
+            "data": {
+                "messages": recent_messages,
+            },
+            "at": now_unix_secs(),
+        });
+        let _ = out_tx.send(Message::Text(frame.to_string().into())).await;
+    }
 
     while let Some(Ok(message)) = ws_receiver.next().await {
         let text = match message {
@@ -656,6 +685,9 @@ async fn run_action(
         "danmu.stop" => invoke_cmd(
             crate::commands::stop_danmu_monitor_for_ws(&state.app.state::<AppState>()).await,
         ),
+        "danmu.recent" => invoke_cmd(
+            crate::commands::get_recent_danmu_for_ws(&state.app.state::<AppState>()).await,
+        ),
         "session.get" => {
             let app_state = state.app.state::<AppState>();
             let runtime = app_state.runtime.lock().await;
@@ -667,6 +699,22 @@ async fn run_action(
         }
         "server.ping" => Ok(json!({ "pong": true, "at": now_unix_secs() })),
         _ => Err(format!("unknown action: {action}")),
+    }
+}
+
+async fn fetch_recent_danmu_messages_for_ws(app: &AppHandle) -> Vec<Value> {
+    let app_state = app.state::<AppState>();
+    match crate::commands::get_recent_danmu_for_ws(&app_state).await {
+        Ok(payload) => payload
+            .get("data")
+            .and_then(|value| value.get("messages"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+        Err(error) => {
+            crate::runtime_warn!("[ws-server] fetch recent danmu failed: {error}");
+            Vec::new()
+        }
     }
 }
 

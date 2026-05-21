@@ -1,4 +1,4 @@
-import { PanelTop, Radio, RefreshCw, Trash2, Users } from "lucide-react";
+import { PanelTop, RefreshCw, Trash2, Users } from "lucide-react";
 import type { ActiveTab } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t, tf } from "../../utils/i18n";
@@ -10,11 +10,8 @@ type HeaderBarProps = {
   onRefreshAccounts: () => Promise<void>;
   onRefreshPartitions: () => Promise<void>;
   danmuCount: number;
-  danmuListening: boolean;
   danmuOverlayVisible: boolean;
   liveOnlineRankPanelOpen: boolean;
-  onStartDanmu: () => Promise<void>;
-  onStopDanmu: () => Promise<void>;
   onShowDanmuOverlay: () => Promise<void>;
   onHideDanmuOverlay: () => Promise<void>;
   onToggleLiveOnlineRankPanel: () => void;
@@ -28,11 +25,8 @@ export function HeaderBar({
   onRefreshAccounts,
   onRefreshPartitions,
   danmuCount,
-  danmuListening,
   danmuOverlayVisible,
   liveOnlineRankPanelOpen,
-  onStartDanmu,
-  onStopDanmu,
   onShowDanmuOverlay,
   onHideDanmuOverlay,
   onToggleLiveOnlineRankPanel,
@@ -68,37 +62,6 @@ export function HeaderBar({
           </div>
 
           <div data-tauri-drag-region="false" className="no-drag flex shrink-0 items-center gap-2">
-            <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#05070a] px-2.5 py-1.5">
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  danmuListening
-                    ? "animate-pulse bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"
-                    : "bg-gray-600"
-                }`}
-              />
-              <span className="text-xs font-semibold text-gray-300">
-                {danmuListening ? t(locale, "ui.danmu.status.on") : t(locale, "ui.danmu.status.off")}
-              </span>
-            </div>
-
-            {!danmuListening ? (
-              <button
-                onClick={() => void onStartDanmu()}
-                className="flex items-center space-x-1.5 rounded-lg bg-bili-blue px-3 py-1.5 text-xs font-bold text-white shadow-[0_4px_12px_rgba(0,174,236,0.25)] transition-all hover:bg-bili-blue/90 active:scale-95"
-              >
-                <Radio className="h-3.5 w-3.5" />
-                <span>{t(locale, "ui.danmu.start")}</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => void onStopDanmu()}
-                className="flex items-center space-x-1.5 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-400 transition-all hover:bg-rose-500/20 active:scale-95"
-              >
-                <Radio className="h-3.5 w-3.5 animate-pulse text-rose-400" />
-                <span>{t(locale, "ui.danmu.stop")}</span>
-              </button>
-            )}
-
             <button
               onClick={() =>
                 void (danmuOverlayVisible ? onHideDanmuOverlay() : onShowDanmuOverlay())

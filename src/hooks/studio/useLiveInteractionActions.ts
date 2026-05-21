@@ -436,7 +436,6 @@ export function useLiveInteractionActions({
           : tf(localeSetting, "ui.ctrl.stop_live_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }),
       );
       if (res.code === 0 && sessionConsistent) {
-        setDanmuListening(false);
         setRtmp(null);
       }
       if (res.code === 0) {

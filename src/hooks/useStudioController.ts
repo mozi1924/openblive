@@ -11,6 +11,7 @@ import type {
   User,
 } from "../types/studio";
 import { writeClipboardText } from "../utils/clipboard";
+import { createSelfDanmuMessage } from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
 import {
@@ -549,6 +550,57 @@ export function useStudioController() {
     await syncTrayMenu();
   }, [append, localeSetting, syncTrayMenu]);
 
+  const resolveDanmuSegments = useCallback(
+    (message: DanmuMsg): DanmuMsg => {
+      if (message.type !== "danmu" || (message.segments && message.segments.length > 0)) {
+        return message;
+      }
+      const fallback = createSelfDanmuMessage(
+        message.content,
+        message.sender,
+        liveEmoticonMap,
+        {
+          sender_uid: message.sender_uid,
+          sender_role: message.sender_role,
+          sender_name_color: message.sender_name_color,
+          sender_guard_level: message.sender_guard_level,
+          sender_face: message.sender_face,
+        },
+      );
+      return {
+        ...message,
+        segments: fallback.segments,
+      };
+    },
+    [liveEmoticonMap],
+  );
+
+  const loadRecentDanmu = useCallback(async () => {
+    const res = await studioApi.getRecentDanmu().catch(() => null);
+    if (!res || res.code !== 0 || !Array.isArray(res.data)) {
+      return;
+    }
+    const recent = [...res.data].map(resolveDanmuSegments).reverse();
+    setDanmus((prev) => {
+      if (prev.length === 0) {
+        return recent;
+      }
+      const seen = new Set(prev.map((item) => item.id));
+      const appended = recent.filter((item) => !seen.has(item.id));
+      if (appended.length === 0) {
+        return prev;
+      }
+      return [...prev, ...appended];
+    });
+  }, [resolveDanmuSegments]);
+
+  useEffect(() => {
+    if (liveEmoticonMap.size === 0) {
+      return;
+    }
+    setDanmus((prev) => prev.map(resolveDanmuSegments));
+  }, [liveEmoticonMap, resolveDanmuSegments]);
+
   const accountController = useAccountController({
     localeSetting,
     append,
@@ -736,6 +788,7 @@ export function useStudioController() {
     clearDanmuAssetsAndVoteState,
     syncLiveRoomProfile,
     loadLiveEmoticons,
+    loadRecentDanmu,
     clearLiveVoteState,
     loadLiveVoteData,
     loadLiveOnlineRank,
