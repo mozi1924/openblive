@@ -161,6 +161,7 @@ pnpm tauri build
 - 感谢 [ChaceQC/bilibili_live_stream_code](https://github.com/ChaceQC/bilibili_live_stream_code) 项目，为本项目提供了重要的实现思路启发，并在 API 链路对齐方面提供了参考。
 - 感谢 [TNXG/bilibili_live_stream](https://github.com/TNXG/bilibili_live_stream) 项目，为本项目提供了关键的功能设计启发，并在 API 链路对齐方面提供了参考。
 - 感谢 [Radekyspec/StartLive](https://github.com/Radekyspec/StartLive) 项目，为本项目提供了工程实践启发，并在 API 链路对齐方面提供了参考。
+- 感谢 [xfgryujk/blivechat](https://github.com/xfgryujk/blivechat) 项目为本项目的外部弹幕ws服务器和外部overlay前端提供相关api参考和前端代码。
 
 ---
 
