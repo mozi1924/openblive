@@ -2,10 +2,8 @@ import { useEffect } from "react";
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg, LiveProfileState, Session } from "../../types/studio";
-import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
 import { tagsToKey } from "./controllerHelpers";
-import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "./realtimeDanmu";
 import { useTauriEvent } from "../useTauriEvent";
 
 type UseStudioControllerEffectsParams = {
@@ -31,7 +29,6 @@ type UseStudioControllerEffectsParams = {
   clearDanmuAssetsAndVoteState: () => void;
   syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<void>;
   loadLiveEmoticons: () => Promise<void>;
-  loadRecentDanmu: () => Promise<void>;
   clearLiveVoteState: () => void;
   loadLiveVoteData: (options?: { silent?: boolean }) => Promise<void>;
   loadLiveOnlineRank: (options?: { silent?: boolean }) => Promise<void>;
@@ -41,9 +38,6 @@ type UseStudioControllerEffectsParams = {
   cancelQrcodeLogin: (reason?: "timeout" | "manual") => void;
   pollLogin: (silent?: boolean) => Promise<void>;
   localeSetting: LocaleSetting;
-  liveEmoticonMap: ReturnType<typeof createLiveEmoticonIndex>;
-  setDanmus: Dispatch<SetStateAction<DanmuMsg[]>>;
-  scheduleLiveVoteSync: () => void;
   append: (line: string) => void;
   clearLiveVoteSyncTimer: () => void;
   setSession: Dispatch<SetStateAction<Session | null>>;
@@ -81,7 +75,6 @@ export function useStudioControllerEffects({
   clearDanmuAssetsAndVoteState,
   syncLiveRoomProfile,
   loadLiveEmoticons,
-  loadRecentDanmu,
   clearLiveVoteState,
   loadLiveVoteData,
   loadLiveOnlineRank,
@@ -91,9 +84,6 @@ export function useStudioControllerEffects({
   cancelQrcodeLogin,
   pollLogin,
   localeSetting,
-  liveEmoticonMap,
-  setDanmus,
-  scheduleLiveVoteSync,
   append,
   clearLiveVoteSyncTimer,
   setSession,
@@ -174,13 +164,6 @@ export function useStudioControllerEffects({
 
   useEffect(() => {
     if (!currentUserUid?.trim()) {
-      return;
-    }
-    void loadRecentDanmu();
-  }, [currentUserUid, loadRecentDanmu]);
-
-  useEffect(() => {
-    if (!currentUserUid?.trim()) {
       clearLiveVoteState();
       return;
     }
@@ -227,27 +210,6 @@ export function useStudioControllerEffects({
       clearLiveVoteSyncTimer();
     };
   }, [clearLiveVoteSyncTimer]);
-
-  useTauriEvent(studioApi.listenDanmuMessage, (message) => {
-    const withFallbackSegments =
-      message.type === "danmu" && (!message.segments || message.segments.length === 0)
-        ? createSelfDanmuMessage(message.content, message.sender, liveEmoticonMap)
-        : null;
-    const resolvedMessage = withFallbackSegments
-      ? { ...message, segments: withFallbackSegments.segments }
-      : message;
-    setDanmus((prev) => applyIncomingRealtimeMessage(prev, resolvedMessage, localeSetting));
-
-    if (message.cmd === "DM_INTERACTION" && message.interaction_event_type === 101) {
-      scheduleLiveVoteSync();
-    }
-
-    append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
-  });
-
-  useTauriEvent(studioApi.listenDanmuAvatarResolved, (payload) => {
-    setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload));
-  });
 
   useTauriEvent(studioApi.listenStudioState, (event) => {
     switch (event.kind) {

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pin, Send, SmilePlus, X } from "lucide-react";
 import { studioApi } from "../services/studioApi";
-import type { AppConfig, DanmuMsg, LiveEmoticonPackage, User } from "../types/studio";
+import type { AppConfig, LiveEmoticonPackage, StudioStateEvent, User } from "../types/studio";
 import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../utils/danmu";
 import { t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
-import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "../hooks/studio/realtimeDanmu";
+import { useDanmuMessageFeed } from "../hooks/studio/useDanmuMessageFeed";
 import { DanmuOverlayMessageRow } from "../features/danmu/DanmuOverlayMessageRow";
 import { useTauriEvent } from "../hooks/useTauriEvent";
 
@@ -21,7 +21,6 @@ const resolveEmoticonStyle = (width: number, height: number, targetHeight: numbe
 export function DanmuOverlayApp() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [danmus, setDanmus] = useState<DanmuMsg[]>([]);
   const [danmuText, setDanmuText] = useState("");
   const [liveEmoticonPackages, setLiveEmoticonPackages] = useState<LiveEmoticonPackage[]>([]);
   const [liveEmoticonsLoading, setLiveEmoticonsLoading] = useState(false);
@@ -40,6 +39,12 @@ export function DanmuOverlayApp() {
     () => createLiveEmoticonIndex(liveEmoticonPackages),
     [liveEmoticonPackages],
   );
+  const { danmus, setDanmus } = useDanmuMessageFeed({
+    localeSetting: locale,
+    liveEmoticonMap,
+    currentUserUid: currentUser?.uid,
+    maxMessages: 160,
+  });
   const orderedDanmus = useMemo(() => [...danmus].slice(0, 160).reverse(), [danmus]);
   const panelOpacity = Math.max(40, Math.min(appConfig?.danmu_overlay_opacity ?? 55, 100));
   const panelOpacityRatio = panelOpacity / 100;
@@ -47,30 +52,13 @@ export function DanmuOverlayApp() {
   const controlBorder = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.15, 0.05)})`;
   const controlButtonBg = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.1, 0.03)})`;
 
-  const resolveDanmuSegments = useCallback(
-    (message: DanmuMsg): DanmuMsg => {
-      if (message.type !== "danmu" || (message.segments && message.segments.length > 0)) {
-        return message;
-      }
-      const fallback = createSelfDanmuMessage(
-        message.content,
-        message.sender,
-        liveEmoticonMap,
-        {
-          sender_uid: message.sender_uid,
-          sender_role: message.sender_role,
-          sender_name_color: message.sender_name_color,
-          sender_guard_level: message.sender_guard_level,
-          sender_face: message.sender_face,
-        },
-      );
-      return {
-        ...message,
-        segments: fallback.segments,
-      };
-    },
-    [liveEmoticonMap],
-  );
+  const refreshCurrentUser = useCallback(async () => {
+    const res = await studioApi.loadSavedConfig().catch(() => null);
+    if (!res || res.code !== 0) {
+      return;
+    }
+    setCurrentUser(res.data ?? null);
+  }, []);
 
   useWindowDrag(rootDragRef);
 
@@ -92,9 +80,16 @@ export function DanmuOverlayApp() {
   }, []);
 
   useEffect(() => {
-    let active = true;
+    const uid = currentUser?.uid?.trim();
+    if (!uid) {
+      setLiveEmoticonPackages([]);
+      setLiveEmoticonsLoading(false);
+      return;
+    }
 
+    let active = true;
     setLiveEmoticonsLoading(true);
+
     void studioApi.getLiveEmoticons().then((res) => {
       if (!active) {
         return;
@@ -106,62 +101,28 @@ export function DanmuOverlayApp() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentUser?.uid]);
 
-  useEffect(() => {
-    let active = true;
-    void studioApi.getRecentDanmu().then((res) => {
-      if (!active || res.code !== 0 || !Array.isArray(res.data)) {
-        return;
-      }
-      const recent = [...res.data].map(resolveDanmuSegments).reverse();
-      setDanmus((prev) => {
-        if (prev.length === 0) {
-          return recent.slice(0, 160);
-        }
-        const seen = new Set(prev.map((item) => item.id));
-        const appended = recent.filter((item) => !seen.has(item.id));
-        if (appended.length === 0) {
-          return prev;
-        }
-        return [...prev, ...appended].slice(0, 160);
-      });
-    });
-    return () => {
-      active = false;
-    };
-  }, [resolveDanmuSegments]);
+  useTauriEvent(studioApi.listenStudioState, (event: StudioStateEvent) => {
+    if (event.kind !== "runtime.snapshot") {
+      return;
+    }
 
-  useEffect(() => {
-    let active = true;
+    const nextUidRaw = event.data?.session?.uid;
+    const nextUid = typeof nextUidRaw === "number" && Number.isFinite(nextUidRaw)
+      ? String(nextUidRaw)
+      : "";
+    const currentUid = currentUser?.uid?.trim() || "";
 
-    const refreshCurrentUser = async () => {
-      const res = await studioApi.loadSavedConfig().catch(() => null);
-      if (!active || !res || res.code !== 0) {
-        return;
-      }
-      setCurrentUser(res.data ?? null);
-    };
-
-    void refreshCurrentUser();
-    const timer = window.setInterval(() => {
+    // Refresh only when auth context changes or after explicit account commands.
+    if (
+      nextUid !== currentUid ||
+      event.source === "command.poll_login_status" ||
+      event.source === "command.switch_account" ||
+      event.source === "command.logout"
+    ) {
       void refreshCurrentUser();
-    }, 15_000);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  useTauriEvent(studioApi.listenDanmuMessage, (message) => {
-    setDanmus((prev) =>
-      applyIncomingRealtimeMessage(prev, resolveDanmuSegments(message), locale).slice(0, 160),
-    );
-  });
-
-  useTauriEvent(studioApi.listenDanmuAvatarResolved, (payload) => {
-    setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload).slice(0, 160));
+    }
   });
 
   useTauriEvent(studioApi.listenDanmuOverlaySettings, (payload) => {
@@ -210,13 +171,6 @@ export function DanmuOverlayApp() {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [orderedDanmus.length]);
-
-  useEffect(() => {
-    if (liveEmoticonMap.size === 0) {
-      return;
-    }
-    setDanmus((prev) => prev.map(resolveDanmuSegments).slice(0, 160));
-  }, [liveEmoticonMap, resolveDanmuSegments]);
 
   const insertEmoticon = (text: string) => {
     const input = textareaRef.current;

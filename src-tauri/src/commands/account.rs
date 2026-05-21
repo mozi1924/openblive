@@ -210,6 +210,7 @@ pub async fn poll_login_status(
     drop(runtime);
     crate::tray::refresh_tray_menu(&app);
     ensure_auto_start_danmu_monitor(&app, &state, "command.poll_login_status.auto_start").await;
+    emit_runtime_snapshot(&app, &state, "command.poll_login_status").await;
     Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }
 
@@ -370,7 +371,11 @@ pub async fn logout(app: AppHandle, req: UidReq, state: State<'_, AppState>) -> 
         runtime.session = Default::default();
     }
     save_config(&state.config_path, &runtime.config, &state.master_key);
+    let should_emit_snapshot = runtime.config.current_uid.is_none() && runtime.session.uid == 0;
     drop(runtime);
+    if should_emit_snapshot {
+        emit_runtime_snapshot(&app, &state, "command.logout").await;
+    }
     crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(json!({})))
 }

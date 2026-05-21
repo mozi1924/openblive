@@ -11,7 +11,6 @@ import type {
   User,
 } from "../types/studio";
 import { writeClipboardText } from "../utils/clipboard";
-import { createSelfDanmuMessage } from "../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
 import {
@@ -26,6 +25,7 @@ import { useDanmuVoteController } from "./studio/useDanmuVoteController";
 import { useStudioControllerEffects } from "./studio/useStudioControllerEffects";
 import { useAccountController } from "./studio/useAccountController";
 import { useLiveInteractionActions } from "./studio/useLiveInteractionActions";
+import { useDanmuMessageFeed } from "./studio/useDanmuMessageFeed";
 
 type ConfirmModalTone = "primary" | "danger";
 
@@ -107,7 +107,6 @@ export function useStudioController() {
   const [danmuText, setDanmuText] = useState("");
   const [danmuListening, setDanmuListening] = useState(false);
   const [danmuOverlayVisible, setDanmuOverlayVisible] = useState(false);
-  const [danmus, setDanmus] = useState<DanmuMsg[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
 
   const [faceQr, setFaceQr] = useState("");
@@ -545,56 +544,22 @@ export function useStudioController() {
     await syncTrayMenu();
   }, [append, localeSetting, syncTrayMenu]);
 
-  const resolveDanmuSegments = useCallback(
-    (message: DanmuMsg): DanmuMsg => {
-      if (message.type !== "danmu" || (message.segments && message.segments.length > 0)) {
-        return message;
+  const handleRealtimeDanmuMessage = useCallback(
+    (message: DanmuMsg) => {
+      if (message.cmd === "DM_INTERACTION" && message.interaction_event_type === 101) {
+        scheduleLiveVoteSync();
       }
-      const fallback = createSelfDanmuMessage(
-        message.content,
-        message.sender,
-        liveEmoticonMap,
-        {
-          sender_uid: message.sender_uid,
-          sender_role: message.sender_role,
-          sender_name_color: message.sender_name_color,
-          sender_guard_level: message.sender_guard_level,
-          sender_face: message.sender_face,
-        },
-      );
-      return {
-        ...message,
-        segments: fallback.segments,
-      };
+      append(tf(localeSetting, "ui.ctrl.danmu_event", { cmd: message.type.toUpperCase() }));
     },
-    [liveEmoticonMap],
+    [append, localeSetting, scheduleLiveVoteSync],
   );
 
-  const loadRecentDanmu = useCallback(async () => {
-    const res = await studioApi.getRecentDanmu().catch(() => null);
-    if (!res || res.code !== 0 || !Array.isArray(res.data)) {
-      return;
-    }
-    const recent = [...res.data].map(resolveDanmuSegments).reverse();
-    setDanmus((prev) => {
-      if (prev.length === 0) {
-        return recent;
-      }
-      const seen = new Set(prev.map((item) => item.id));
-      const appended = recent.filter((item) => !seen.has(item.id));
-      if (appended.length === 0) {
-        return prev;
-      }
-      return [...prev, ...appended];
-    });
-  }, [resolveDanmuSegments]);
-
-  useEffect(() => {
-    if (liveEmoticonMap.size === 0) {
-      return;
-    }
-    setDanmus((prev) => prev.map(resolveDanmuSegments));
-  }, [liveEmoticonMap, resolveDanmuSegments]);
+  const { danmus, setDanmus } = useDanmuMessageFeed({
+    localeSetting,
+    liveEmoticonMap,
+    currentUserUid: hasLiveAuth ? currentUser?.uid : undefined,
+    onRealtimeMessage: handleRealtimeDanmuMessage,
+  });
 
   const accountController = useAccountController({
     localeSetting,
@@ -783,7 +748,6 @@ export function useStudioController() {
     clearDanmuAssetsAndVoteState,
     syncLiveRoomProfile,
     loadLiveEmoticons,
-    loadRecentDanmu,
     clearLiveVoteState,
     loadLiveVoteData,
     loadLiveOnlineRank,
@@ -793,9 +757,6 @@ export function useStudioController() {
     cancelQrcodeLogin,
     pollLogin,
     localeSetting,
-    liveEmoticonMap,
-    setDanmus,
-    scheduleLiveVoteSync,
     append,
     clearLiveVoteSyncTimer,
     setSession,
