@@ -5,7 +5,7 @@ import {
   SmilePlus,
   Terminal,
 } from "lucide-react";
-import { DanmuCard, canMergeDanmu, resolveEmoticonStyle } from "./DanmuMessageCard";
+import { DanmuCard, isSelfMessage, resolveEmoticonStyle } from "./DanmuMessageCard";
 import type {
   DanmuMsg,
   LiveEmoticonPackage,
@@ -48,13 +48,6 @@ type DanmuTabProps = {
   onSendDanmu: (event: React.FormEvent) => Promise<void>;
 };
 
-type DanmuRenderState = {
-  message: DanmuMsg;
-  mergeWithAbove: boolean;
-  mergeWithBelow: boolean;
-  showSenderMeta: boolean;
-};
-
 export function DanmuTab({
   locale,
   currentUser,
@@ -93,23 +86,65 @@ export function DanmuTab({
     () => liveEmoticonPackages.some((pkg) => pkg.emoticons.length > 0),
     [liveEmoticonPackages],
   );
-  const renderedDanmus = useMemo<DanmuRenderState[]>(
-    () =>
-      danmus.map((message, index) => {
-        const newerMessage = danmus[index - 1];
-        const olderMessage = danmus[index + 1];
-        const mergeWithBelow = canMergeDanmu(message, newerMessage, currentUser, locale);
-        const mergeWithAbove = canMergeDanmu(message, olderMessage, currentUser, locale);
+  type DanmuGroupItem = {
+    id: string;
+    messages: DanmuMsg[];
+  };
 
-        return {
-          message,
-          mergeWithAbove,
-          mergeWithBelow,
-          showSenderMeta: true,
+  const groupedDanmus = useMemo<DanmuGroupItem[]>(() => {
+    const result: DanmuGroupItem[] = [];
+    let currentGroup: DanmuGroupItem | null = null;
+
+    // Build the groups chronologically (oldest to newest)
+    for (let i = danmus.length - 1; i >= 0; i--) {
+      const msg = danmus[i];
+      const rawType = String(msg.type ?? "");
+
+      const isEvent = (
+        rawType === "system" ||
+        rawType === "interact" ||
+        rawType === "moderation" ||
+        rawType === "live_state" ||
+        rawType === "recall"
+      );
+      const isSpecial = (
+        rawType === "superchat" ||
+        rawType === "gift" ||
+        rawType === "guard"
+      );
+
+      if (isEvent || isSpecial) {
+        currentGroup = null;
+        result.push({
+          id: msg.id,
+          messages: [msg],
+        });
+        continue;
+      }
+
+      // Standard chat message
+      const isMe = isSelfMessage(msg, currentUser, locale);
+      const groupIsMe = currentGroup && isSelfMessage(currentGroup.messages[0], currentUser, locale);
+      
+      const sameSender = currentGroup && (
+        typeof currentGroup.messages[0].sender_uid === "number" && typeof msg.sender_uid === "number"
+          ? currentGroup.messages[0].sender_uid === msg.sender_uid
+          : currentGroup.messages[0].sender === msg.sender
+      );
+
+      if (currentGroup && groupIsMe === isMe && sameSender) {
+        currentGroup.messages.push(msg);
+      } else {
+        currentGroup = {
+          id: msg.id,
+          messages: [msg],
         };
-      }),
-    [currentUser, danmus, locale],
-  );
+        result.push(currentGroup);
+      }
+    }
+
+    return result.reverse();
+  }, [danmus, currentUser, locale]);
 
   useEffect(() => {
     if (!openPanel) {
@@ -174,15 +209,12 @@ export function DanmuTab({
             </p>
           </div>
         ) : (
-          renderedDanmus.map((item) => (
+          groupedDanmus.map((item) => (
             <DanmuCard
-              key={item.message.id}
-              message={item.message}
+              key={item.id}
+              messages={item.messages}
               locale={locale}
               currentUser={currentUser}
-              mergeWithAbove={item.mergeWithAbove}
-              mergeWithBelow={item.mergeWithBelow}
-              showSenderMeta={item.showSenderMeta}
             />
           ))
         )}

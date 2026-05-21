@@ -5,7 +5,7 @@ import type { DanmuMsg, LiveProfileState, Session } from "../../types/studio";
 import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
 import { tagsToKey } from "./controllerHelpers";
-import { applyIncomingRealtimeMessage } from "./realtimeDanmu";
+import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "./realtimeDanmu";
 
 type UseStudioControllerEffectsParams = {
   title: string;
@@ -218,6 +218,22 @@ export function useStudioControllerEffects({
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [append, clearLiveVoteSyncTimer, liveEmoticonMap, localeSetting, scheduleLiveVoteSync, setDanmus]);
+
+  useEffect(() => {
+    let active = true;
+
+    const unlistenPromise = studioApi.listenDanmuAvatarResolved((payload) => {
+      if (!active) {
+        return;
+      }
+      setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload));
+    });
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [setDanmus]);
 
   useEffect(() => {
     let active = true;

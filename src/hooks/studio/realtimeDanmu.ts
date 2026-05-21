@@ -1,4 +1,4 @@
-import type { DanmuMsg } from "../../types/studio";
+import type { DanmuAvatarResolvedEvent, DanmuMsg } from "../../types/studio";
 import { tf, type LocaleSetting } from "../../utils/i18n";
 import { upsertIncomingDanmuMessage } from "../../utils/danmu";
 
@@ -115,4 +115,29 @@ export const applyIncomingRealtimeMessage = (
   }
 
   return upsertIncomingDanmuMessage(prev, incoming);
+};
+
+export const applyResolvedDanmuAvatar = (
+  prev: DanmuMsg[],
+  incoming: DanmuAvatarResolvedEvent,
+): DanmuMsg[] => {
+  const uid = Number.parseInt(incoming.uid, 10);
+  const senderFace = incoming.sender_face.trim();
+  if (!Number.isFinite(uid) || !senderFace) {
+    return prev;
+  }
+
+  let changed = false;
+  const next = prev.map((message) => {
+    if (message.sender_uid !== uid || message.sender_face === senderFace) {
+      return message;
+    }
+    changed = true;
+    return {
+      ...message,
+      sender_face: senderFace,
+    };
+  });
+
+  return changed ? next : prev;
 };

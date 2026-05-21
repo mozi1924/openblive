@@ -5,7 +5,7 @@ import type { AppConfig, DanmuMsg, LiveEmoticonPackage, User } from "../types/st
 import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../utils/danmu";
 import { t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
-import { applyIncomingRealtimeMessage } from "../hooks/studio/realtimeDanmu";
+import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "../hooks/studio/realtimeDanmu";
 import { DanmuOverlayMessageRow } from "../features/danmu/DanmuOverlayMessageRow";
 
 const resolveEmoticonStyle = (width: number, height: number, targetHeight: number) => {
@@ -128,6 +128,22 @@ export function DanmuOverlayApp() {
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, [liveEmoticonMap, locale]);
+
+  useEffect(() => {
+    let active = true;
+
+    const unlistenPromise = studioApi.listenDanmuAvatarResolved((payload) => {
+      if (!active) {
+        return;
+      }
+      setDanmus((prev) => applyResolvedDanmuAvatar(prev, payload).slice(0, 160));
+    });
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;

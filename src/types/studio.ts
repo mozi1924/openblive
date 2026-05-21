@@ -50,6 +50,11 @@ export type DanmuOverlaySettingsEvent = {
   always_on_top: boolean;
 };
 
+export type DanmuAvatarResolvedEvent = {
+  uid: string;
+  sender_face: string;
+};
+
 export type Session = {
   uid: number;
   room_id: string;

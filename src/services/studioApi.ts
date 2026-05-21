@@ -4,6 +4,7 @@ import type {
   AccountList,
   AppLogEvent,
   AppConfig,
+  DanmuAvatarResolvedEvent,
   DanmuMsg,
   DanmuOverlaySettingsEvent,
   LinkageStatus,
@@ -118,6 +119,8 @@ export const studioApi = {
   clearAppLogs: () => invokeCommand("clear_app_logs"),
   listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
     listen<DanmuMsg>("danmu-message", (event) => handler(event.payload)),
+  listenDanmuAvatarResolved: (handler: (payload: DanmuAvatarResolvedEvent) => void) =>
+    listen<DanmuAvatarResolvedEvent>("danmu-avatar-resolved", (event) => handler(event.payload)),
   listenAppLog: (handler: (payload: AppLogEvent) => void) =>
     listen<AppLogEvent>("app-log", (event) => handler(event.payload)),
   listenStudioState: (handler: (payload: StudioStateEvent) => void) =>
