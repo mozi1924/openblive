@@ -12,10 +12,12 @@ type HeaderBarProps = {
   danmuCount: number;
   danmuListening: boolean;
   danmuOverlayVisible: boolean;
+  liveOnlineRankPanelOpen: boolean;
   onStartDanmu: () => Promise<void>;
   onStopDanmu: () => Promise<void>;
   onShowDanmuOverlay: () => Promise<void>;
   onHideDanmuOverlay: () => Promise<void>;
+  onToggleLiveOnlineRankPanel: () => void;
   onClearDanmus: () => void;
 };
 
@@ -28,10 +30,12 @@ export function HeaderBar({
   danmuCount,
   danmuListening,
   danmuOverlayVisible,
+  liveOnlineRankPanelOpen,
   onStartDanmu,
   onStopDanmu,
   onShowDanmuOverlay,
   onHideDanmuOverlay,
+  onToggleLiveOnlineRankPanel,
   onClearDanmus,
 }: HeaderBarProps) {
   const title = t(locale, `ui.header.title.${activeTab}`);
@@ -111,6 +115,19 @@ export function HeaderBar({
                   ? t(locale, "ui.overlay.hide")
                   : t(locale, "ui.overlay.show")}
               </span>
+            </button>
+
+            <button
+              onClick={onToggleLiveOnlineRankPanel}
+              className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                liveOnlineRankPanelOpen
+                  ? "border border-bili-blue/30 bg-bili-blue/15 text-bili-blue"
+                  : "border border-white/8 bg-white/5 text-gray-200 hover:border-white/15 hover:bg-white/10"
+              }`}
+              title={t(locale, "ui.danmu.online_rank.toggle")}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>{t(locale, "ui.danmu.online_rank.panel_title")}</span>
             </button>
 
             <button

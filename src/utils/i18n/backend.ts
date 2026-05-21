@@ -23,6 +23,7 @@ export const backendZhCN: Record<string, string> = {
   "i18n.live.error.stop_live_failed": "停播失败",
   "i18n.live.error.send_danmu_failed": "发送失败",
   "i18n.live.error.fetch_live_emoticons_failed": "获取直播表情失败",
+  "i18n.live.error.fetch_live_online_rank_failed": "获取在线观众榜失败",
   "i18n.live.error.fetch_live_vote_panel_failed": "获取直播投票信息失败",
   "i18n.live.error.fetch_live_vote_history_failed": "获取直播投票历史失败",
   "i18n.live.error.create_live_vote_failed": "创建直播投票失败",
@@ -111,6 +112,7 @@ export const backendEnUS: Record<string, string> = {
   "i18n.live.error.stop_live_failed": "Failed to stop live",
   "i18n.live.error.send_danmu_failed": "Failed to send",
   "i18n.live.error.fetch_live_emoticons_failed": "Failed to load live emoticons",
+  "i18n.live.error.fetch_live_online_rank_failed": "Failed to load online audience rank",
   "i18n.live.error.fetch_live_vote_panel_failed": "Failed to load live vote details",
   "i18n.live.error.fetch_live_vote_history_failed": "Failed to load live vote history",
   "i18n.live.error.create_live_vote_failed": "Failed to create live vote",
@@ -157,4 +159,3 @@ export const backendEnUS: Record<string, string> = {
   "i18n.account.error.account_login_invalid": "Account session is invalid, please log in again",
   "i18n.account.user.unknown_name": "Unknown user",
 };
-

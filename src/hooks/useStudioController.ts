@@ -67,6 +67,7 @@ const MANUAL_SAVE_APP_CONFIG_KEYS = [
 
 type ManualSaveConfigKey = (typeof MANUAL_SAVE_APP_CONFIG_KEYS)[number];
 type AppConfigSnapshot = Pick<AppConfig, ManualSaveConfigKey>;
+const LIVE_ONLINE_RANK_POLL_INTERVAL_MS = 5_000;
 
 const buildAppConfigSnapshot = (config: AppConfig): AppConfigSnapshot =>
   MANUAL_SAVE_APP_CONFIG_KEYS.reduce((acc, key) => {
@@ -79,6 +80,7 @@ const buildAppConfigSnapshot = (config: AppConfig): AppConfigSnapshot =>
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
+  const [showLiveOnlineRankPanel, setShowLiveOnlineRankPanel] = useState(false);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
@@ -144,6 +146,7 @@ export function useStudioController() {
   const childRef = useRef("");
   const syncStatusCacheHintRef = useRef("");
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
+  const liveOnlineRankPollingRef = useRef(false);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   useWindowDrag(sidebarDragRef, headerDragRef);
@@ -221,6 +224,8 @@ export function useStudioController() {
       liveEmoticonMap,
       liveVotePanel,
       liveVoteHistory,
+      liveOnlineRankData,
+      liveOnlineRankLoading,
       liveVoteLoading,
       liveVoteSubmitting,
       liveVoteTerminating,
@@ -234,6 +239,7 @@ export function useStudioController() {
       setLiveVoteDuration,
       loadLiveEmoticons,
       loadLiveVoteData,
+      loadLiveOnlineRank,
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       setLiveVoteQuestion: updateLiveVoteQuestion,
@@ -311,6 +317,47 @@ export function useStudioController() {
     parentRef.current = parent;
     childRef.current = child;
   }, [child, parent]);
+
+  useEffect(() => {
+    if (activeTab !== "danmu") {
+      setShowLiveOnlineRankPanel(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (
+      activeTab !== "danmu" ||
+      !showLiveOnlineRankPanel ||
+      !currentUser?.uid ||
+      !session?.room_id
+    ) {
+      return;
+    }
+
+    let alive = true;
+    const refresh = async () => {
+      if (!alive || liveOnlineRankPollingRef.current) {
+        return;
+      }
+      liveOnlineRankPollingRef.current = true;
+      try {
+        await loadLiveOnlineRank({ silent: true });
+      } finally {
+        liveOnlineRankPollingRef.current = false;
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, LIVE_ONLINE_RANK_POLL_INTERVAL_MS);
+
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      liveOnlineRankPollingRef.current = false;
+    };
+  }, [activeTab, currentUser?.uid, loadLiveOnlineRank, session?.room_id, showLiveOnlineRankPanel]);
 
   const syncTrayMenu = useCallback(async () => {
     await studioApi.refreshTrayMenu().catch(() => undefined);
@@ -687,6 +734,7 @@ export function useStudioController() {
     loadLiveEmoticons,
     clearLiveVoteState,
     loadLiveVoteData,
+    loadLiveOnlineRank,
     qrcodeKey,
     qrLoginExpiresAt,
     setQrLoginRemainingSeconds,
@@ -729,6 +777,8 @@ export function useStudioController() {
       liveEmoticonsLoading,
       liveVotePanel,
       liveVoteHistory,
+      liveOnlineRankData,
+      liveOnlineRankLoading,
       liveVoteLoading,
       liveVoteSubmitting,
       liveVoteTerminating,
@@ -756,6 +806,7 @@ export function useStudioController() {
       qrLoginTimedOut,
       rtmp,
       session,
+      showLiveOnlineRankPanel,
       showConfirmModal: confirmModal.show,
       showFaceModal,
       showLogs,
@@ -789,6 +840,8 @@ export function useStudioController() {
         setShowFaceModal(false);
         await startLive("face_retry");
       },
+      toggleLiveOnlineRankPanel: () => setShowLiveOnlineRankPanel((prev) => !prev),
+      closeLiveOnlineRankPanel: () => setShowLiveOnlineRankPanel(false),
       setActiveTab,
       setChild: changeChild,
       setDanmuText,
@@ -804,6 +857,7 @@ export function useStudioController() {
       addTag,
       removeTag,
       refreshLiveVoteData: () => loadLiveVoteData(),
+      refreshLiveOnlineRank: () => loadLiveOnlineRank(),
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       setLiveVoteQuestion: updateLiveVoteQuestion,

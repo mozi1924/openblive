@@ -7,6 +7,7 @@ import { ConfirmActionModal } from "./components/shared/ConfirmActionModal";
 import { FaceAuthModal } from "./components/shared/FaceAuthModal";
 import { AccountTab } from "./features/account/AccountTab";
 import { DanmuTab } from "./features/danmu/DanmuTab";
+import { LiveOnlineRankPanel } from "./features/danmu/LiveOnlineRankPanel";
 import { SettingsTab } from "./features/settings/SettingsTab";
 import { StreamTab } from "./features/stream/StreamTab";
 import { useStudioController } from "./hooks/useStudioController";
@@ -49,10 +50,17 @@ function App() {
           danmuCount={state.danmus.length}
           danmuListening={state.danmuListening}
           danmuOverlayVisible={state.danmuOverlayVisible}
+          liveOnlineRankPanelOpen={state.showLiveOnlineRankPanel}
           onStartDanmu={actions.startDanmu}
           onStopDanmu={actions.stopDanmu}
           onShowDanmuOverlay={actions.showDanmuOverlay}
           onHideDanmuOverlay={actions.hideDanmuOverlay}
+          onToggleLiveOnlineRankPanel={() => {
+            actions.toggleLiveOnlineRankPanel();
+            if (!state.showLiveOnlineRankPanel) {
+              void actions.refreshLiveOnlineRank();
+            }
+          }}
           onClearDanmus={actions.clearDanmus}
         />
 
@@ -182,6 +190,17 @@ function App() {
             logs={state.logs}
             onClearLogs={actions.clearLogs}
             onClose={actions.closeLogs}
+          />
+        )}
+
+        {state.activeTab === "danmu" && state.showLiveOnlineRankPanel && (
+          <LiveOnlineRankPanel
+            locale={locale}
+            liveOnlineRankLoading={state.liveOnlineRankLoading}
+            liveOnlineRankItems={state.liveOnlineRankData?.online_rank_items || []}
+            onlineAudienceCount={state.liveOnlineRankData?.online_num || 0}
+            onRefresh={actions.refreshLiveOnlineRank}
+            onClose={actions.closeLiveOnlineRankPanel}
           />
         )}
       </main>

@@ -40,11 +40,18 @@ const { mockStudioApi } = vi.hoisted(() => ({
     stopDanmuMonitor: vi.fn(),
     sendDanmu: vi.fn(),
     getLiveEmoticons: vi.fn(),
+    getLiveOnlineRank: vi.fn(),
+    getLiveVotePanel: vi.fn(),
+    getLiveVoteHistory: vi.fn(),
+    createLiveVote: vi.fn(),
+    terminateLiveVote: vi.fn(),
+    generateHttpUserAgent: vi.fn(),
     renderQrcode: vi.fn(),
     pushAppLog: vi.fn(),
     getAppLogs: vi.fn(),
     clearAppLogs: vi.fn(),
     listenDanmuMessage: vi.fn(),
+    listenDanmuAvatarResolved: vi.fn(),
     listenAppLog: vi.fn(),
     listenStudioState: vi.fn(),
     listenDanmuOverlaySettings: vi.fn(),
@@ -159,6 +166,7 @@ beforeEach(() => {
   mockStudioApi.refreshTrayMenu.mockResolvedValue(ok({}));
   mockStudioApi.getPartitions.mockResolvedValue(ok({ 手游: ["王者荣耀", "永劫无间"] }));
   mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
+  mockStudioApi.listenDanmuAvatarResolved.mockResolvedValue(() => undefined);
   mockStudioApi.listenAppLog.mockResolvedValue(() => undefined);
   mockStudioApi.listenStudioState.mockResolvedValue(() => undefined);
   mockStudioApi.listenDanmuOverlaySettings.mockResolvedValue(() => undefined);
@@ -170,6 +178,26 @@ beforeEach(() => {
   mockStudioApi.stopDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.sendDanmu.mockResolvedValue(ok({}));
   mockStudioApi.getLiveEmoticons.mockResolvedValue(ok([]));
+  mockStudioApi.getLiveOnlineRank.mockResolvedValue(
+    ok({
+      online_num: 0,
+      online_rank_items: [],
+    }),
+  );
+  mockStudioApi.getLiveVotePanel.mockResolvedValue(
+    ok({
+      vote_info: null,
+      templates: [],
+    }),
+  );
+  mockStudioApi.getLiveVoteHistory.mockResolvedValue(
+    ok({
+      history: [],
+    }),
+  );
+  mockStudioApi.createLiveVote.mockResolvedValue(ok({ interaction_id: 0 }));
+  mockStudioApi.terminateLiveVote.mockResolvedValue(ok({}));
+  mockStudioApi.generateHttpUserAgent.mockResolvedValue(ok({ user_agent: "ua" }));
   mockStudioApi.renderQrcode.mockResolvedValue(ok({ content: "", image_src: "" }));
   mockStudioApi.pushAppLog.mockResolvedValue(ok({ line: "" }));
   mockStudioApi.getAppLogs.mockResolvedValue(ok([]));

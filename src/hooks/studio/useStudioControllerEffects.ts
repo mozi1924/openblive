@@ -32,6 +32,7 @@ type UseStudioControllerEffectsParams = {
   loadLiveEmoticons: () => Promise<void>;
   clearLiveVoteState: () => void;
   loadLiveVoteData: (options?: { silent?: boolean }) => Promise<void>;
+  loadLiveOnlineRank: (options?: { silent?: boolean }) => Promise<void>;
   qrcodeKey: string;
   qrLoginExpiresAt: number | null;
   setQrLoginRemainingSeconds: Dispatch<SetStateAction<number>>;
@@ -79,6 +80,7 @@ export function useStudioControllerEffects({
   loadLiveEmoticons,
   clearLiveVoteState,
   loadLiveVoteData,
+  loadLiveOnlineRank,
   qrcodeKey,
   qrLoginExpiresAt,
   setQrLoginRemainingSeconds,
@@ -160,6 +162,13 @@ export function useStudioControllerEffects({
     }
     void loadLiveVoteData();
   }, [clearLiveVoteState, currentUserUid, loadLiveVoteData, sessionRoomId]);
+
+  useEffect(() => {
+    if (!currentUserUid || !sessionRoomId) {
+      return;
+    }
+    void loadLiveOnlineRank({ silent: true });
+  }, [currentUserUid, loadLiveOnlineRank, sessionRoomId]);
 
   useEffect(() => {
     if (!qrcodeKey || !qrLoginExpiresAt) {

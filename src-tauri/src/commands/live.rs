@@ -1,4 +1,5 @@
 use crate::bili::wbi_signed;
+use crate::avatar;
 use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
@@ -10,7 +11,7 @@ use crate::response::wrap_ok;
 use crate::state::AppState;
 use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use tauri::{AppHandle, State};
 
 mod client_version;
@@ -358,6 +359,185 @@ pub async fn get_live_vote_history(state: State<'_, AppState>) -> CmdResult {
         Err(error_message(
             &value,
             "i18n.live.error.fetch_live_vote_history_failed",
+        ))
+    }
+}
+
+#[tauri::command]
+pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
+    let (anchor_uid, room_id, _csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if room_id.is_empty() {
+        return Err("i18n.live.error.room_id_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/general-interface/v1/rank/getOnlineGoldRank"),
+            &[
+                ("roomId", room_id),
+                ("ruid", anchor_uid),
+                ("page", "1".to_string()),
+                ("pageSize", "50".to_string()),
+            ],
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code == 0 {
+        let mut runtime = state.runtime.lock().await;
+        if let Some(current_uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&current_uid) {
+                clear_user_auth_flags(user);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+
+        let normalize_face_url = |value: &str| {
+            let trimmed = value.trim();
+            if trimmed.starts_with("//") {
+                format!("https:{trimmed}")
+            } else if let Some(stripped) = trimmed.strip_prefix("http://") {
+                format!("https://{stripped}")
+            } else {
+                trimmed.to_string()
+            }
+        };
+
+        #[derive(Clone)]
+        struct RankEntry {
+            user_rank: u64,
+            uid: String,
+            name: String,
+            face_hint: String,
+        }
+
+        let rank_entries = value["data"]["OnlineRankItem"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|item| {
+                        let user_rank = item["userRank"].as_u64().unwrap_or(0);
+                        let uid = item["uid"]
+                            .as_u64()
+                            .map(|raw| raw.to_string())
+                            .or_else(|| {
+                                item["uid"]
+                                    .as_str()
+                                    .map(str::trim)
+                                    .filter(|raw| !raw.is_empty())
+                                    .map(str::to_string)
+                            })
+                            .unwrap_or_default();
+                        let name = item["name"]
+                            .as_str()
+                            .map(str::to_string)
+                            .or_else(|| item["uinfo"]["base"]["name"].as_str().map(str::to_string))
+                            .unwrap_or_default();
+                        let face_hint = item["face"]
+                            .as_str()
+                            .map(normalize_face_url)
+                            .or_else(|| {
+                                item["uinfo"]["base"]["face"]
+                                    .as_str()
+                                    .map(normalize_face_url)
+                            })
+                            .or_else(|| item["uinfo"]["face"].as_str().map(normalize_face_url))
+                            .unwrap_or_default();
+                        RankEntry {
+                            user_rank,
+                            uid,
+                            name,
+                            face_hint,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let mut avatar_requests = HashMap::new();
+        for entry in &rank_entries {
+            if entry.uid.is_empty() {
+                continue;
+            }
+            if avatar::load_cached_face_data_url(&state.config_path, &entry.uid).is_some() {
+                continue;
+            }
+            let fallback = if entry.face_hint.trim().is_empty() {
+                None
+            } else {
+                Some(entry.face_hint.clone())
+            };
+            avatar_requests.insert(entry.uid.clone(), fallback);
+        }
+        let resolved_faces = if avatar_requests.is_empty() {
+            HashMap::new()
+        } else {
+            match avatar::resolve_and_cache_face_data_urls(
+                &state.client,
+                &state.config_path,
+                &avatar_requests,
+            )
+            .await
+            {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    crate::runtime_warn!(
+                        "get_live_online_rank resolve avatars failed: {}",
+                        error
+                    );
+                    HashMap::new()
+                }
+            }
+        };
+
+        let online_num = value["data"]["onlineNum"].as_u64().unwrap_or(0);
+        let online_rank_items = rank_entries
+            .into_iter()
+            .map(|entry| {
+                let face = if entry.uid.is_empty() {
+                    entry.face_hint
+                } else {
+                    avatar::load_cached_face_data_url(&state.config_path, &entry.uid)
+                        .or_else(|| resolved_faces.get(&entry.uid).cloned())
+                        .unwrap_or(entry.face_hint)
+                };
+                json!({
+                    "user_rank": entry.user_rank,
+                    "uid": entry.uid,
+                    "name": entry.name,
+                    "face": face,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        Ok(wrap_ok(json!({
+            "online_num": online_num,
+            "online_rank_items": online_rank_items,
+        })))
+    } else {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "get_live_online_rank code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        Err(error_message(
+            &value,
+            "i18n.live.error.fetch_live_online_rank_failed",
         ))
     }
 }

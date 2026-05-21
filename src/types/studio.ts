@@ -319,6 +319,18 @@ export type LiveVotePanelData = {
   templates: LiveVoteTemplate[];
 };
 
+export type LiveOnlineRankItem = {
+  user_rank: number;
+  uid: string;
+  name: string;
+  face: string;
+};
+
+export type LiveOnlineRankData = {
+  online_num: number;
+  online_rank_items: LiveOnlineRankItem[];
+};
+
 export type LiveVoteHistoryData = {
   history: LiveVoteInfo[];
 };

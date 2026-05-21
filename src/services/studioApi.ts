@@ -12,6 +12,7 @@ import type {
   LiveEmoticonPackage,
   LiveVoteCreateResp,
   LiveDashboardSnapshot,
+  LiveOnlineRankData,
   LiveVoteHistoryData,
   LiveVotePanelData,
   QrPayload,
@@ -93,6 +94,7 @@ export const studioApi = {
   getLiveEmoticons: () => invokeCommand<LiveEmoticonPackage[]>("get_live_emoticons"),
   getLiveDashboardSnapshot: () =>
     invokeCommand<LiveDashboardSnapshot>("get_live_dashboard_snapshot"),
+  getLiveOnlineRank: () => invokeCommand<LiveOnlineRankData>("get_live_online_rank"),
   getLiveVotePanel: () => invokeCommand<LiveVotePanelData>("get_live_vote_panel"),
   getLiveVoteHistory: () => invokeCommand<LiveVoteHistoryData>("get_live_vote_history"),
   createLiveVote: (

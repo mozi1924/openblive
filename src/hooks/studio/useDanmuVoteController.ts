@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import { studioApi } from "../../services/studioApi";
 import type {
   LiveEmoticonPackage,
+  LiveOnlineRankData,
   LiveVoteInfo,
   LiveVotePanelData,
 } from "../../types/studio";
@@ -43,6 +44,8 @@ export function useDanmuVoteController({
   const [liveEmoticonsLoading, setLiveEmoticonsLoading] = useState(false);
   const [liveVotePanel, setLiveVotePanel] = useState<LiveVotePanelData | null>(null);
   const [liveVoteHistory, setLiveVoteHistory] = useState<LiveVoteInfo[]>([]);
+  const [liveOnlineRankData, setLiveOnlineRankData] = useState<LiveOnlineRankData | null>(null);
+  const [liveOnlineRankLoading, setLiveOnlineRankLoading] = useState(false);
   const [liveVoteLoading, setLiveVoteLoading] = useState(false);
   const [liveVoteSubmitting, setLiveVoteSubmitting] = useState(false);
   const [liveVoteTerminating, setLiveVoteTerminating] = useState(false);
@@ -72,6 +75,8 @@ export function useDanmuVoteController({
   const clearLiveVoteState = useCallback(() => {
     setLiveVotePanel(null);
     setLiveVoteHistory([]);
+    setLiveOnlineRankData(null);
+    setLiveOnlineRankLoading(false);
     setLiveVoteLoading(false);
     setLiveVoteSubmitting(false);
     setLiveVoteTerminating(false);
@@ -188,6 +193,75 @@ export function useDanmuVoteController({
 
       if (requestUid === activeUidRef.current) {
         setLiveVoteLoading(false);
+      }
+    },
+    [activeUidRef, append, localeSetting, sessionRoomId],
+  );
+
+  const loadLiveOnlineRank = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!activeUidRef.current || !sessionRoomId) {
+        setLiveOnlineRankData(null);
+        return;
+      }
+
+      const requestUid = activeUidRef.current;
+      if (!options?.silent) {
+        setLiveOnlineRankLoading(true);
+      }
+
+      try {
+        const res = await studioApi.getLiveOnlineRank();
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+
+        if (res.code === 0) {
+          const onlineRankItems = Array.isArray(res.data?.online_rank_items)
+            ? res.data.online_rank_items.map((item) => ({
+                user_rank: Number(item.user_rank ?? 0),
+                uid: String(item.uid ?? ""),
+                name: String(item.name ?? ""),
+                face: String(item.face ?? ""),
+              }))
+            : [];
+          setLiveOnlineRankData({
+            online_num: Number(res.data?.online_num ?? 0),
+            online_rank_items: onlineRankItems,
+          });
+          return;
+        }
+
+        setLiveOnlineRankData({
+          online_num: 0,
+          online_rank_items: [],
+        });
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_online_rank_load_failed", {
+              msg: resolveBackendMessage(res.msg, localeSetting),
+            }),
+          );
+        }
+      } catch (error) {
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        setLiveOnlineRankData({
+          online_num: 0,
+          online_rank_items: [],
+        });
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_online_rank_load_failed", {
+              msg: resolveBackendMessage(String(error), localeSetting),
+            }),
+          );
+        }
+      } finally {
+        if (requestUid === activeUidRef.current && !options?.silent) {
+          setLiveOnlineRankLoading(false);
+        }
       }
     },
     [activeUidRef, append, localeSetting, sessionRoomId],
@@ -368,6 +442,8 @@ export function useDanmuVoteController({
       liveEmoticonMap,
       liveVotePanel,
       liveVoteHistory,
+      liveOnlineRankData,
+      liveOnlineRankLoading,
       liveVoteLoading,
       liveVoteSubmitting,
       liveVoteTerminating,
@@ -381,6 +457,7 @@ export function useDanmuVoteController({
       setLiveVoteDuration,
       loadLiveEmoticons,
       loadLiveVoteData,
+      loadLiveOnlineRank,
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       setLiveVoteQuestion: updateLiveVoteQuestion,
