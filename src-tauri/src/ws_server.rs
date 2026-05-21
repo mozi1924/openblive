@@ -3,10 +3,12 @@ use axum::extract::{ConnectInfo, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use axum::Json;
 use axum::Router;
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::net::{IpAddr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -18,6 +20,8 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::{self, Duration};
 
 use crate::constants::CmdResult;
+use crate::emoticon::parse_live_emoticon_packages;
+use crate::endpoints;
 use crate::state::AppState;
 
 const WS_SERVER_DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:12450";
@@ -216,6 +220,10 @@ async fn run_ws_server(
         .route("/overlay", get(overlay_index_handler))
         .route("/overlay/{*path}", get(overlay_asset_handler))
         .route("/api/chat", get(chat_ws_handler))
+        .route(
+            "/api/text_emoticon_mappings",
+            get(text_emoticon_mappings_handler),
+        )
         .route("/ws", get(raw_ws_handler))
         .with_state(shared_state);
 
@@ -352,6 +360,25 @@ async fn chat_ws_handler(
 
     ws.on_upgrade(move |socket| compat_ws_session(socket, state))
         .into_response()
+}
+
+async fn text_emoticon_mappings_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Query(query): Query<TokenQuery>,
+    State(state): State<Arc<WsServerRuntimeState>>,
+) -> impl IntoResponse {
+    if !is_authorized(&headers, query.token.as_deref(), addr, &state) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+
+    let mappings = fetch_text_emoticon_mappings(&state.app).await;
+    let mut response = Json(json!({ "textEmoticons": mappings })).into_response();
+    response.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("private, max-age=60"),
+    );
+    response
 }
 
 async fn raw_ws_handler(
@@ -546,6 +573,67 @@ async fn raw_ws_session(socket: WebSocket, state: Arc<WsServerRuntimeState>) {
 
     event_pump.abort();
     writer.abort();
+}
+
+async fn fetch_text_emoticon_mappings(app: &AppHandle) -> Vec<Value> {
+    let app_state = app.state::<AppState>();
+    let (room_id, cookie) = {
+        let runtime = app_state.runtime.lock().await;
+        let Some(uid) = runtime.config.current_uid.clone() else {
+            return Vec::new();
+        };
+        let Some(user) = runtime.config.users.get(&uid) else {
+            return Vec::new();
+        };
+
+        let room_id = if user.room_id.trim().is_empty() {
+            runtime.session.room_id.clone()
+        } else {
+            user.room_id.clone()
+        };
+        if room_id.trim().is_empty() || user.cookie.trim().is_empty() {
+            return Vec::new();
+        }
+        (room_id, user.cookie.clone())
+    };
+
+    let value = match app_state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/web-ucenter/v2/emoticon/GetEmoticons"),
+            &[("platform", "pc".to_string()), ("room_id", room_id)],
+            &cookie,
+        )
+        .await
+    {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+
+    if value["code"].as_i64().unwrap_or(-1) != 0 {
+        return Vec::new();
+    }
+
+    let packages =
+        parse_live_emoticon_packages(&app_state.client, &app_state.config_path, &value).await;
+    let mut seen = HashSet::new();
+    let mut items = Vec::new();
+    for package in packages {
+        for emoticon in package.emoticons {
+            if emoticon.text.trim().is_empty() || emoticon.url.trim().is_empty() {
+                continue;
+            }
+            let dedup_key = format!("{}\u{1f}{}", emoticon.text, emoticon.url);
+            if !seen.insert(dedup_key) {
+                continue;
+            }
+            items.push(json!({
+                "keyword": emoticon.text,
+                "url": emoticon.url,
+            }));
+        }
+    }
+    items
 }
 
 async fn run_action(
@@ -941,18 +1029,33 @@ fn sanitize_overlay_subpath(path: &str) -> String {
 }
 
 fn overlay_roots(app: &AppHandle) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let mut push_unique = |path: PathBuf| {
+        if !roots.contains(&path) {
+            roots.push(path);
+        }
+    };
+
     if let Ok(resource_dir) = app.path().resource_dir() {
-        roots.push(resource_dir.clone());
-        roots.push(resource_dir.join("dist"));
-        roots.push(resource_dir.join("overlay-compat").join("dist"));
+        push_unique(resource_dir.clone());
+        push_unique(resource_dir.join("dist"));
+        push_unique(resource_dir.join("overlay-compat").join("dist"));
+        // Tauri v2 may place `bundle.resources` under `Resources/_up_/...`.
+        push_unique(resource_dir.join("_up_"));
+        push_unique(resource_dir.join("_up_").join("dist"));
+        push_unique(
+            resource_dir
+                .join("_up_")
+                .join("overlay-compat")
+                .join("dist"),
+        );
     }
     if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd.join("dist"));
-        roots.push(cwd.join("overlay-compat").join("dist"));
+        push_unique(cwd.join("dist"));
+        push_unique(cwd.join("overlay-compat").join("dist"));
         if let Some(parent) = cwd.parent() {
-            roots.push(parent.join("dist"));
-            roots.push(parent.join("overlay-compat").join("dist"));
+            push_unique(parent.join("dist"));
+            push_unique(parent.join("overlay-compat").join("dist"));
         }
     }
     roots

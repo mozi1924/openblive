@@ -305,6 +305,22 @@ export function useStudioControllerEffects({
         }
         break;
       }
+      case "danmu.monitor": {
+        if (event.source !== "command.switch_account.auto_resume") {
+          break;
+        }
+        const running = event.data?.running === true;
+        if (running) {
+          append(t(localeSetting, "ui.ctrl.switch_account_danmu_auto_resume_ok"));
+          break;
+        }
+        append(
+          tf(localeSetting, "ui.ctrl.switch_account_danmu_auto_resume_failed", {
+            msg: resolveBackendMessage(String(event.data?.msg || "unknown"), localeSetting),
+          }),
+        );
+        break;
+      }
       default:
         break;
     }

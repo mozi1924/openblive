@@ -64,15 +64,25 @@ struct DanmuTaskGuard {
     task_id: u64,
 }
 
+fn clear_danmu_task_if_current(runtime: &mut crate::state::RuntimeState, task_id: u64) -> bool {
+    if runtime.danmu_task_id != task_id {
+        return false;
+    }
+    runtime.danmu_task = None;
+    true
+}
+
 impl Drop for DanmuTaskGuard {
     fn drop(&mut self) {
         let app = self.app.clone();
         let task_id = self.task_id;
         tokio::spawn(async move {
             let state = app.state::<AppState>();
-            let mut runtime = state.runtime.lock().await;
-            if runtime.danmu_task_id == task_id {
-                runtime.danmu_task = None;
+            let should_emit_snapshot = {
+                let mut runtime = state.runtime.lock().await;
+                clear_danmu_task_if_current(&mut runtime, task_id)
+            };
+            if should_emit_snapshot {
                 emit_runtime_snapshot(&app, &state, "danmu.cleanup").await;
             }
         });
@@ -256,4 +266,20 @@ pub(crate) async fn stop_danmu_monitor_inner(state: &AppState) -> CmdResult {
         "stopped": stopped,
         "msg": "i18n.live.danmu_monitor_stopped"
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clear_danmu_task_if_current;
+    use crate::state::RuntimeState;
+
+    #[test]
+    fn clear_danmu_task_only_when_task_id_matches() {
+        let mut runtime = RuntimeState::default();
+        runtime.danmu_task_id = 42;
+
+        assert!(!clear_danmu_task_if_current(&mut runtime, 41));
+        assert!(clear_danmu_task_if_current(&mut runtime, 42));
+        assert!(runtime.danmu_task.is_none());
+    }
 }

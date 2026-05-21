@@ -139,13 +139,35 @@
 
 ### 项目构建与打包
 
-根据您当前的操作系统，运行以下命令可以将项目打包为原生安装包（如 Windows 的 `.msi`、macOS 的 `.dmg` 或 Linux 的 `.deb`）：
+本项目包含两套前端与一套 Rust 后端：
+
+- 主前端：根目录 `React + Vite`
+- Overlay 前端：`overlay-compat`（Vue2）
+- 桌面后端：`src-tauri`（Rust + Tauri）
+
+可按以下顺序进行本地验证：
 
 ```bash
-pnpm tauri build
+pnpm build:desktop      # 构建两套前端产物到 dist/
+pnpm build:backend      # 编译 Rust 后端（release）
+pnpm package:desktop    # Tauri 打包（会生成平台安装包）
 ```
 
 打包生成的文件将存放在 `src-tauri/target/release/bundle/` 目录下。
+
+也可以直接使用一键命令：
+
+```bash
+pnpm verify:release
+```
+
+### GitHub Release 自动构建
+
+仓库内已提供 GitHub Actions 工作流：`.github/workflows/release.yml`，用于在发布时自动构建并上传安装包到 GitHub Release。
+
+- 触发方式 1：推送版本标签（如 `v0.1.1`）
+- 触发方式 2：手动触发 `workflow_dispatch`
+- 构建平台：`macOS` / `Windows` / `Linux`
 
 ---
 

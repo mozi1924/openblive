@@ -117,8 +117,11 @@ const deferred = <T,>() => {
   return { promise, resolve };
 };
 
+let studioStateListener: ((payload: { kind: string; source: string; at: number; data?: Record<string, unknown> }) => void) | null = null;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  studioStateListener = null;
 
   mockStudioApi.syncLiveStatus.mockResolvedValue(ok(null));
   mockStudioApi.getSession.mockResolvedValue(ok(null));
@@ -168,7 +171,14 @@ beforeEach(() => {
   mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
   mockStudioApi.listenDanmuAvatarResolved.mockResolvedValue(() => undefined);
   mockStudioApi.listenAppLog.mockResolvedValue(() => undefined);
-  mockStudioApi.listenStudioState.mockResolvedValue(() => undefined);
+  mockStudioApi.listenStudioState.mockImplementation(async (handler) => {
+    studioStateListener = handler;
+    return () => {
+      if (studioStateListener === handler) {
+        studioStateListener = null;
+      }
+    };
+  });
   mockStudioApi.listenDanmuOverlaySettings.mockResolvedValue(() => undefined);
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
   mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
@@ -380,6 +390,103 @@ describe("useStudioController multi-account regressions", () => {
     expect(result.current.state.currentUser?.uid).toBe("2");
     expect(result.current.state.danmuListening).toBe(false);
     expect(result.current.state.danmus).toHaveLength(0);
+  });
+
+  it("restores danmu listening by runtime snapshot after account switch fallback", async () => {
+    const userA = makeUser("1", "A", "A-old");
+    const userB = makeUser("2", "B", "B-old");
+    let backendCurrentUid = "1";
+
+    mockStudioApi.refreshAllAccountProfiles.mockResolvedValue({
+      code: 1,
+      msg: "skip",
+    });
+    mockStudioApi.loadSavedConfig.mockImplementation(async () =>
+      ok(backendCurrentUid === "1" ? userA : userB),
+    );
+    mockStudioApi.getAccountList.mockImplementation(async () =>
+      ok({ list: [userA, userB], current_uid: backendCurrentUid }),
+    );
+    mockStudioApi.switchAccount.mockImplementation(async () => {
+      backendCurrentUid = "2";
+      return ok(userB);
+    });
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+
+    await act(async () => {
+      await result.current.actions.startDanmu();
+    });
+    expect(result.current.state.danmuListening).toBe(true);
+
+    await act(async () => {
+      await result.current.actions.switchAccount("2");
+    });
+    expect(result.current.state.danmuListening).toBe(false);
+
+    act(() => {
+      studioStateListener?.({
+        kind: "runtime.snapshot",
+        source: "command.switch_account",
+        at: Date.now(),
+        data: {
+          danmu_running: true,
+          session: {
+            uid: 2,
+            room_id: "2",
+            csrf: "csrf",
+            is_live: false,
+          },
+        },
+      });
+    });
+
+    expect(result.current.state.danmuListening).toBe(true);
+  });
+
+  it("logs switch-account auto resume danmu result events", async () => {
+    const user = makeUser("1", "A", "A-old");
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.pushAppLog.mockRejectedValue(new Error("log unavailable"));
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+
+    act(() => {
+      studioStateListener?.({
+        kind: "danmu.monitor",
+        source: "command.switch_account.auto_resume",
+        at: Date.now(),
+        data: {
+          running: true,
+          msg: "i18n.live.danmu_monitor_started",
+        },
+      });
+    });
+    await act(async () => {
+      await flush();
+    });
+    expect(
+      result.current.state.logs.some((line) => line.includes("自动恢复弹幕监听")),
+    ).toBe(true);
+
+    act(() => {
+      studioStateListener?.({
+        kind: "danmu.monitor",
+        source: "command.switch_account.auto_resume",
+        at: Date.now(),
+        data: {
+          running: false,
+          msg: "i18n.common.not_logged_in",
+        },
+      });
+    });
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.state.logs.some((line) => line.includes("恢复失败"))).toBe(true);
   });
 
   it("stops QR polling when login session times out", async () => {

@@ -5,6 +5,7 @@ The compatibility layer is designed for existing scripts/tools that already cons
 
 - Overlay URL: `GET /overlay`
 - Chat WebSocket: `GET /api/chat`
+- Text emoticon mappings: `GET /api/text_emoticon_mappings`
 - Overlay frontend source: `overlay-compat/` (migrated from `xfgryujk/blivechat` frontend)
 
 ## Important behavior
@@ -30,6 +31,15 @@ Server emits blivechat-style frames:
 - Super Chat delete: `cmd = 6` (when deletion IDs are available)
 
 Client heartbeat (`cmd = 0`) and join (`cmd = 1`) are supported.
+
+## `/api/text_emoticon_mappings` (compatible)
+For blivechat frontend compatibility, server now exposes:
+
+- `GET /api/text_emoticon_mappings`
+- Response shape: `{ "textEmoticons": [{ "keyword": "...", "url": "..." }, ...] }`
+
+Current implementation resolves mappings from the current logged-in session's live emoticon list.
+If account/room context is unavailable, it safely returns an empty list.
 
 ## Overlay page
 `/overlay` serves the compiled `blivechat`-compatible frontend (not a custom rewritten template).

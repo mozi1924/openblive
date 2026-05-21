@@ -7,6 +7,7 @@ use refresh::{refresh_accounts_batch, refresh_cookie_for_uid};
 use crate::avatar::{delete_avatar_cache, has_cached_face, refresh_avatar_cache, to_response_user};
 use crate::bili::fetch_full_user_data;
 use crate::client::parse_cookie_value;
+use crate::commands::live::start_danmu_monitor_for_ws;
 use crate::commands::system::render_qr_data_url;
 use crate::config::save_config;
 use crate::constants::CmdResult;
@@ -14,6 +15,7 @@ use crate::endpoints;
 use crate::models::{sync_live_profile_state_defaults, PollReq, UidReq, UserRecord};
 use crate::response::wrap_ok;
 use crate::state::{restore_session_from_current, AppState};
+use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
 use serde_json::json;
 use tauri::{AppHandle, State};
 
@@ -134,16 +136,15 @@ pub async fn poll_login_status(
         cookie_diagnostics(&cookie_header)
     );
 
-    let mut runtime = state.runtime.lock().await;
-    if let Some(task) = runtime.danmu_task.take() {
-        task.abort();
-    }
-    let old = runtime
-        .config
-        .users
-        .get(&uid_str)
-        .cloned()
-        .unwrap_or_default();
+    let old = {
+        let runtime = state.runtime.lock().await;
+        runtime
+            .config
+            .users
+            .get(&uid_str)
+            .cloned()
+            .unwrap_or_default()
+    };
     let user = UserRecord {
         uid: uid_str.clone(),
         uname: String::new(),
@@ -187,6 +188,10 @@ pub async fn poll_login_status(
         crate::runtime_warn!("avatar cache refresh failed for uid {uid_str}: {error}");
     }
 
+    let mut runtime = state.runtime.lock().await;
+    if let Some(task) = runtime.danmu_task.take() {
+        task.abort();
+    }
     runtime.config.users.insert(uid_str.clone(), user.clone());
     runtime.config.current_uid = Some(uid_str);
     runtime.session.uid = uid;
@@ -308,6 +313,11 @@ pub async fn switch_account(app: AppHandle, req: UidReq, state: State<'_, AppSta
         return Err("i18n.account.error.account_login_invalid".into());
     }
 
+    let was_danmu_running = runtime
+        .danmu_task
+        .as_ref()
+        .map(|task| !task.is_finished())
+        .unwrap_or(false);
     if let Some(task) = runtime.danmu_task.take() {
         task.abort();
     }
@@ -329,6 +339,41 @@ pub async fn switch_account(app: AppHandle, req: UidReq, state: State<'_, AppSta
             crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
         }
     }
+
+    if was_danmu_running {
+        let mut auto_resume_running = false;
+        let auto_resume_msg = match start_danmu_monitor_for_ws(&app, &state).await {
+            Ok(payload) => {
+                let started = payload["started"].as_bool().unwrap_or(false);
+                let msg = payload["msg"]
+                    .as_str()
+                    .unwrap_or("i18n.live.danmu_monitor_started")
+                    .to_string();
+                auto_resume_running = started || msg == "i18n.live.danmu_monitor_already_running";
+                msg
+            }
+            Err(error) => {
+                crate::runtime_warn!(
+                    "[auth][switch] auto resume danmu failed for uid {}: {}",
+                    user.uid,
+                    error
+                );
+                error
+            }
+        };
+        emit_studio_state_event(
+            &app,
+            "danmu.monitor",
+            "command.switch_account.auto_resume",
+            json!({
+                "running": auto_resume_running,
+                "msg": auto_resume_msg,
+                "uid": user.uid,
+            }),
+        );
+    }
+
+    emit_runtime_snapshot(&app, &state, "command.switch_account").await;
     let response_user = to_response_user(&state.config_path, &user);
     crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
