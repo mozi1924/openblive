@@ -25,6 +25,55 @@ use serde_json::json;
 use std::collections::BTreeMap;
 use tauri::AppHandle;
 
+async fn resolve_start_live_ts(state: &AppState, cookie: &str) -> String {
+    let local_ts = chrono::Utc::now().timestamp().to_string();
+    let value = match state
+        .client
+        .get_json_with_cookie(&endpoints::api("/x/report/click/now"), &[], cookie)
+        .await
+    {
+        Ok(value) => value,
+        Err(_) => return local_ts,
+    };
+
+    value["data"]["now"]
+        .as_i64()
+        .filter(|ts| *ts > 0)
+        .map(|ts| ts.to_string())
+        .unwrap_or(local_ts)
+}
+
+async fn request_start_live(
+    state: &AppState,
+    cookie: &str,
+    room_id: &str,
+    csrf: &str,
+    area: u64,
+    force_refresh_identity: bool,
+) -> Result<serde_json::Value, String> {
+    let ts = resolve_start_live_ts(state, cookie).await;
+    let mut form = BTreeMap::new();
+    form.insert("room_id".into(), room_id.to_string());
+    form.insert("platform".into(), live_platform());
+    form.insert("area_v2".into(), area.to_string());
+    form.insert("backup_stream".into(), "0".into());
+    form.insert("csrf_token".into(), csrf.to_string());
+    form.insert("csrf".into(), csrf.to_string());
+    inject_live_client_identity(state, &mut form, force_refresh_identity).await;
+    form.insert("ts".into(), ts);
+    let form = app_sign(&form);
+
+    state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/room/v1/Room/startLive"),
+            &form,
+            cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
 pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
     let (room_id, csrf, cookie, area) = {
         let runtime = state.runtime.lock().await;
@@ -43,29 +92,20 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
     }
     let room_id_for_rollback = room_id.clone();
     let csrf_for_rollback = csrf.clone();
-    let now = chrono::Utc::now().timestamp().to_string();
-
-    let mut form = BTreeMap::new();
-    form.insert("room_id".into(), room_id);
-    form.insert("platform".into(), live_platform());
-    form.insert("area_v2".into(), area.to_string());
-    form.insert("backup_stream".into(), "0".into());
-    form.insert("csrf_token".into(), csrf.clone());
-    form.insert("csrf".into(), csrf);
-    inject_live_client_identity(state, &mut form, false).await;
-    form.insert("ts".into(), now);
-    let form = app_sign(&form);
-
-    let response = state
-        .client
-        .post_form_with_cookie(
-            &endpoints::live_api("/room/v1/Room/startLive"),
-            &form,
-            &cookie,
-        )
-        .await
-        .map_err(|error| error.to_string())?;
-    let code = response["code"].as_i64().unwrap_or(-1);
+    let response_first = request_start_live(state, &cookie, &room_id, &csrf, area, false).await?;
+    let mut response = response_first.clone();
+    let mut code = response["code"].as_i64().unwrap_or(-1);
+    if matches!(code, 60024 | 60043) {
+        let response_retry = request_start_live(state, &cookie, &room_id, &csrf, area, true).await?;
+        let retry_code = response_retry["code"].as_i64().unwrap_or(-1);
+        if retry_code == 0 {
+            response = response_retry;
+            code = 0;
+        } else {
+            response = response_retry;
+            code = retry_code;
+        }
+    }
     if code == 60024 {
         let qr = response["data"]["qr"].as_str().unwrap_or("").to_string();
         return Ok(json!({ "code": 60024, "msg": "i18n.live.face_auth_required", "qr": qr }));
@@ -112,7 +152,6 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
         obs_ws_url,
         obs_ws_password,
         start_command_template,
-        obs_ws_auto_start_on_live,
     ) = {
         let runtime = state.runtime.lock().await;
         (
@@ -120,16 +159,12 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
             runtime.config.obs_ws_url.clone(),
             runtime.config.obs_ws_password.clone(),
             runtime.config.on_live_start_command.clone(),
-            runtime.config.obs_ws_auto_start_on_live,
         )
     };
 
     let linkage_result = match live_control_mode.as_str() {
         "obs_ws" => {
-            if !obs_ws_auto_start_on_live {
-                Ok(())
-            } else if primary_context.server.trim().is_empty()
-                || primary_context.stream_key.trim().is_empty()
+            if primary_context.server.trim().is_empty() || primary_context.stream_code.trim().is_empty()
             {
                 Err("i18n.live.error.obs_stream_context_missing".to_string())
             } else {
@@ -137,8 +172,12 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
             }
         }
         "command" => {
-            let command = apply_command_template(&start_command_template, &primary_context)?;
-            spawn_shell_command(&command).await
+            if start_command_template.trim().is_empty() {
+                Err("i18n.live.error.command_start_template_missing".to_string())
+            } else {
+                let command = apply_command_template(&start_command_template, &primary_context)?;
+                spawn_shell_command(&command).await
+            }
         }
         _ => Ok(()),
     };
@@ -336,7 +375,6 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
             obs_ws_url,
             obs_ws_password,
             stop_command_template,
-            obs_ws_auto_stop_on_live_end,
         ) = {
             let runtime = state.runtime.lock().await;
             (
@@ -344,19 +382,15 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
                 runtime.config.obs_ws_url.clone(),
                 runtime.config.obs_ws_password.clone(),
                 runtime.config.on_live_stop_command.clone(),
-                runtime.config.obs_ws_auto_stop_on_live_end,
             )
         };
         let empty_context = empty_command_template_context();
         let linkage_result = match live_control_mode.as_str() {
-            "obs_ws" => {
-                if obs_ws_auto_stop_on_live_end {
-                    obs_ws_stop_stream(&obs_ws_url, &obs_ws_password).await
-                } else {
-                    Ok(())
-                }
-            }
+            "obs_ws" => obs_ws_stop_stream(&obs_ws_url, &obs_ws_password).await,
             "command" => {
+                if stop_command_template.trim().is_empty() {
+                    return Err("i18n.live.error.command_stop_template_missing".to_string());
+                }
                 let command = apply_command_template(&stop_command_template, &empty_context)?;
                 spawn_shell_command(&command).await
             }

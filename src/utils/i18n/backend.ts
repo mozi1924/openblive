@@ -30,6 +30,10 @@ export const backendZhCN: Record<string, string> = {
   "i18n.live.error.terminate_live_vote_failed": "中断直播投票失败",
   "i18n.live.error.invalid_vote_duration": "投票时长必须是 1 到 9 分钟的整数",
   "i18n.live.error.spawn_command_failed": "执行命令失败",
+  "i18n.live.error.command_start_template_missing": "开播联动命令未配置，请先填写开播命令",
+  "i18n.live.error.command_stop_template_missing": "停播联动命令未配置，请先填写停播命令",
+  "i18n.live.error.command_template_stream_key_removed":
+    "命令模板中的 {stream_key} 已废弃，请改用 {stream_code}",
   "i18n.live.error.obs_ws_closed": "OBS WS 连接已关闭",
   "i18n.live.error.obs_ws_receive_failed": "OBS WS 收包失败",
   "i18n.live.error.obs_ws_json_parse_failed": "OBS WS JSON 解析失败",
@@ -118,6 +122,12 @@ export const backendEnUS: Record<string, string> = {
   "i18n.live.error.create_live_vote_failed": "Failed to create live vote",
   "i18n.live.error.terminate_live_vote_failed": "Failed to terminate live vote",
   "i18n.live.error.invalid_vote_duration": "Vote duration must be an integer from 1 to 9 minutes",
+  "i18n.live.error.command_start_template_missing":
+    "Start-live linkage command is not configured. Please set a start command first.",
+  "i18n.live.error.command_stop_template_missing":
+    "Stop-live linkage command is not configured. Please set a stop command first.",
+  "i18n.live.error.command_template_stream_key_removed":
+    "{stream_key} is deprecated in command templates. Please use {stream_code}.",
   "i18n.live.event.fallback.anonymous_user": "Anonymous User",
   "i18n.live.event.fallback.viewer": "Viewer",
   "i18n.live.event.fallback.gift_user": "Gift User",

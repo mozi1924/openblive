@@ -161,13 +161,6 @@ export type StreamEndpoint = {
   addr: string;
   code: string;
   full_url: string;
-  provider: string;
-  new_link: string;
-  stream_name: string;
-  stream_key: string;
-  schedule: string;
-  pflag: string;
-  query: Record<string, string>;
 };
 
 export type LiveRoomProfile = {

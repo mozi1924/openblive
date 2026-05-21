@@ -9,7 +9,6 @@ use tokio_tungstenite::tungstenite::Message;
 #[derive(Clone)]
 pub(crate) struct CommandTemplateContext {
     pub(crate) server: String,
-    pub(crate) stream_key: String,
     pub(crate) stream_code: String,
     pub(crate) stream_url: String,
     pub(crate) protocol: String,
@@ -24,18 +23,8 @@ pub(crate) fn normalize_live_control_mode(mode: &str) -> &'static str {
 }
 
 pub(crate) fn build_command_template_context(primary: &StreamEndpoint) -> CommandTemplateContext {
-    let stream_key = if !primary.stream_key.trim().is_empty() {
-        primary.stream_key.clone()
-    } else {
-        primary
-            .query
-            .get("key")
-            .cloned()
-            .unwrap_or_else(String::new)
-    };
     CommandTemplateContext {
         server: primary.addr.clone(),
-        stream_key,
         stream_code: primary.code.clone(),
         stream_url: primary.full_url.clone(),
         protocol: primary.protocol.clone(),
@@ -45,7 +34,6 @@ pub(crate) fn build_command_template_context(primary: &StreamEndpoint) -> Comman
 pub(crate) fn empty_command_template_context() -> CommandTemplateContext {
     CommandTemplateContext {
         server: String::new(),
-        stream_key: String::new(),
         stream_code: String::new(),
         stream_url: String::new(),
         protocol: String::new(),
@@ -62,13 +50,22 @@ fn is_safe_template_value(value: &str) -> bool {
     })
 }
 
+fn contains_deprecated_stream_key_placeholder(raw: &str) -> bool {
+    raw.contains("{stream_key}")
+        || raw.contains("{{stream_key}}")
+        || raw.contains("${stream_key}")
+}
+
 pub(crate) fn apply_command_template(
     raw: &str,
     context: &CommandTemplateContext,
 ) -> Result<String, String> {
+    if contains_deprecated_stream_key_placeholder(raw) {
+        return Err("i18n.live.error.command_template_stream_key_removed".to_string());
+    }
+
     let variables = [
         ("server", context.server.as_str()),
-        ("stream_key", context.stream_key.as_str()),
         ("stream_code", context.stream_code.as_str()),
         ("stream_url", context.stream_url.as_str()),
         ("protocol", context.protocol.as_str()),
@@ -86,9 +83,6 @@ pub(crate) fn apply_command_template(
         ("{{server}}", context.server.as_str()),
         ("{server}", context.server.as_str()),
         ("${server}", context.server.as_str()),
-        ("{{stream_key}}", context.stream_key.as_str()),
-        ("{stream_key}", context.stream_key.as_str()),
-        ("${stream_key}", context.stream_key.as_str()),
         ("{{stream_code}}", context.stream_code.as_str()),
         ("{stream_code}", context.stream_code.as_str()),
         ("${stream_code}", context.stream_code.as_str()),
@@ -293,7 +287,7 @@ pub(crate) async fn obs_ws_start_stream(
             "streamServiceType": "rtmp_custom",
             "streamServiceSettings": {
                 "server": context.server,
-                "key": context.stream_key
+                "key": context.stream_code
             }
         }),
     )
@@ -331,18 +325,13 @@ pub(crate) async fn obs_ws_probe(url: &str, password: &str) -> Result<(), String
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        apply_command_template, build_command_template_context, CommandTemplateContext,
-        StreamEndpoint,
-    };
-    use std::collections::BTreeMap;
+    use super::{apply_command_template, build_command_template_context, CommandTemplateContext, StreamEndpoint};
 
     fn demo_context() -> CommandTemplateContext {
         CommandTemplateContext {
             server: "rtmp://example.com/live".to_string(),
-            stream_key: "key_abc-123".to_string(),
-            stream_code: "/live/key_abc-123".to_string(),
-            stream_url: "rtmp://example.com/live/key_abc-123".to_string(),
+            stream_code: "?streamname=live_1_2&key=key_abc-123".to_string(),
+            stream_url: "rtmp://example.com/live?streamname=live_1_2&key=key_abc-123".to_string(),
             protocol: "rtmp".to_string(),
         }
     }
@@ -354,37 +343,36 @@ mod tests {
             .expect("template should be valid");
         assert_eq!(
             output,
-            "ffmpeg -re -i in.mp4 -f flv rtmp://example.com/live/key_abc-123"
+            "ffmpeg -re -i in.mp4 -f flv rtmp://example.com/live?streamname=live_1_2&key=key_abc-123"
         );
     }
 
     #[test]
     fn apply_command_template_rejects_unsafe_value() {
         let mut context = demo_context();
-        context.stream_key = "abc;rm -rf /".to_string();
-        let err = apply_command_template("{stream_key}", &context)
+        context.stream_code = "abc;rm -rf /".to_string();
+        let err = apply_command_template("{stream_code}", &context)
             .expect_err("unsafe template variable must be rejected");
-        assert!(err.contains("stream_key"));
+        assert!(err.contains("stream_code"));
     }
 
     #[test]
-    fn build_command_template_context_uses_query_key_fallback() {
-        let mut query = BTreeMap::new();
-        query.insert("key".to_string(), "fallback_key".to_string());
+    fn apply_command_template_rejects_deprecated_stream_key_placeholder() {
+        let context = demo_context();
+        let err = apply_command_template("{stream_key}", &context)
+            .expect_err("deprecated stream_key placeholder should be rejected");
+        assert_eq!(err, "i18n.live.error.command_template_stream_key_removed");
+    }
+
+    #[test]
+    fn build_command_template_context_uses_code_as_fallback() {
         let endpoint = StreamEndpoint {
             addr: "rtmp://localhost/live".to_string(),
-            code: "/live/abc".to_string(),
-            full_url: "rtmp://localhost/live/abc".to_string(),
+            code: "?streamname=live_1_2&key=abc".to_string(),
+            full_url: "rtmp://localhost/live?streamname=live_1_2&key=abc".to_string(),
             protocol: "rtmp".to_string(),
-            provider: String::new(),
-            new_link: String::new(),
-            stream_name: String::new(),
-            stream_key: String::new(),
-            schedule: String::new(),
-            pflag: String::new(),
-            query,
         };
         let context = build_command_template_context(&endpoint);
-        assert_eq!(context.stream_key, "fallback_key");
+        assert_eq!(context.stream_code, endpoint.code);
     }
 }

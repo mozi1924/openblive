@@ -65,7 +65,7 @@ export function SettingsTab({
     );
   }
 
-  const variables = ["{server}", "{stream_key}", "{stream_url}", "{stream_code}", "{protocol}"];
+  const variables = ["{server}", "{stream_url}", "{stream_code}", "{protocol}"];
   const optionCardClass =
     "flex min-h-36 items-start rounded-xl border p-4 text-left transition-all duration-200";
   const windowBehaviorCardClass =

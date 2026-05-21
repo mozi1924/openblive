@@ -1,7 +1,6 @@
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
-use url::form_urlencoded;
+use std::collections::HashSet;
 
 #[derive(Clone, Serialize)]
 pub(crate) struct StreamEndpoint {
@@ -9,24 +8,6 @@ pub(crate) struct StreamEndpoint {
     pub(crate) addr: String,
     pub(crate) code: String,
     pub(crate) full_url: String,
-    pub(crate) provider: String,
-    pub(crate) new_link: String,
-    pub(crate) stream_name: String,
-    pub(crate) stream_key: String,
-    pub(crate) schedule: String,
-    pub(crate) pflag: String,
-    pub(crate) query: BTreeMap<String, String>,
-}
-
-fn parse_stream_query(code: &str) -> BTreeMap<String, String> {
-    let query_str = code.trim().trim_start_matches('?');
-    if query_str.is_empty() {
-        return BTreeMap::new();
-    }
-
-    form_urlencoded::parse(query_str.as_bytes())
-        .into_owned()
-        .collect::<BTreeMap<_, _>>()
 }
 
 fn parse_protocol_from_addr(addr: &str) -> String {
@@ -43,18 +24,11 @@ fn parse_stream_endpoint(value: &Value, fallback_protocol: &str) -> Option<Strea
         return None;
     }
 
-    let query = parse_stream_query(&code);
     let mut protocol = value["protocol"]
         .as_str()
         .unwrap_or("")
         .trim()
         .to_ascii_lowercase();
-    if protocol.is_empty() {
-        protocol = query
-            .get("schedule")
-            .map(|item| item.trim().to_ascii_lowercase())
-            .unwrap_or_default();
-    }
     if protocol.is_empty() {
         protocol = parse_protocol_from_addr(&addr);
     }
@@ -62,25 +36,9 @@ fn parse_stream_endpoint(value: &Value, fallback_protocol: &str) -> Option<Strea
         protocol = fallback_protocol.to_ascii_lowercase();
     }
 
-    let stream_key = query.get("key").cloned().unwrap_or_else(|| {
-        let cleaned = code.trim_start_matches('?').trim();
-        if cleaned.is_empty() || cleaned.contains('=') {
-            String::new()
-        } else {
-            cleaned.to_string()
-        }
-    });
-
     Some(StreamEndpoint {
         protocol,
         full_url: format!("{addr}{code}"),
-        provider: value["provider"].as_str().unwrap_or("").to_string(),
-        new_link: value["new_link"].as_str().unwrap_or("").to_string(),
-        stream_name: query.get("streamname").cloned().unwrap_or_default(),
-        stream_key,
-        schedule: query.get("schedule").cloned().unwrap_or_default(),
-        pflag: query.get("pflag").cloned().unwrap_or_default(),
-        query,
         addr,
         code,
     })

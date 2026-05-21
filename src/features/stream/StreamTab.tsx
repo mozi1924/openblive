@@ -489,17 +489,12 @@ export function StreamTab({
                     <Key className="h-3.5 w-3.5 text-gray-500 shrink-0" />
                     <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.key")}</span>
                     <span className="truncate text-gray-300 select-text">
-                      {primaryEndpoint?.stream_key || primaryEndpoint?.code ? "••••••••••••••••••••••••" : t(locale, "ui.stream.unavailable")}
+                      {primaryEndpoint?.code ? "••••••••••••••••••••••••" : t(locale, "ui.stream.unavailable")}
                     </span>
                   </div>
                   <button
-                    onClick={() =>
-                      void onCopyToClipboard(
-                        primaryEndpoint?.stream_key || primaryEndpoint?.code || "",
-                        "key",
-                      )
-                    }
-                    disabled={!primaryEndpoint?.code && !primaryEndpoint?.stream_key}
+                    onClick={() => void onCopyToClipboard(primaryEndpoint?.code || "", "key")}
+                    disabled={!primaryEndpoint?.code}
                     className="flex items-center rounded bg-white/4 px-2 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/8 hover:text-white active:scale-95"
                   >
                     {copiedKey === "key" ? (
@@ -513,26 +508,6 @@ export function StreamTab({
 
               </div>
 
-              {primaryEndpoint && (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 px-1 text-[10px] text-gray-500 font-mono">
-                  <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>{t(locale, "ui.stream.protocol")}</span>
-                    <span className="text-gray-300 uppercase font-medium">{(primaryEndpoint.protocol || "rtmp")}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>{t(locale, "ui.stream.provider")}</span>
-                    <span className="text-gray-300 font-medium">{primaryEndpoint.provider || "Bilibili"}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>{t(locale, "ui.stream.schedule")}</span>
-                    <span className="text-gray-300 font-medium">{primaryEndpoint.schedule || t(locale, "ui.stream.schedule.default")}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span>Live Key:</span>
-                    <span className="text-gray-300 truncate max-w-[80px] font-medium">{rtmp.live_key || "-"}</span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -727,13 +702,6 @@ function buildStreamEndpoints(rtmp: StreamInfo | null): StreamEndpoint[] {
         addr: rtmp.rtmp1?.addr || "",
         code: rtmp.rtmp1?.code || "",
         full_url: `${rtmp.rtmp1?.addr || ""}${rtmp.rtmp1?.code || ""}`,
-        provider: "",
-        new_link: "",
-        stream_name: "",
-        stream_key: "",
-        schedule: "rtmp",
-        pflag: "",
-        query: {},
       },
     ];
   }
