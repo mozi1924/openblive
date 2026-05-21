@@ -58,7 +58,6 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
-          save-if: ${{ matrix.platform != 'windows-latest' }}
 
       - name: Build and upload release assets
         uses: tauri-apps/tauri-action@v0
