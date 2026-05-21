@@ -48,7 +48,7 @@ export function DanmuOverlayApp() {
   const orderedDanmus = useMemo(() => [...danmus].slice(0, 160).reverse(), [danmus]);
   const panelOpacity = Math.max(40, Math.min(appConfig?.danmu_overlay_opacity ?? 55, 100));
   const panelOpacityRatio = panelOpacity / 100;
-  const controlSurface = `rgba(8, 12, 19, ${Math.max(panelOpacityRatio, 0.24)})`;
+  const composerSurface = `rgba(8, 12, 19, ${Math.max(panelOpacityRatio * 0.72, 0.16)})`;
   const controlBorder = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.15, 0.05)})`;
   const controlButtonBg = `rgba(255, 255, 255, ${Math.max(panelOpacityRatio * 0.1, 0.03)})`;
 
@@ -386,7 +386,7 @@ export function DanmuOverlayApp() {
               className="flex items-center gap-2 rounded-[20px] border p-2"
               style={{
                 borderColor: controlBorder,
-                backgroundColor: controlSurface,
+                backgroundColor: composerSurface,
               }}
             >
               <textarea
