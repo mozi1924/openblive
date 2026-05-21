@@ -170,7 +170,18 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
             {
                 Err("i18n.live.error.obs_stream_context_missing".to_string())
             } else {
-                obs_ws_start_stream(&obs_ws_url, &obs_ws_password, &primary_context).await
+                let obs_ws_url_bg = obs_ws_url.clone();
+                let obs_ws_password_bg = obs_ws_password.clone();
+                let primary_context_bg = primary_context.clone();
+                tokio::spawn(async move {
+                    if let Err(error) =
+                        obs_ws_start_stream(&obs_ws_url_bg, &obs_ws_password_bg, &primary_context_bg)
+                            .await
+                    {
+                        crate::runtime_warn!("[live][obs] async start linkage failed: {error}");
+                    }
+                });
+                Ok(())
             }
         }
         "command" => {
