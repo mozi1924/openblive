@@ -280,7 +280,7 @@ export function DanmuOverlayApp() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-3 pb-2 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto px-3 pb-2 app-scrollbar">
           {orderedDanmus.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-[11px] text-gray-400">
@@ -331,7 +331,7 @@ export function DanmuOverlayApp() {
                     {liveEmoticonPackages.reduce((count, pkg) => count + pkg.emoticons.length, 0)}
                   </span>
                 </div>
-                <div className="max-h-[18rem] overflow-y-auto px-4 py-4 scrollbar-thin">
+                <div className="max-h-[18rem] overflow-y-auto px-4 py-4 app-scrollbar">
                   {liveEmoticonsLoading ? (
                     <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/8 bg-white/[0.02] px-4 py-10 text-xs text-gray-400">
                       {t(locale, "ui.danmu.emoticon.loading")}
@@ -393,7 +393,7 @@ export function DanmuOverlayApp() {
                 onChange={(event) => setDanmuText(event.target.value)}
                 placeholder={t(locale, "ui.danmu.placeholder")}
                 rows={1}
-                className="selectable-text no-drag max-h-24 flex-1 resize-none bg-transparent px-2.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none scrollbar-thin"
+                className="selectable-text no-drag max-h-24 flex-1 resize-none bg-transparent px-2.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none app-scrollbar"
                 onKeyDown={(event) => {
                   if (event.key === "Escape" && openPanel) {
                     event.preventDefault();

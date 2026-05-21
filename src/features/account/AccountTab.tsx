@@ -160,7 +160,7 @@ export function AccountTab({
               </p>
             </div>
           ) : (
-            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2">
+            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2 app-scrollbar">
               {switchableAccounts.map((user) => (
                   <div
                     key={user.uid}

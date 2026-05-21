@@ -36,7 +36,6 @@ const DANMU_OVERLAY_WIDTH: f64 = 420.0;
 const DANMU_OVERLAY_HEIGHT: f64 = 360.0;
 const DANMU_OVERLAY_MIN_WIDTH: f64 = 360.0;
 const DANMU_OVERLAY_MIN_HEIGHT: f64 = 260.0;
-const WINDOW_STATE_SYNC_DELAY_MS: u64 = 120;
 const MANAGED_WINDOW_STATE_FILENAME: &str = "managed-window-state.json";
 
 static ALWAYS_ON_TOP_UNSUPPORTED_WARN: Once = Once::new();
@@ -312,15 +311,6 @@ fn restore_window_state(window: &WebviewWindow) -> Result<bool, String> {
     Ok(true)
 }
 
-fn schedule_restore_window_state(window: WebviewWindow) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
-        if let Err(error) = restore_window_state(&window) {
-            crate::runtime_warn!("{error}");
-        }
-    });
-}
-
 fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
     if !supports_window_positioning() {
         warn_window_position_unsupported();
@@ -347,15 +337,6 @@ fn position_overlay_window(app: &AppHandle, window: &WebviewWindow) -> Result<()
         .map_err(|error| format!("position overlay window failed: {error}"))
 }
 
-fn schedule_overlay_position(app: AppHandle, window: WebviewWindow) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
-        if let Err(error) = position_overlay_window(&app, &window) {
-            crate::runtime_warn!("{error}");
-        }
-    });
-}
-
 fn apply_overlay_window_config(
     window: &WebviewWindow,
     config: &PersistConfig,
@@ -369,29 +350,6 @@ fn apply_overlay_window_config(
     }
     emit_overlay_settings(window, config);
     Ok(())
-}
-
-fn schedule_overlay_config_reapply(window: WebviewWindow, config: PersistConfig) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
-        if let Err(error) = apply_overlay_window_config(&window, &config) {
-            crate::runtime_warn!("{error}");
-        }
-    });
-}
-
-pub(crate) fn restore_main_window_state(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(WINDOW_STATE_SYNC_DELAY_MS)).await;
-        let Some(window) = app.get_webview_window("main") else {
-            return;
-        };
-
-        if let Err(error) = restore_window_state(&window) {
-            crate::runtime_warn!("{error}");
-        }
-        schedule_restore_window_state(window);
-    });
 }
 
 fn emit_overlay_visibility(app: &AppHandle, visible: bool) {
@@ -408,23 +366,19 @@ fn show_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<(), St
     let has_saved_state = window_has_saved_state(app, DANMU_OVERLAY_LABEL);
 
     apply_overlay_window_config(&window, config)?;
-    if created_now && !has_saved_state {
-        position_overlay_window(app, &window)?;
+    if created_now {
+        if has_saved_state {
+            restore_window_state(&window)?;
+        } else {
+            position_overlay_window(app, &window)?;
+        }
     }
     if window.is_minimized().unwrap_or(false) {
         let _ = window.unminimize();
     }
     let _ = window.show();
-    if created_now {
-        if has_saved_state {
-            schedule_restore_window_state(window.clone());
-        } else {
-            schedule_overlay_position(app.clone(), window.clone());
-        }
-    }
     // Some window managers ignore top-most changes until the window is mapped.
     apply_overlay_window_config(&window, config)?;
-    schedule_overlay_config_reapply(window.clone(), config.clone());
     emit_overlay_visibility(app, true);
     Ok(())
 }
@@ -869,9 +823,6 @@ pub async fn set_danmu_overlay_pinned(
 
     if let Some(window) = app.get_webview_window(DANMU_OVERLAY_LABEL) {
         apply_overlay_window_config(&window, &config)?;
-        if window.is_visible().unwrap_or(false) {
-            schedule_overlay_config_reapply(window, config.clone());
-        }
     }
 
     Ok(wrap_ok(json!({ "always_on_top": pinned })))

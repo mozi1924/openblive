@@ -148,7 +148,7 @@ export function LiveVotePanel({
         </button>
       </div>
 
-      <div className="max-h-[30rem] overflow-y-auto px-4 py-4 scrollbar-thin">
+      <div className="max-h-[30rem] overflow-y-auto px-4 py-4 app-scrollbar">
         {liveVoteLoading ? (
           <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/8 bg-white/[0.02] px-4 py-10 text-xs text-gray-400">
             {t(locale, "ui.danmu.vote.loading")}
@@ -251,7 +251,7 @@ export function LiveVotePanel({
               </div>
 
               {liveVotePanel?.templates?.length ? (
-                <div className="mb-4 flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                <div className="mb-4 flex gap-2 overflow-x-auto pb-1 app-scrollbar">
                   {liveVotePanel.templates.map((template) => (
                     <button
                       key={template.template_id}

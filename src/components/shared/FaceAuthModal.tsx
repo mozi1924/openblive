@@ -41,7 +41,7 @@ export function FaceAuthModal({
               <p className="text-xs leading-relaxed text-gray-500">
                 {t(locale, "ui.face.qr_render_failed")}
               </p>
-              <div className="max-h-32 overflow-auto break-all rounded-lg border border-gray-200 bg-gray-100 p-2 text-[10px] text-gray-700">
+              <div className="max-h-32 overflow-auto break-all rounded-lg border border-gray-200 bg-gray-100 p-2 text-[10px] text-gray-700 app-scrollbar">
                 {faceQrContent}
               </div>
             </div>

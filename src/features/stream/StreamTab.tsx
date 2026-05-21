@@ -515,7 +515,7 @@ export function StreamTab({
 
       {/* Right Column: Live cockpit control */}
       <div className="lg:col-span-5 lg:self-start">
-        <div className="flat-panel flex flex-col justify-between space-y-5 rounded-xl p-5 text-center lg:sticky lg:top-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto">
+        <div className="flat-panel flex flex-col justify-between space-y-5 rounded-xl p-5 text-center lg:sticky lg:top-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto app-scrollbar">
           <div>
             <div className="mb-5 flex items-center justify-between">
               <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">

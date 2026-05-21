@@ -47,20 +47,33 @@
 
   /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
+    background: transparent;
   }
-  
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
+    border: 1px solid transparent;
+    background-clip: padding-box;
     border-radius: 9999px;
     transition: background 0.2s ease;
   }
-  
+
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.25);
   }
@@ -73,6 +86,38 @@
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.app-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* Glassmorphism card */

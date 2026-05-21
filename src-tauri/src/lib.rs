@@ -86,7 +86,6 @@ pub fn run() {
             if let PageLoadEvent::Finished = payload.event() {
                 let app_handle = webview.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    commands::restore_main_window_state(app_handle.clone());
                     let state = app_handle.state::<AppState>();
                     commands::sync_overlay_window_from_config(app_handle.clone(), &state).await;
                 });

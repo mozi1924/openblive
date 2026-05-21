@@ -61,7 +61,7 @@ function App() {
           onClearDanmus={actions.clearDanmus}
         />
 
-        <div className={`flex-1 ${state.activeTab === "danmu" ? "overflow-hidden flex flex-col" : "overflow-y-auto p-8"}`}>
+        <div className={`flex-1 ${state.activeTab === "danmu" ? "overflow-hidden flex flex-col" : "overflow-y-auto p-8 app-scrollbar"}`}>
           {state.activeTab === "account" && (
             <AccountTab
               locale={locale}

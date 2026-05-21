@@ -91,7 +91,7 @@ export function LiveOnlineRankPanel({
           </div>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto p-5 scrollbar-thin">
+        <div className="max-h-[60vh] overflow-y-auto p-5 app-scrollbar">
           <div className="grid grid-cols-[5rem_3.75rem_minmax(0,1fr)] items-center gap-2 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-500">
             <span>{t(locale, "ui.danmu.online_rank.rank")}</span>
             <span>{t(locale, "ui.danmu.online_rank.avatar")}</span>

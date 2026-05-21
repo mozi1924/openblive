@@ -201,7 +201,7 @@ export function DanmuTab({
 
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-[#070a0f]">
-      <div className="flex-1 overflow-y-auto p-6 scrollbar-thin flex flex-col-reverse bg-[#06080d]/40">
+      <div className="flex-1 overflow-y-auto p-6 app-scrollbar flex flex-col-reverse bg-[#06080d]/40">
         <div ref={danmuEndRef} />
 
         {danmus.length === 0 ? (
@@ -247,7 +247,7 @@ export function DanmuTab({
                 </span>
               </div>
 
-              <div className="max-h-[24rem] overflow-y-auto px-4 py-4 scrollbar-thin">
+              <div className="max-h-[24rem] overflow-y-auto px-4 py-4 app-scrollbar">
                 {liveEmoticonsLoading ? (
                   <div className="flex items-center justify-center rounded-2xl border border-dashed border-white/8 bg-white/[0.02] px-4 py-10 text-xs text-gray-400">
                     {t(locale, "ui.danmu.emoticon.loading")}
@@ -334,7 +334,7 @@ export function DanmuTab({
                 onChange={(event) => onChangeDanmuText(event.target.value)}
                 placeholder={t(locale, "ui.danmu.placeholder")}
                 rows={1}
-                className="selectable-text flex-1 resize-none bg-transparent px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none max-h-24 scrollbar-thin"
+                className="selectable-text flex-1 resize-none bg-transparent px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none max-h-24 app-scrollbar"
                 onKeyDown={(event) => {
                   if (event.key === "Escape" && openPanel) {
                     event.preventDefault();
