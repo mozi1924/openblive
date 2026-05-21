@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:overlay": "npm --prefix overlay-compat ci && npm --prefix overlay-compat run build -- --dest ../dist/overlay",
+    "build:desktop": "pnpm build && pnpm build:overlay",
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",

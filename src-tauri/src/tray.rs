@@ -84,7 +84,10 @@ fn read_tray_menu_snapshot(app: &AppHandle) -> Option<TrayMenuSnapshot> {
     })
 }
 
-fn build_tray_menu(app: &AppHandle, snapshot: &TrayMenuSnapshot) -> tauri::Result<Menu<tauri::Wry>> {
+fn build_tray_menu(
+    app: &AppHandle,
+    snapshot: &TrayMenuSnapshot,
+) -> tauri::Result<Menu<tauri::Wry>> {
     let account_info = MenuItem::with_id(
         app,
         MENU_ACCOUNT_INFO,

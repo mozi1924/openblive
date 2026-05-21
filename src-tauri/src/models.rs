@@ -263,6 +263,14 @@ pub struct PersistConfig {
     pub on_live_start_command: String,
     #[serde(default)]
     pub on_live_stop_command: String,
+    #[serde(default)]
+    pub ws_server_enabled: bool,
+    #[serde(default = "default_ws_server_listen_addr")]
+    pub ws_server_listen_addr: String,
+    #[serde(default)]
+    pub ws_server_auth_token: String,
+    #[serde(default = "default_ws_server_bypass_token_for_loopback")]
+    pub ws_server_bypass_token_for_loopback: bool,
     #[serde(default = "default_locale")]
     pub locale: String,
     #[serde(default)]
@@ -317,6 +325,10 @@ impl Default for PersistConfig {
             obs_ws_auto_stop_on_live_end: false,
             on_live_start_command: String::new(),
             on_live_stop_command: String::new(),
+            ws_server_enabled: false,
+            ws_server_listen_addr: default_ws_server_listen_addr(),
+            ws_server_auth_token: String::new(),
+            ws_server_bypass_token_for_loopback: default_ws_server_bypass_token_for_loopback(),
             locale: default_locale(),
             host_www: String::new(),
             host_api: String::new(),
@@ -348,6 +360,14 @@ fn default_obs_ws_url() -> String {
 
 fn default_locale() -> String {
     "auto".to_string()
+}
+
+fn default_ws_server_listen_addr() -> String {
+    "127.0.0.1:12450".to_string()
+}
+
+fn default_ws_server_bypass_token_for_loopback() -> bool {
+    true
 }
 
 fn default_danmu_overlay_enabled() -> bool {

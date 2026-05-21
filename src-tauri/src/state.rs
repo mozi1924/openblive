@@ -2,7 +2,7 @@ use crate::client::BiliClient;
 use crate::models::{PersistConfig, SessionState};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tokio::sync::Mutex;
+use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
 #[derive(Default)]
@@ -15,6 +15,10 @@ pub struct RuntimeState {
     pub obs_ws_connected: bool,
     pub obs_ws_last_error: String,
     pub obs_ws_last_checked_at: i64,
+    pub ws_server_task: Option<JoinHandle<()>>,
+    pub ws_server_shutdown_tx: Option<oneshot::Sender<()>>,
+    pub ws_server_runtime_fingerprint: String,
+    pub ws_server_danmu_tx: Option<broadcast::Sender<serde_json::Value>>,
     pub app_logs: Vec<String>,
     pub config: PersistConfig,
 }

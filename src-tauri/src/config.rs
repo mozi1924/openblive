@@ -41,6 +41,14 @@ struct AppSettingsFile {
     on_live_start_command: String,
     #[serde(default)]
     on_live_stop_command: String,
+    #[serde(default)]
+    ws_server_enabled: bool,
+    #[serde(default = "default_ws_server_listen_addr")]
+    ws_server_listen_addr: String,
+    #[serde(default)]
+    ws_server_auth_token: String,
+    #[serde(default = "default_ws_server_bypass_token_for_loopback")]
+    ws_server_bypass_token_for_loopback: bool,
     #[serde(default = "default_locale")]
     locale: String,
     #[serde(default)]
@@ -170,6 +178,14 @@ fn default_live_control_mode() -> String {
 
 fn default_locale() -> String {
     "auto".to_string()
+}
+
+fn default_ws_server_listen_addr() -> String {
+    "127.0.0.1:12450".to_string()
+}
+
+fn default_ws_server_bypass_token_for_loopback() -> bool {
+    true
 }
 
 fn default_live_client_version() -> String {
@@ -334,6 +350,10 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
         cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
         cfg.on_live_start_command = app_file.on_live_start_command;
         cfg.on_live_stop_command = app_file.on_live_stop_command;
+        cfg.ws_server_enabled = app_file.ws_server_enabled;
+        cfg.ws_server_listen_addr = app_file.ws_server_listen_addr;
+        cfg.ws_server_auth_token = app_file.ws_server_auth_token;
+        cfg.ws_server_bypass_token_for_loopback = app_file.ws_server_bypass_token_for_loopback;
         cfg.locale = crate::i18n::normalize_locale_setting(&app_file.locale).to_string();
         cfg.host_www = app_file.host_www;
         cfg.host_api = app_file.host_api;
@@ -483,6 +503,10 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
         obs_ws_auto_stop_on_live_end: cfg.obs_ws_auto_stop_on_live_end,
         on_live_start_command: cfg.on_live_start_command.clone(),
         on_live_stop_command: cfg.on_live_stop_command.clone(),
+        ws_server_enabled: cfg.ws_server_enabled,
+        ws_server_listen_addr: cfg.ws_server_listen_addr.clone(),
+        ws_server_auth_token: cfg.ws_server_auth_token.clone(),
+        ws_server_bypass_token_for_loopback: cfg.ws_server_bypass_token_for_loopback,
         locale: cfg.locale.clone(),
         host_www: cfg.host_www.clone(),
         host_api: cfg.host_api.clone(),

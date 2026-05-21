@@ -2,8 +2,8 @@ use super::stream::StreamEndpoint;
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use tokio::process::Command;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{sleep, Duration};
@@ -632,8 +632,7 @@ pub(crate) async fn obs_ws_start_stream(
 
     obs_apply_stream_settings(&mut write, &mut read, &context.server, &context.stream_code).await?;
     obs_start_stream(&mut write, &mut read).await?;
-    if let Err(error) = obs_try_bili_primary_server_fallback(&mut write, &mut read, context).await
-    {
+    if let Err(error) = obs_try_bili_primary_server_fallback(&mut write, &mut read, context).await {
         crate::runtime_warn!("[live][obs] fallback process failed: {error}");
     }
     Ok(())

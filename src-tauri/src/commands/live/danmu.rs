@@ -109,7 +109,10 @@ pub(crate) async fn start_danmu_monitor_inner(app: &AppHandle, state: &AppState)
     let app_handle = app.clone();
     let app_handle_for_guard = app.clone();
     runtime.danmu_task = Some(tokio::spawn(async move {
-        let _guard = DanmuTaskGuard { app: app_handle_for_guard, task_id: current_task_id };
+        let _guard = DanmuTaskGuard {
+            app: app_handle_for_guard,
+            task_id: current_task_id,
+        };
         let mut attempt: u32 = 0;
         let mut host_cursor: usize = 0;
         loop {

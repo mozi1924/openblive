@@ -25,6 +25,10 @@ export type AppConfig = {
   obs_ws_auto_stop_on_live_end: boolean;
   on_live_start_command: string;
   on_live_stop_command: string;
+  ws_server_enabled: boolean;
+  ws_server_listen_addr: string;
+  ws_server_auth_token: string;
+  ws_server_bypass_token_for_loopback: boolean;
   locale: "auto" | "zh-CN" | "en-US";
   host_www: string;
   host_api: string;

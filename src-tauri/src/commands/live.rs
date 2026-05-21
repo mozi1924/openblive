@@ -1,5 +1,5 @@
-use crate::bili::wbi_signed;
 use crate::avatar;
+use crate::bili::wbi_signed;
 use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
@@ -44,6 +44,14 @@ use profile_sync::{
     sync_live_status as sync_live_status_inner,
 };
 use session::resolve_current_auth_context;
+
+pub async fn start_danmu_monitor_for_ws(app: &AppHandle, state: &AppState) -> CmdResult {
+    start_danmu_monitor_inner(app, state).await
+}
+
+pub async fn stop_danmu_monitor_for_ws(state: &AppState) -> CmdResult {
+    stop_danmu_monitor_inner(state).await
+}
 
 #[tauri::command]
 pub async fn sync_live_status(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
@@ -493,10 +501,7 @@ pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
             {
                 Ok(resolved) => resolved,
                 Err(error) => {
-                    crate::runtime_warn!(
-                        "get_live_online_rank resolve avatars failed: {}",
-                        error
-                    );
+                    crate::runtime_warn!("get_live_online_rank resolve avatars failed: {}", error);
                     HashMap::new()
                 }
             }

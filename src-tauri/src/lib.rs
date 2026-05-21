@@ -15,6 +15,7 @@ mod runtime_log;
 mod state;
 mod state_event;
 mod tray;
+mod ws_server;
 
 use commands::{
     clear_app_logs, create_live_vote, generate_http_user_agent, get_account_list, get_app_config,
@@ -106,6 +107,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 commands::ensure_obs_ws_keepalive_task(app_handle.clone()).await;
+                ws_server::sync_ws_server_from_config(app_handle.clone()).await;
 
                 let first_state = app_handle.state::<AppState>();
                 let first = refresh_all_account_profiles_inner(&first_state).await;

@@ -284,6 +284,18 @@ fn apply_app_config_value(
         "on_live_stop_command" => {
             runtime.config.on_live_stop_command = value.as_str().unwrap_or("").to_string();
         }
+        "ws_server_enabled" => {
+            runtime.config.ws_server_enabled = value.as_bool().unwrap_or(false);
+        }
+        "ws_server_listen_addr" => {
+            runtime.config.ws_server_listen_addr = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "ws_server_auth_token" => {
+            runtime.config.ws_server_auth_token = value.as_str().unwrap_or("").trim().to_string();
+        }
+        "ws_server_bypass_token_for_loopback" => {
+            runtime.config.ws_server_bypass_token_for_loopback = value.as_bool().unwrap_or(true);
+        }
         "locale" => {
             runtime.config.locale =
                 normalize_locale_setting(value.as_str().unwrap_or("auto")).to_string();
@@ -430,6 +442,10 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "obs_ws_auto_stop_on_live_end": runtime.config.obs_ws_auto_stop_on_live_end,
         "on_live_start_command": runtime.config.on_live_start_command,
         "on_live_stop_command": runtime.config.on_live_stop_command,
+        "ws_server_enabled": runtime.config.ws_server_enabled,
+        "ws_server_listen_addr": runtime.config.ws_server_listen_addr,
+        "ws_server_auth_token": runtime.config.ws_server_auth_token,
+        "ws_server_bypass_token_for_loopback": runtime.config.ws_server_bypass_token_for_loopback,
         "locale": runtime.config.locale,
         "host_www": runtime.config.host_www,
         "host_api": runtime.config.host_api,
@@ -470,6 +486,7 @@ pub async fn set_app_config(
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);
     ensure_obs_ws_keepalive_task(app.clone()).await;
+    crate::ws_server::sync_ws_server_from_config(app.clone()).await;
     sync_overlay_window_from_config(app.clone(), &state).await;
     crate::tray::sync_dock_visibility(&app);
     crate::tray::refresh_tray_menu(&app);
@@ -491,6 +508,7 @@ pub async fn set_app_configs(
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);
     ensure_obs_ws_keepalive_task(app.clone()).await;
+    crate::ws_server::sync_ws_server_from_config(app.clone()).await;
     sync_overlay_window_from_config(app.clone(), &state).await;
     crate::tray::sync_dock_visibility(&app);
     crate::tray::refresh_tray_menu(&app);

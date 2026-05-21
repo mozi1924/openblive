@@ -98,7 +98,8 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
     let mut response = response_first.clone();
     let mut code = response["code"].as_i64().unwrap_or(-1);
     if matches!(code, 60024 | 60043) {
-        let response_retry = request_start_live(state, &cookie, &room_id, &csrf, area, true).await?;
+        let response_retry =
+            request_start_live(state, &cookie, &room_id, &csrf, area, true).await?;
         let retry_code = response_retry["code"].as_i64().unwrap_or(-1);
         if retry_code == 0 {
             response = response_retry;
@@ -149,12 +150,7 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
         .map(build_command_template_context)
         .unwrap_or_else(empty_command_template_context);
 
-    let (
-        live_control_mode,
-        obs_ws_url,
-        obs_ws_password,
-        start_command_template,
-    ) = {
+    let (live_control_mode, obs_ws_url, obs_ws_password, start_command_template) = {
         let runtime = state.runtime.lock().await;
         (
             normalize_live_control_mode(&runtime.config.live_control_mode).to_string(),
@@ -166,7 +162,8 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
 
     let linkage_result = match live_control_mode.as_str() {
         "obs_ws" => {
-            if primary_context.server.trim().is_empty() || primary_context.stream_code.trim().is_empty()
+            if primary_context.server.trim().is_empty()
+                || primary_context.stream_code.trim().is_empty()
             {
                 Err("i18n.live.error.obs_stream_context_missing".to_string())
             } else {
@@ -174,9 +171,12 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
                 let obs_ws_password_bg = obs_ws_password.clone();
                 let primary_context_bg = primary_context.clone();
                 tokio::spawn(async move {
-                    if let Err(error) =
-                        obs_ws_start_stream(&obs_ws_url_bg, &obs_ws_password_bg, &primary_context_bg)
-                            .await
+                    if let Err(error) = obs_ws_start_stream(
+                        &obs_ws_url_bg,
+                        &obs_ws_password_bg,
+                        &primary_context_bg,
+                    )
+                    .await
                     {
                         crate::runtime_warn!("[live][obs] async start linkage failed: {error}");
                     }
@@ -407,12 +407,7 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
         .map_err(|error| error.to_string())?;
     let code = value["code"].as_i64().unwrap_or(-1);
     if code == 0 {
-        let (
-            live_control_mode,
-            obs_ws_url,
-            obs_ws_password,
-            stop_command_template,
-        ) = {
+        let (live_control_mode, obs_ws_url, obs_ws_password, stop_command_template) = {
             let runtime = state.runtime.lock().await;
             (
                 normalize_live_control_mode(&runtime.config.live_control_mode).to_string(),
@@ -455,8 +450,8 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
             && current_sub_session_key == expected_sub_session_key
             && response_session_consistent;
         if !same_session {
-            let has_expected_identity =
-                expected_live_key.as_deref().is_some() || expected_sub_session_key.as_deref().is_some();
+            let has_expected_identity = expected_live_key.as_deref().is_some()
+                || expected_sub_session_key.as_deref().is_some();
             let mut reclaimed_user_count = 0usize;
             if has_expected_identity {
                 for user in runtime.config.users.values_mut() {
@@ -603,10 +598,13 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
         .unwrap_or(true);
     if !session_consistent {
         let synced_session = sync_live_status_runtime(state).await;
-        let synced_live_status =
-            synced_session
-                .live_status
-                .unwrap_or(if synced_session.is_live { LIVE_STATUS_LIVE } else { LIVE_STATUS_OFFLINE });
+        let synced_live_status = synced_session
+            .live_status
+            .unwrap_or(if synced_session.is_live {
+                LIVE_STATUS_LIVE
+            } else {
+                LIVE_STATUS_OFFLINE
+            });
         let synced_is_live = matches!(synced_live_status, LIVE_STATUS_LIVE | LIVE_STATUS_ROUND);
         let danmu_result = if synced_is_live {
             json!({

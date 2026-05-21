@@ -212,7 +212,9 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                         reenter_delay_secs = Some(delay);
                     }
                 } else {
-                    crate::runtime_log!("[danmu] Decompressed size exceeded safety limit (5MB). Aborting packet.");
+                    crate::runtime_log!(
+                        "[danmu] Decompressed size exceeded safety limit (5MB). Aborting packet."
+                    );
                 }
             }
         } else if proto == 3 {
@@ -226,7 +228,9 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                         reenter_delay_secs = Some(delay);
                     }
                 } else {
-                    crate::runtime_log!("[danmu] Decompressed size exceeded safety limit (5MB). Aborting packet.");
+                    crate::runtime_log!(
+                        "[danmu] Decompressed size exceeded safety limit (5MB). Aborting packet."
+                    );
                 }
             }
         } else if op == 5 {
@@ -235,6 +239,7 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                 let (message, reenter_delay) = parse_danmu_message(&value);
                 if let Some(mut message) = message {
                     enrich_sender_face_with_cache(app, &mut message);
+                    crate::ws_server::broadcast_danmu_message(app, &message);
                     let _ = app.emit("danmu-message", message);
                 } else if is_supported_cmd(raw_cmd) {
                     let _ = app.emit("danmu-message", build_parse_failed_system_message(raw_cmd));
