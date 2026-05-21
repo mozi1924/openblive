@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg } from "../../types/studio";
-import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../../utils/danmu";
+import {
+  createLiveEmoticonIndex,
+  createSelfDanmuMessage,
+  normalizeDanmuEmoticon,
+  resolveDanmuMessageSegments,
+} from "../../utils/danmu";
 import type { LocaleSetting } from "../../utils/i18n";
 import { useTauriEvent } from "../useTauriEvent";
 import { applyIncomingRealtimeMessage, applyResolvedDanmuAvatar } from "./realtimeDanmu";
@@ -41,9 +46,12 @@ export function useDanmuMessageFeed({
 
   const resolveDanmuSegments = useCallback(
     (message: DanmuMsg): DanmuMsg => {
-      if (message.type !== "danmu" || (message.segments && message.segments.length > 0)) {
+      if (message.type !== "danmu") {
         return message;
       }
+
+      const normalizedEmoticon = normalizeDanmuEmoticon(message.emoticon);
+      const resolvedSegments = resolveDanmuMessageSegments(message, liveEmoticonMap);
       const fallback = createSelfDanmuMessage(
         message.content,
         message.sender,
@@ -56,9 +64,22 @@ export function useDanmuMessageFeed({
           sender_face: message.sender_face,
         },
       );
+
+      if (
+        resolvedSegments === message.segments &&
+        (normalizedEmoticon?.url || "") === (message.emoticon?.url || "")
+      ) {
+        return message;
+      }
+
+      if (!resolvedSegments && !normalizedEmoticon && !fallback.segments) {
+        return message;
+      }
+
       return {
         ...message,
-        segments: fallback.segments,
+        emoticon: normalizedEmoticon ?? message.emoticon,
+        segments: resolvedSegments ?? fallback.segments,
       };
     },
     [liveEmoticonMap],
@@ -74,12 +95,14 @@ export function useDanmuMessageFeed({
       if (prev.length === 0) {
         return recent;
       }
+      const recentById = new Map(recent.map((item) => [item.id, item] as const));
+      const merged = prev.map((item) => recentById.get(item.id) ?? item);
       const seen = new Set(prev.map((item) => item.id));
       const appended = recent.filter((item) => !seen.has(item.id));
-      if (appended.length === 0) {
+      if (appended.length === 0 && merged.every((item, index) => item === prev[index])) {
         return prev;
       }
-      return applyLimit([...prev, ...appended]);
+      return applyLimit([...merged, ...appended]);
     });
   }, [applyLimit, resolveDanmuSegments]);
 
@@ -95,7 +118,8 @@ export function useDanmuMessageFeed({
       return;
     }
     setDanmus((prev) => applyLimit(prev.map(resolveDanmuSegments)));
-  }, [applyLimit, liveEmoticonMap, resolveDanmuSegments]);
+    void loadRecentDanmu();
+  }, [applyLimit, liveEmoticonMap, loadRecentDanmu, resolveDanmuSegments]);
 
   useTauriEvent(studioApi.listenDanmuMessage, (message) => {
     const resolvedMessage = resolveDanmuSegments(message);

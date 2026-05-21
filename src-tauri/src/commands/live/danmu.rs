@@ -1,5 +1,6 @@
 use crate::bili::get_danmu_info;
 use crate::constants::CmdResult;
+use crate::emoticon::{parse_live_emoticon_packages, LiveEmoticonResource};
 use crate::danmu::decode_and_emit;
 use crate::endpoints;
 use crate::state::AppState;
@@ -8,6 +9,7 @@ use chrono::{FixedOffset, NaiveDateTime, TimeZone};
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
 use serde_json::json;
+use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio_tungstenite::tungstenite::Message;
@@ -228,6 +230,110 @@ fn map_history_entry_to_danmu(
     })
 }
 
+async fn fetch_history_emoticon_map(
+    client: &crate::client::BiliClient,
+    config_path: &std::path::Path,
+    room_id: &str,
+    cookie: &str,
+) -> HashMap<String, LiveEmoticonResource> {
+    let value = match client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/web-ucenter/v2/emoticon/GetEmoticons"),
+            &[("platform", "pc".to_string()), ("room_id", room_id.to_string())],
+            cookie,
+        )
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            crate::runtime_warn!("[history-danmu] fetch emoticons failed: {}", error);
+            return HashMap::new();
+        }
+    };
+
+    if value["code"].as_i64().unwrap_or(-1) != 0 {
+        crate::runtime_warn!(
+            "[history-danmu] fetch emoticons code={} msg={}",
+            value["code"].as_i64().unwrap_or(-1),
+            value["message"].as_str().unwrap_or("")
+        );
+        return HashMap::new();
+    }
+
+    let packages = parse_live_emoticon_packages(client, config_path, &value).await;
+    let mut emoticon_map = HashMap::new();
+    for package in packages {
+        for emoticon in package.emoticons {
+            if !emoticon.text.trim().is_empty() && !emoticon.url.trim().is_empty() {
+                emoticon_map.insert(emoticon.text.clone(), emoticon);
+            }
+        }
+    }
+    emoticon_map
+}
+
+fn build_history_segments(
+    content: &str,
+    emoticon_map: &HashMap<String, LiveEmoticonResource>,
+) -> Option<Vec<serde_json::Value>> {
+    if content.trim().is_empty() || emoticon_map.is_empty() {
+        return None;
+    }
+
+    let mut segments = Vec::new();
+    let mut cursor = 0usize;
+    let mut matched = false;
+
+    while let Some(start_offset) = content[cursor..].find('[') {
+        let start = cursor + start_offset;
+        let Some(end_offset) = content[start..].find(']') else {
+            break;
+        };
+        let end = start + end_offset + 1;
+        let token = &content[start..end];
+        let Some(emoticon) = emoticon_map.get(token) else {
+            cursor = start + 1;
+            continue;
+        };
+
+        if start > cursor {
+            segments.push(json!({
+                "type": "text",
+                "text": &content[cursor..start],
+            }));
+        }
+
+        segments.push(json!({
+            "type": "emoticon",
+            "text": token,
+            "emoticon": {
+                "emoticon_id": emoticon.emoticon_id,
+                "emoticon_unique": emoticon.emoticon_unique,
+                "text": emoticon.text,
+                "url": emoticon.url,
+                "width": emoticon.width,
+                "height": emoticon.height,
+                "is_dynamic": emoticon.is_dynamic,
+            }
+        }));
+        cursor = end;
+        matched = true;
+    }
+
+    if !matched {
+        return None;
+    }
+
+    if cursor < content.len() {
+        segments.push(json!({
+            "type": "text",
+            "text": &content[cursor..],
+        }));
+    }
+
+    Some(segments)
+}
+
 pub(crate) async fn fetch_recent_danmu_messages_inner(
     state: &AppState,
 ) -> Result<Vec<serde_json::Value>, String> {
@@ -281,6 +387,9 @@ pub(crate) async fn fetch_recent_danmu_messages_inner(
         return Err(message.to_string());
     }
 
+    let history_emoticon_map =
+        fetch_history_emoticon_map(&client, &config_path, &room_id, &cookie).await;
+
     let mut rows: Vec<(i64, serde_json::Value)> = Vec::new();
     let mut seq = 0usize;
     for source in ["admin", "room"] {
@@ -298,6 +407,17 @@ pub(crate) async fn fetch_recent_danmu_messages_inner(
                 .unwrap_or(i64::MAX / 2 + seq as i64);
             rows.push((order_ts, mapped));
             seq += 1;
+        }
+    }
+
+    if !history_emoticon_map.is_empty() {
+        for (_, message) in &mut rows {
+            let Some(content) = message.get("content").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            if let Some(segments) = build_history_segments(content, &history_emoticon_map) {
+                message["segments"] = serde_json::Value::Array(segments);
+            }
         }
     }
 
@@ -555,8 +675,10 @@ pub(crate) async fn stop_danmu_monitor_inner(state: &AppState) -> CmdResult {
 
 #[cfg(test)]
 mod tests {
-    use super::clear_danmu_task_if_current;
+    use super::{build_history_segments, clear_danmu_task_if_current};
+    use crate::emoticon::LiveEmoticonResource;
     use crate::state::RuntimeState;
+    use std::collections::HashMap;
 
     #[test]
     fn clear_danmu_task_only_when_task_id_matches() {
@@ -566,5 +688,37 @@ mod tests {
         assert!(!clear_danmu_task_if_current(&mut runtime, 41));
         assert!(clear_danmu_task_if_current(&mut runtime, 42));
         assert!(runtime.danmu_task.is_none());
+    }
+
+    #[test]
+    fn build_history_segments_splits_inline_emoticons() {
+        let mut emoticon_map = HashMap::new();
+        emoticon_map.insert(
+            "[doge]".to_string(),
+            LiveEmoticonResource {
+                emoticon_id: 1,
+                emoticon_unique: "emoji_1".to_string(),
+                text: "[doge]".to_string(),
+                label: "doge".to_string(),
+                url: "data:image/png;base64,abc".to_string(),
+                width: 32,
+                height: 32,
+                is_dynamic: false,
+            },
+        );
+
+        let segments = build_history_segments("hello [doge] world", &emoticon_map)
+            .expect("segments should be built");
+
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0]["type"].as_str(), Some("text"));
+        assert_eq!(segments[0]["text"].as_str(), Some("hello "));
+        assert_eq!(segments[1]["type"].as_str(), Some("emoticon"));
+        assert_eq!(segments[1]["text"].as_str(), Some("[doge]"));
+        assert_eq!(
+            segments[1]["emoticon"]["url"].as_str(),
+            Some("data:image/png;base64,abc")
+        );
+        assert_eq!(segments[2]["text"].as_str(), Some(" world"));
     }
 }

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   createLiveEmoticonIndex,
   createSelfDanmuMessage,
+  normalizeDanmuSegments,
   normalizeEmoticonText,
+  resolveDanmuMessageSegments,
   upsertIncomingDanmuMessage,
 } from "./danmu";
 import type { DanmuMsg, LiveEmoticonPackage } from "../types/studio";
@@ -55,6 +57,65 @@ describe("danmu emoticon helpers", () => {
           width: 20,
           height: 20,
           is_dynamic: false,
+        },
+      },
+    ]);
+  });
+
+  it("hydrates segments from backend emoticon payload without room cache", () => {
+    const segments = resolveDanmuMessageSegments({
+      content: "[çƒ­]",
+      emoticon: {
+        emoticon_id: 278,
+        emoticon_unique: "emoji_278",
+        text: "çƒ­",
+        url: "http://i0.hdslb.com/bfs/live/test.png",
+        width: 20,
+        height: 20,
+        is_dynamic: false,
+      },
+    });
+
+    expect(segments).toEqual([
+      {
+        type: "emoticon",
+        text: "[çƒ­]",
+        emoticon: {
+          emoticon_id: 278,
+          emoticon_unique: "emoji_278",
+          text: "[çƒ­]",
+          url: "https://i0.hdslb.com/bfs/live/test.png",
+          width: 20,
+          height: 20,
+          is_dynamic: false,
+        },
+      },
+    ]);
+  });
+
+  it("normalizes existing emoticon segment asset urls", () => {
+    expect(
+      normalizeDanmuSegments([
+        {
+          type: "emoticon",
+          text: "çƒ­",
+          emoticon: {
+            text: "çƒ­",
+            url: "//i0.hdslb.com/bfs/live/test.png",
+            width: 20,
+            height: 20,
+          },
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "emoticon",
+        text: "[çƒ­]",
+        emoticon: {
+          text: "[çƒ­]",
+          url: "https://i0.hdslb.com/bfs/live/test.png",
+          width: 20,
+          height: 20,
         },
       },
     ]);

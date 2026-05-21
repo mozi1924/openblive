@@ -28,6 +28,26 @@ const normalizeAssetUrl = (url: string) => {
   return trimmed;
 };
 
+export const normalizeDanmuEmoticon = (
+  emoticon?: DanmuEmoticon | null,
+): DanmuEmoticon | undefined => {
+  if (!emoticon) {
+    return undefined;
+  }
+
+  const text = normalizeEmoticonText(emoticon.text);
+  const url = normalizeAssetUrl(emoticon.url);
+  if (!text || !url) {
+    return undefined;
+  }
+
+  return {
+    ...emoticon,
+    text,
+    url,
+  };
+};
+
 export const normalizeEmoticonText = (text: string) => {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -37,6 +57,37 @@ export const normalizeEmoticonText = (text: string) => {
     return trimmed;
   }
   return `[${trimmed}]`;
+};
+
+export const normalizeDanmuSegments = (
+  segments?: DanmuContentSegment[],
+): DanmuContentSegment[] | undefined => {
+  if (!segments?.length) {
+    return undefined;
+  }
+
+  const normalized = segments.reduce<DanmuContentSegment[]>((acc, segment) => {
+    if (segment.type === "text") {
+      if (segment.text) {
+        acc.push(segment);
+      }
+      return acc;
+    }
+
+    const emoticon = normalizeDanmuEmoticon(segment.emoticon);
+    if (!emoticon) {
+      return acc;
+    }
+
+    acc.push({
+      type: "emoticon" as const,
+      text: normalizeEmoticonText(segment.text || emoticon.text),
+      emoticon,
+    });
+    return acc;
+  }, []);
+
+  return normalized.length > 0 ? normalized : undefined;
 };
 
 
@@ -100,6 +151,38 @@ const buildSegments = (
   return segments;
 };
 
+export const resolveDanmuMessageSegments = (
+  message: Pick<DanmuMsg, "content" | "segments" | "emoticon">,
+  emoticonMap?: Map<string, DanmuEmoticon>,
+): DanmuContentSegment[] | undefined => {
+  const normalizedSegments = normalizeDanmuSegments(message.segments);
+  if (normalizedSegments?.length) {
+    return normalizedSegments;
+  }
+
+  const normalizedEmoticon = normalizeDanmuEmoticon(message.emoticon);
+  if (normalizedEmoticon) {
+    const token = normalizedEmoticon.text;
+    const directSegments = buildSegments(message.content, new Map([[token, normalizedEmoticon]]));
+    if (directSegments?.length) {
+      return directSegments;
+    }
+    if (message.content.trim() === token) {
+      return [{
+        type: "emoticon",
+        text: token,
+        emoticon: normalizedEmoticon,
+      }];
+    }
+  }
+
+  if (!emoticonMap) {
+    return undefined;
+  }
+
+  return buildSegments(message.content, emoticonMap);
+};
+
 export const createLiveEmoticonIndex = (packages: LiveEmoticonPackage[]) => {
   const map = new Map<string, DanmuEmoticon>();
   for (const pkg of packages) {
@@ -152,7 +235,7 @@ export const createSelfDanmuMessage = (
     content,
     optimistic: true,
     ...normalizedSenderMeta,
-    segments: emoticonMap ? buildSegments(content, emoticonMap) : undefined,
+    segments: emoticonMap ? resolveDanmuMessageSegments({ content }, emoticonMap) : undefined,
   };
 };
 

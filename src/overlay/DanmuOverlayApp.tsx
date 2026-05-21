@@ -28,7 +28,7 @@ export function DanmuOverlayApp() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const rootDragRef = useRef<HTMLDivElement>(null);
+  const headerDragRef = useRef<HTMLElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const floatingPanelRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -60,7 +60,7 @@ export function DanmuOverlayApp() {
     setCurrentUser(res.data ?? null);
   }, []);
 
-  useWindowDrag(rootDragRef);
+  useWindowDrag(headerDragRef);
 
   useEffect(() => {
     void (async () => {
@@ -225,14 +225,16 @@ export function DanmuOverlayApp() {
 
   return (
     <div
-      ref={rootDragRef}
       className="flex h-screen w-screen overflow-hidden rounded-[22px] text-[#eaf2ff]"
       style={{
         backgroundColor: `rgba(8, 12, 19, ${panelOpacityRatio})`,
       }}
     >
       <div className="relative flex h-full w-full flex-col">
-        <header className="drag-region flex items-center justify-between px-3 py-2.5">
+        <header
+          ref={headerDragRef}
+          className="drag-region flex items-center justify-between px-3 py-2.5"
+        >
           <div data-tauri-drag-region="false" className="flex items-center gap-2">
             <button
               type="button"

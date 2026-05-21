@@ -238,6 +238,7 @@ export type DanmuMsg = {
   gift_unit_price?: number;
   gift_total_coin?: number;
   optimistic?: boolean;
+  emoticon?: DanmuEmoticon;
   segments?: DanmuContentSegment[];
 };
 
