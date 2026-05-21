@@ -1,9 +1,16 @@
-import { BookOpen, HeartHandshake, Layers3, Wrench, Link as LinkIcon } from "lucide-react";
+import { BookOpen, HeartHandshake, Layers3, Wrench, Link as LinkIcon, RefreshCcw, Download } from "lucide-react";
 import type { LocaleSetting } from "../../utils/i18n";
-import { t } from "../../utils/i18n";
+import { t, tf } from "../../utils/i18n";
 
 type ProjectTabProps = {
   locale: LocaleSetting;
+  appVersion: string;
+  appBundleType: string | null;
+  availableAppUpdateVersion: string | null;
+  checkingAppUpdate: boolean;
+  installingAppUpdate: boolean;
+  onCheckAppUpdate: () => void;
+  onRunPlatformUpdateAction: () => void;
 };
 
 const techStacks = [
@@ -32,7 +39,40 @@ const acknowledgements = [
   { name: "xfgryujk/blivechat", url: "https://github.com/xfgryujk/blivechat" },
 ] as const;
 
-export function ProjectTab({ locale }: ProjectTabProps) {
+export function ProjectTab({
+  locale,
+  appVersion,
+  appBundleType,
+  availableAppUpdateVersion,
+  checkingAppUpdate,
+  installingAppUpdate,
+  onCheckAppUpdate,
+  onRunPlatformUpdateAction,
+}: ProjectTabProps) {
+  const hasAvailableUpdate = Boolean(availableAppUpdateVersion?.trim());
+  const actionDisabled = checkingAppUpdate || installingAppUpdate;
+  const updateActionLabel = (() => {
+    if (appBundleType === "deb" || appBundleType === "rpm") {
+      return t(locale, "ui.project.update.install.pkg");
+    }
+    if (appBundleType === "app") {
+      return t(locale, "ui.project.update.install.dmg");
+    }
+    return t(locale, "ui.project.update.install");
+  })();
+  const actionLabel = (() => {
+    if (installingAppUpdate) {
+      return t(locale, "ui.project.update.installing");
+    }
+    if (checkingAppUpdate) {
+      return t(locale, "ui.project.update.checking");
+    }
+    if (hasAvailableUpdate) {
+      return updateActionLabel;
+    }
+    return t(locale, "ui.project.update.check");
+  })();
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 pb-6">
       <section className="flat-panel rounded-2xl border border-white/5 p-6">
@@ -44,6 +84,42 @@ export function ProjectTab({ locale }: ProjectTabProps) {
         </div>
         <h3 className="text-base font-bold text-white">OpenBLive Studio</h3>
         <p className="mt-2 text-xs leading-6 text-gray-300">{t(locale, "ui.project.about.desc")}</p>
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/8 bg-white/2 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-[11px] text-gray-400">
+              {t(locale, "ui.project.update.current_version")}
+              <span className="ml-1 font-mono text-cyan-300">v{appVersion || "--"}</span>
+            </p>
+            {hasAvailableUpdate ? (
+              <p className="text-[11px] text-emerald-300">
+                {tf(locale, "ui.project.update.available", {
+                  version: availableAppUpdateVersion || "--",
+                })}
+              </p>
+            ) : (
+              <p className="text-[11px] text-gray-500">{t(locale, "ui.project.update.none_short")}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (hasAvailableUpdate) {
+                onRunPlatformUpdateAction();
+              } else {
+                onCheckAppUpdate();
+              }
+            }}
+            disabled={actionDisabled}
+            className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition-all ${
+              actionDisabled
+                ? "cursor-not-allowed border border-white/10 bg-white/5 text-gray-500"
+                : "border border-bili-blue/40 bg-bili-blue/15 text-bili-blue hover:bg-bili-blue/25"
+            }`}
+          >
+            {hasAvailableUpdate ? <Download className="h-3.5 w-3.5" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+            {actionLabel}
+          </button>
+        </div>
       </section>
 
       <section className="flat-panel rounded-2xl border border-white/5 p-6">

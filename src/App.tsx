@@ -167,7 +167,16 @@ function App() {
           )}
 
           {state.activeTab === "project" && (
-            <ProjectTab locale={locale} />
+            <ProjectTab
+              locale={locale}
+              appVersion={state.appVersion}
+              appBundleType={state.appBundleType}
+              availableAppUpdateVersion={state.availableAppUpdateVersion}
+              checkingAppUpdate={state.checkingAppUpdate}
+              installingAppUpdate={state.installingAppUpdate}
+              onCheckAppUpdate={actions.checkAppUpdate}
+              onRunPlatformUpdateAction={actions.runPlatformUpdateAction}
+            />
           )}
 
           {state.activeTab === "settings" && (

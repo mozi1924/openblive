@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Update as TauriUpdate } from "@tauri-apps/plugin-updater";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { studioApi } from "../services/studioApi";
 import type {
   ActiveTab,
@@ -73,6 +75,8 @@ const MANUAL_SAVE_APP_CONFIG_KEYS = [
 type ManualSaveConfigKey = (typeof MANUAL_SAVE_APP_CONFIG_KEYS)[number];
 type AppConfigSnapshot = Pick<AppConfig, ManualSaveConfigKey>;
 const LIVE_ONLINE_RANK_POLL_INTERVAL_MS = 5_000;
+const APP_UPDATE_POLL_INTERVAL_MS = 60 * 60 * 1000;
+const RELEASES_PAGE_URL = "https://github.com/mozi1924/openblive/releases";
 
 const buildAppConfigSnapshot = (config: AppConfig): AppConfigSnapshot =>
   MANUAL_SAVE_APP_CONFIG_KEYS.reduce((acc, key) => {
@@ -130,6 +134,11 @@ export function useStudioController() {
   const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
   const [recentAreas, setRecentAreas] = useState<RecentArea[]>([]);
   const [profileState, setProfileState] = useState<LiveProfileState>(defaultProfileState);
+  const [appVersion, setAppVersion] = useState("");
+  const [appBundleType, setAppBundleType] = useState<string | null>(null);
+  const [availableAppUpdateVersion, setAvailableAppUpdateVersion] = useState<string | null>(null);
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
+  const [installingAppUpdate, setInstallingAppUpdate] = useState(false);
   const localeSetting = (appConfig?.locale || "auto") as LocaleSetting;
 
   const danmuEndRef = useRef<HTMLDivElement>(null);
@@ -151,6 +160,9 @@ export function useStudioController() {
   const syncStatusCacheHintRef = useRef("");
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
   const liveOnlineRankPollingRef = useRef(false);
+  const appUpdateRef = useRef<TauriUpdate | null>(null);
+  const appUpdatePromptedVersionRef = useRef<string | null>(null);
+  const appUpdateCheckBusyRef = useRef(false);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   useWindowDrag(sidebarDragRef, headerDragRef);
@@ -213,6 +225,117 @@ export function useStudioController() {
       );
     });
   }, [append, localeSetting]);
+
+  const replacePendingAppUpdate = useCallback((next: TauriUpdate | null) => {
+    const previous = appUpdateRef.current;
+    appUpdateRef.current = next;
+    if (previous && previous !== next) {
+      void previous.close().catch(() => undefined);
+    }
+  }, []);
+
+  const loadAppMetadata = useCallback(async () => {
+    try {
+      const { getVersion, getBundleType } = await import("@tauri-apps/api/app");
+      const [version, bundleType] = await Promise.all([getVersion(), getBundleType()]);
+      setAppVersion(version.trim());
+      setAppBundleType(bundleType);
+    } catch {
+      setAppVersion("");
+      setAppBundleType(null);
+    }
+  }, []);
+
+  const checkAppUpdate = useCallback(
+    async (options?: { promptOnAvailable?: boolean; silent?: boolean }) => {
+      if (appUpdateCheckBusyRef.current) {
+        return;
+      }
+      appUpdateCheckBusyRef.current = true;
+      setCheckingAppUpdate(true);
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const update = await check();
+        if (!update) {
+          setAvailableAppUpdateVersion(null);
+          appUpdatePromptedVersionRef.current = null;
+          replacePendingAppUpdate(null);
+          if (!options?.silent) {
+            append(tf(localeSetting, "ui.project.update.none", { version: appVersion || "--" }));
+          }
+          return;
+        }
+
+        setAvailableAppUpdateVersion(update.version);
+        replacePendingAppUpdate(update);
+
+        if (options?.promptOnAvailable === false) {
+          return;
+        }
+        if (appUpdatePromptedVersionRef.current === update.version) {
+          return;
+        }
+
+        appUpdatePromptedVersionRef.current = update.version;
+        const accepted = await requestConfirm({
+          title: t(localeSetting, "ui.project.update.popup.title"),
+          description: tf(localeSetting, "ui.project.update.popup.desc", {
+            current: update.currentVersion,
+            version: update.version,
+          }),
+          confirmText: t(localeSetting, "ui.project.update.popup.confirm"),
+          tone: "primary",
+        });
+        if (accepted) {
+          await revealMainWindowForAction();
+          setActiveTab("project");
+        }
+      } catch (error) {
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.project.update.error.check", {
+              msg: resolveBackendMessage(String(error), localeSetting),
+            }),
+          );
+        }
+      } finally {
+        setCheckingAppUpdate(false);
+        appUpdateCheckBusyRef.current = false;
+      }
+    },
+    [appVersion, append, localeSetting, replacePendingAppUpdate, requestConfirm, revealMainWindowForAction],
+  );
+
+  const downloadAndInstallAppUpdate = useCallback(async () => {
+    if (installingAppUpdate) {
+      return;
+    }
+
+    let update = appUpdateRef.current;
+    if (!update) {
+      await checkAppUpdate({ promptOnAvailable: false, silent: false });
+      update = appUpdateRef.current;
+    }
+    if (!update) {
+      return;
+    }
+
+    setInstallingAppUpdate(true);
+    try {
+      await update.downloadAndInstall();
+      append(tf(localeSetting, "ui.project.update.install.done", { version: update.version }));
+      setAvailableAppUpdateVersion(null);
+      replacePendingAppUpdate(null);
+    } catch (error) {
+      append(
+        tf(localeSetting, "ui.project.update.error.install", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    } finally {
+      setInstallingAppUpdate(false);
+    }
+  }, [append, checkAppUpdate, installingAppUpdate, localeSetting, replacePendingAppUpdate]);
 
   const danmuVoteController = useDanmuVoteController({
     activeUidRef,
@@ -327,6 +450,21 @@ export function useStudioController() {
       setShowLiveOnlineRankPanel(false);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    void loadAppMetadata();
+  }, [loadAppMetadata]);
+
+  useEffect(() => {
+    void checkAppUpdate({ promptOnAvailable: true, silent: true });
+    const timer = window.setInterval(() => {
+      void checkAppUpdate({ promptOnAvailable: true, silent: true });
+    }, APP_UPDATE_POLL_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+      replacePendingAppUpdate(null);
+    };
+  }, [checkAppUpdate, replacePendingAppUpdate]);
 
   useEffect(() => {
     if (activeTab !== "danmu" || !showLiveOnlineRankPanel || !hasLiveAuth) {
@@ -494,6 +632,48 @@ export function useStudioController() {
       );
     });
   }, [append, localeSetting]);
+
+  const openReleasePage = useCallback(async () => {
+    try {
+      await openUrl(RELEASES_PAGE_URL);
+    } catch {
+      window.open(RELEASES_PAGE_URL, "_blank", "noopener,noreferrer");
+    }
+  }, []);
+
+  const runPlatformUpdateAction = useCallback(async () => {
+    if (!availableAppUpdateVersion) {
+      await checkAppUpdate({ promptOnAvailable: false, silent: false });
+      return;
+    }
+
+    if (appBundleType === "deb" || appBundleType === "rpm") {
+      await requestAlert({
+        title: t(localeSetting, "ui.project.update.pkg.title"),
+        description: t(localeSetting, "ui.project.update.pkg.desc"),
+        confirmText: t(localeSetting, "ui.project.update.pkg.confirm"),
+        tone: "primary",
+      });
+      return;
+    }
+
+    if (appBundleType === "app") {
+      await openReleasePage();
+      append(t(localeSetting, "ui.project.update.dmg.opened"));
+      return;
+    }
+
+    await downloadAndInstallAppUpdate();
+  }, [
+    appBundleType,
+    append,
+    availableAppUpdateVersion,
+    checkAppUpdate,
+    downloadAndInstallAppUpdate,
+    localeSetting,
+    openReleasePage,
+    requestAlert,
+  ]);
 
   const saveAppConfig = useCallback(async () => {
     if (!appConfig) {
@@ -773,6 +953,10 @@ export function useStudioController() {
       accounts,
       activeTab,
       appConfig,
+      appVersion,
+      appBundleType,
+      availableAppUpdateVersion,
+      checkingAppUpdate,
       child,
       children,
       copiedKey,
@@ -823,6 +1007,7 @@ export function useStudioController() {
       showConfirmModal: confirmModal.show,
       showFaceModal,
       showLogs,
+      installingAppUpdate,
       savingConfig,
       savingLocale,
       tagInput,
@@ -873,6 +1058,9 @@ export function useStudioController() {
       refreshLiveOnlineRank: () => loadLiveOnlineRank(),
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
+      checkAppUpdate: () => checkAppUpdate({ promptOnAvailable: true, silent: false }),
+      downloadAndInstallAppUpdate,
+      runPlatformUpdateAction,
       setLiveVoteQuestion: updateLiveVoteQuestion,
       setLiveVoteOptionA: updateLiveVoteOptionA,
       setLiveVoteOptionB: updateLiveVoteOptionB,
