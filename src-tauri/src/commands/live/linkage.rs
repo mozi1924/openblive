@@ -187,7 +187,9 @@ static OBS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 static OBS_LINKAGE_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
 const OBS_PRIMARY_PUSH_HOST: &str = "live-push.bilivideo.com";
 const OBS_RECONNECT_TRIGGER_COUNT: usize = 3;
-const OBS_STREAM_STATUS_CHECK_RETRY: usize = 12;
+// OBS auto-reconnect uses increasing intervals, so a short probe window may never
+// observe the third reconnect attempt.
+const OBS_STREAM_STATUS_CHECK_RETRY: usize = 30;
 const OBS_STREAM_STATUS_CHECK_DELAY_MS: u64 = 1_000;
 const OBS_FALLBACK_RESTART_RETRY: usize = 3;
 const OBS_FALLBACK_RESTART_DELAY_MS: u64 = 1_000;
@@ -214,6 +216,10 @@ fn obs_parse_stream_status(value: &serde_json::Value) -> ObsStreamStatus {
         output_reconnecting: data["outputReconnecting"].as_bool().unwrap_or(false),
         output_state: data["outputState"].as_str().unwrap_or_default().to_string(),
     }
+}
+
+fn obs_is_reconnecting_status(status: &ObsStreamStatus) -> bool {
+    status.output_reconnecting || status.output_state == "OBS_WEBSOCKET_OUTPUT_RECONNECTING"
 }
 
 fn rewrite_stream_server_host(server: &str, next_host: &str) -> Option<String> {
@@ -370,8 +376,9 @@ where
     S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
     S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
 {
-    let mut reconnecting_streak = 0usize;
+    let mut reconnect_attempts = 0usize;
     let mut saw_active_stream = false;
+    let mut last_reconnecting = false;
     let mut trigger_reason = String::new();
 
     for attempt in 0..OBS_STREAM_STATUS_CHECK_RETRY {
@@ -381,31 +388,19 @@ where
                     saw_active_stream = true;
                 }
 
-                if status.output_reconnecting
-                    || status.output_state == "OBS_WEBSOCKET_OUTPUT_RECONNECTING"
-                {
-                    reconnecting_streak += 1;
-                } else {
-                    reconnecting_streak = 0;
+                let is_reconnecting = obs_is_reconnecting_status(&status);
+                if is_reconnecting && !last_reconnecting {
+                    reconnect_attempts += 1;
                 }
+                last_reconnecting = is_reconnecting;
 
                 if let Some(reason) =
-                    obs_should_trigger_fallback(&status, saw_active_stream, reconnecting_streak)
+                    obs_should_trigger_fallback(&status, saw_active_stream, reconnect_attempts)
                 {
                     trigger_reason = reason;
                     break;
                 }
 
-                if saw_active_stream
-                    && status.output_active
-                    && !status.output_reconnecting
-                    && status.output_state != "OBS_WEBSOCKET_OUTPUT_RECONNECTING"
-                {
-                    crate::runtime_log!(
-                        "[live][obs] stream started normally, fallback check bypassed"
-                    );
-                    return Ok(());
-                }
             }
             Err(error) => {
                 crate::runtime_warn!(
@@ -421,6 +416,11 @@ where
     }
 
     if trigger_reason.is_empty() {
+        if saw_active_stream {
+            crate::runtime_log!(
+                "[live][obs] stream started normally during fallback monitor window"
+            );
+        }
         return Ok(());
     }
 
@@ -555,12 +555,12 @@ where
 fn obs_should_trigger_fallback(
     status: &ObsStreamStatus,
     saw_active_stream: bool,
-    reconnecting_streak: usize,
+    reconnect_attempts: usize,
 ) -> Option<String> {
-    if reconnecting_streak >= OBS_RECONNECT_TRIGGER_COUNT {
+    if reconnect_attempts >= OBS_RECONNECT_TRIGGER_COUNT {
         return Some(format!(
-            "reconnecting({} consecutive probes)",
-            reconnecting_streak
+            "reconnecting({} attempts)",
+            reconnect_attempts
         ));
     }
 
@@ -759,7 +759,7 @@ mod tests {
     }
 
     #[test]
-    fn obs_should_trigger_fallback_when_reconnecting_streak_reaches_threshold() {
+    fn obs_should_trigger_fallback_when_reconnect_attempts_reach_threshold() {
         let status = ObsStreamStatus {
             output_active: true,
             output_reconnecting: true,
