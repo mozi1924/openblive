@@ -53,6 +53,7 @@ type ConfirmModalState = {
 type ConfirmRequestPayload = Omit<ConfirmModalState, "show" | "showCancel">;
 
 const LIVE_ONLINE_RANK_POLL_INTERVAL_MS = 5_000;
+const LIVE_PROFILE_SYNC_POLL_INTERVAL_MS = 20_000;
 
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
@@ -72,6 +73,7 @@ export function useStudioController() {
 
   const [title, setTitle] = useState(t("auto", "ui.ctrl.default_title"));
   const [tags, setTags] = useState<string[]>([]);
+  const [tagAuditStatusMap, setTagAuditStatusMap] = useState<Record<string, number>>({});
   const [tagInput, setTagInput] = useState("");
   const [partitions, setPartitions] = useState<Record<string, string[]>>({});
   const [parent, setParent] = useState("");
@@ -374,6 +376,13 @@ export function useStudioController() {
       sectionStatus.tags.tone !== "green",
     [sectionStatus],
   );
+  const hasPendingReviewOption = useMemo(
+    () =>
+      profileState.title.review === "pending" ||
+      profileState.area.review === "pending" ||
+      profileState.tags.review === "pending",
+    [profileState],
+  );
 
   const hasLiveAuth = Boolean(currentUser?.uid?.trim() && !currentUser?.login_invalid);
 
@@ -453,6 +462,7 @@ export function useStudioController() {
       }
       if (forceTags || !tagsDirtyRef.current) {
         setTags([...(user.last_tags || [])]);
+        setTagAuditStatusMap({});
         setTagInput("");
       }
     },
@@ -641,25 +651,27 @@ export function useStudioController() {
     setParent,
     setChild,
     setTags,
+    setTagAuditStatusMap,
     setTagInput,
     setProfileState,
     setCurrentUser,
     parent,
     child,
     title,
-    tags,
     tagInput,
     applyProfileState,
     refreshSession,
     loadLinkageStatus,
     pendingLiveFlowHintSkipRef,
     areaDirtyRef,
+    notifyActionResult: pushTopNotice,
   });
   const {
     actions: {
       submitArea,
       submitTitle,
       submitTags,
+      refreshLiveTags,
       addTag,
       removeTag,
       startLive,
@@ -670,6 +682,45 @@ export function useStudioController() {
       submitDanmu,
     },
   } = liveInteractionActions;
+
+  useEffect(() => {
+    if (!hasLiveAuth || !hasPendingReviewOption) {
+      return;
+    }
+    let alive = true;
+    let syncing = false;
+    const syncProfileAndTags = async () => {
+      if (!alive || syncing) {
+        return;
+      }
+      syncing = true;
+      try {
+        await syncLiveRoomProfile(false);
+        await refreshLiveTags();
+      } finally {
+        syncing = false;
+      }
+    };
+
+    void syncProfileAndTags();
+    const timer = window.setInterval(() => {
+      void syncProfileAndTags();
+    }, LIVE_PROFILE_SYNC_POLL_INTERVAL_MS);
+
+    return () => {
+      alive = false;
+      syncing = false;
+      window.clearInterval(timer);
+    };
+  }, [hasLiveAuth, hasPendingReviewOption, refreshLiveTags, syncLiveRoomProfile]);
+
+  useEffect(() => {
+    if (!hasLiveAuth || !hasPendingReviewOption) {
+      setTagAuditStatusMap({});
+      return;
+    }
+    void refreshLiveTags();
+  }, [hasLiveAuth, hasPendingReviewOption, currentUser?.uid, refreshLiveTags]);
 
   const copyToClipboard = useCallback(
     async (text: string, type: string) => {
@@ -816,6 +867,7 @@ export function useStudioController() {
       savingLocale,
       tagInput,
       tags,
+      tagAuditStatusMap,
       title,
       userManageActiveTab,
       topNotices,
@@ -877,6 +929,7 @@ export function useStudioController() {
       setTitle,
       addTag,
       removeTag,
+      refreshLiveTags,
       refreshLiveVoteData: () => loadLiveVoteData(),
       refreshLiveOnlineRank: () => loadLiveOnlineRank(),
       refreshSilentUserList: () => refreshSilentUserList(),
@@ -912,7 +965,10 @@ export function useStudioController() {
       requestRemoveBlackUser,
       requestRemoveRoomAdmin,
       switchAccount,
-      syncLiveRoomProfile: async () => syncLiveRoomProfile(true),
+      syncLiveRoomProfile: async () => {
+        await syncLiveRoomProfile(true);
+        await refreshLiveTags();
+      },
       toggleLogs: () => setShowLogs((prev) => !prev),
     },
     refs: {

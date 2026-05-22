@@ -5,10 +5,10 @@ use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
-    AddBlackUserReq, AddRoomAdminReq, AddSilentUserReq, CreateLiveVoteReq, DanmuReq,
+    AddBlackUserReq, AddLiveTagReq, AddRoomAdminReq, AddSilentUserReq, CreateLiveVoteReq, DanmuReq,
     GetBlackUserListReq, GetRoomAdminListReq, GetSilentUserListReq, RemoveBlackUserReq,
-    RemoveRoomAdminReq, RemoveSilentUserReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq,
-    UpdateTitleReq,
+    RemoveLiveTagReq, RemoveRoomAdminReq, RemoveSilentUserReq, TerminateLiveVoteReq, UpdateAreaReq,
+    UpdateTagsReq, UpdateTitleReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -42,8 +42,10 @@ pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 use flow::{start_live_inner, stop_live_inner};
 pub(crate) use linkage::obs_ws_probe;
 use profile_api::{
+    add_live_tag as add_live_tag_inner, get_live_tags as get_live_tags_inner,
     get_partitions as get_partitions_inner, update_area as update_area_inner,
-    update_live_tags as update_live_tags_inner, update_title as update_title_inner,
+    remove_live_tag as remove_live_tag_inner, update_live_tags as update_live_tags_inner,
+    update_title as update_title_inner,
 };
 use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
@@ -153,6 +155,21 @@ pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> Cm
 #[tauri::command]
 pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) -> CmdResult {
     update_live_tags_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn get_live_tags(state: State<'_, AppState>) -> CmdResult {
+    get_live_tags_inner(state).await
+}
+
+#[tauri::command]
+pub async fn add_live_tag(req: AddLiveTagReq, state: State<'_, AppState>) -> CmdResult {
+    add_live_tag_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn remove_live_tag(req: RemoveLiveTagReq, state: State<'_, AppState>) -> CmdResult {
+    remove_live_tag_inner(req, state).await
 }
 
 #[tauri::command]

@@ -6,7 +6,7 @@ export const isValidUser = (value: User | null | undefined): value is User =>
 
 export const splitTagInput = (raw: string) =>
   raw
-    .split(/[,，]/)
+    .split(/[,\uFF0C]/)
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0);
 
@@ -18,7 +18,8 @@ export type SectionStatus = { tone: StatusTone; label: string; detail: string };
 export const normalizeTags = (values: string[]) =>
   [...new Set(values.map((tag) => tag.trim()).filter(Boolean))];
 
-export const tagsToKey = (values: string[]) => normalizeTags(values).join(",");
+export const tagsToKey = (values: string[]) =>
+  normalizeTags(values).slice().sort((left, right) => left.localeCompare(right)).join(",");
 
 export const unsavedLabelMap = {
   title: "ui.stream.section.title",

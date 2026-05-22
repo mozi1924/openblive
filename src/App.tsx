@@ -114,6 +114,7 @@ function App() {
               linkageStatus={state.linkageStatus}
               tagInput={state.tagInput}
               tags={state.tags}
+              tagAuditStatusMap={state.tagAuditStatusMap}
               title={state.title}
               onSelectTab={actions.setActiveTab}
               onChangeChild={actions.setChild}
@@ -135,7 +136,6 @@ function App() {
               unsavedItems={state.unsavedItems}
               onApplyRecentArea={actions.applyRecentArea}
               onSubmitArea={actions.submitArea}
-              onSubmitTags={actions.submitTags}
               onSubmitTitle={actions.submitTitle}
             />
           )}

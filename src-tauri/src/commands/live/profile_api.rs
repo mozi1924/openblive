@@ -8,13 +8,116 @@ use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::endpoints;
 use crate::models::{
-    sync_live_profile_state_defaults, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
+    sync_live_profile_state_defaults, AddLiveTagReq, RemoveLiveTagReq, UpdateAreaReq,
+    UpdateTagsReq, UpdateTitleReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
 use tauri::State;
+
+#[derive(Clone)]
+struct LiveTagEntry {
+    tag_id: u64,
+    tag_content: String,
+    audit_status: i64,
+}
+
+fn parse_live_tag_entries(value: &serde_json::Value) -> Vec<LiveTagEntry> {
+    value["data"]["tags"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|tag| {
+            let tag_id = tag["tag_id"].as_u64().or_else(|| {
+                tag["tag_id"]
+                    .as_i64()
+                    .and_then(|raw| if raw > 0 { Some(raw as u64) } else { None })
+            })?;
+            let tag_content = tag["tag_content"].as_str().unwrap_or("").trim().to_string();
+            if tag_content.is_empty() {
+                return None;
+            }
+            Some(LiveTagEntry {
+                tag_id,
+                tag_content,
+                audit_status: tag["audit_status"].as_i64().unwrap_or(-1),
+            })
+        })
+        .collect()
+}
+
+fn tags_review_from_audit_status(tags: &[LiveTagEntry]) -> &'static str {
+    if tags.is_empty() {
+        return "none";
+    }
+    if tags.iter().any(|tag| tag.audit_status == 2) {
+        return "rejected";
+    }
+    if tags.iter().any(|tag| tag.audit_status == 0) {
+        return "pending";
+    }
+    if tags.iter().all(|tag| tag.audit_status == 1) {
+        return "approved";
+    }
+    "unknown"
+}
+
+async fn fetch_live_tags_remote(state: &AppState, cookie: &str) -> Result<serde_json::Value, String> {
+    state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/liveTagService/GetLiveTags"),
+            &[],
+            cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+fn build_live_tag_update_form(csrf: &str, key: &str, value: String) -> BTreeMap<String, String> {
+    let mut form = BTreeMap::new();
+    form.insert(key.into(), value);
+    form.insert("csrf".into(), csrf.to_string());
+    form.insert("csrf_token".into(), csrf.to_string());
+    form
+}
+
+async fn apply_tag_profile_snapshot(
+    state: &AppState,
+    uid: &str,
+    tags: &[LiveTagEntry],
+) -> serde_json::Value {
+    let mut runtime = state.runtime.lock().await;
+    let tag_contents: Vec<String> = tags.iter().map(|item| item.tag_content.clone()).collect();
+    if let Some(user) = runtime.config.users.get_mut(uid) {
+        sync_live_profile_state_defaults(user);
+        user.last_tags = tag_contents.clone();
+        user.live_profile_state.tags.submitted = tag_contents.clone();
+        user.live_profile_state.tags.effective = tag_contents.clone();
+        user.live_profile_state.tags.transport = "synced".to_string();
+        user.live_profile_state.tags.review = tags_review_from_audit_status(tags).to_string();
+        user.live_profile_state.tags.message.clear();
+        user.live_profile_state.tags.updated_at = current_timestamp();
+        clear_user_auth_flags(user);
+    }
+    runtime.session.current_tags = tag_contents.clone();
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+    json!({
+        "tags": tags.iter().map(|item| json!({
+            "tag_id": item.tag_id,
+            "tag_content": item.tag_content,
+            "audit_status": item.audit_status,
+        })).collect::<Vec<_>>(),
+        "tag_contents": tag_contents,
+        "profile_state": runtime
+            .config
+            .users
+            .get(uid)
+            .map(|user| user.live_profile_state.clone())
+    })
+}
 
 pub(crate) async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
     let value = state
@@ -209,20 +312,12 @@ pub(crate) async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>
 
 pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) -> CmdResult {
     let desired_tags = split_tags(&req.tags);
-    let (uid, room_id, csrf, current_tags, cookie) = {
+    let (uid, csrf, cookie) = {
         let runtime = state.runtime.lock().await;
-        let (uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
-        let user = runtime
-            .config
-            .users
-            .get(&uid)
-            .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
-        (uid, room_id, csrf, user.last_tags.clone(), cookie)
+        let (uid, _room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (uid, csrf, cookie)
     };
 
-    if room_id.is_empty() {
-        return Err("i18n.live.error.room_id_missing".into());
-    }
     if csrf.is_empty() {
         return Err("i18n.live.error.csrf_missing".into());
     }
@@ -230,23 +325,51 @@ pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppSta
         return Err("i18n.account.error.local_credential_empty".into());
     }
 
+    let current_value = fetch_live_tags_remote(&state, &cookie).await?;
+    let current_code = current_value["code"].as_i64().unwrap_or(-1);
+    if current_code != 0 {
+        if is_auth_invalid_code(current_code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "update_live_tags(fetch) code={current_code}, msg={}",
+                    error_message(&current_value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &current_value,
+            "i18n.live.error.update_tags_remove_failed",
+        ));
+    }
+    let current_tags = parse_live_tag_entries(&current_value);
+
     let to_add: Vec<String> = desired_tags
         .iter()
-        .filter(|tag| !current_tags.iter().any(|old| old == *tag))
+        .filter(|tag| {
+            !current_tags
+                .iter()
+                .any(|old| old.tag_content == **tag)
+        })
         .cloned()
         .collect();
-    let to_del: Vec<String> = current_tags
+    let to_del: Vec<LiveTagEntry> = current_tags
         .iter()
-        .filter(|tag| !desired_tags.iter().any(|new| new == *tag))
+        .filter(|tag| !desired_tags.iter().any(|new| new == &tag.tag_content))
         .cloned()
         .collect();
 
     for tag in &to_add {
-        let mut form = build_room_update_form(&room_id, &csrf);
-        form.insert("add_tag".into(), tag.clone());
+        let form = build_live_tag_update_form(&csrf, "tag_content", tag.clone());
         let value = state
             .client
-            .post_form_with_cookie(&endpoints::live_api("/room/v1/Room/update"), &form, &cookie)
+            .post_form_with_cookie(
+                &endpoints::live_api("/xlive/app-blink/v1/liveTagService/AddLiveTag"),
+                &form,
+                &cookie,
+            )
             .await
             .map_err(|error| error.to_string())?;
         let code = value["code"].as_i64().unwrap_or(-1);
@@ -270,11 +393,14 @@ pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppSta
     }
 
     for tag in &to_del {
-        let mut form = build_room_update_form(&room_id, &csrf);
-        form.insert("del_tag".into(), tag.clone());
+        let form = build_live_tag_update_form(&csrf, "tag_id", tag.tag_id.to_string());
         let value = state
             .client
-            .post_form_with_cookie(&endpoints::live_api("/room/v1/Room/update"), &form, &cookie)
+            .post_form_with_cookie(
+                &endpoints::live_api("/xlive/app-blink/v1/liveTagService/DeleteLiveTag"),
+                &form,
+                &cookie,
+            )
             .await
             .map_err(|error| error.to_string())?;
         let code = value["code"].as_i64().unwrap_or(-1);
@@ -284,7 +410,8 @@ pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppSta
                     &state,
                     &format!(
                         "update_live_tags(del) tag={tag}, code={code}, msg={}",
-                        error_message(&value, "")
+                        error_message(&value, ""),
+                        tag = tag.tag_content
                     ),
                 )
                 .await;
@@ -292,34 +419,211 @@ pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppSta
             }
             return Err(format!(
                 "i18n.live.error.update_tags_remove_failed({tag}): {}",
-                error_message(&value, "i18n.live.error.update_tags_remove_failed")
+                error_message(&value, "i18n.live.error.update_tags_remove_failed"),
+                tag = tag.tag_content
             ));
         }
     }
 
-    let mut runtime = state.runtime.lock().await;
-    if let Some(user) = runtime.config.users.get_mut(&uid) {
-        sync_live_profile_state_defaults(user);
-        user.last_tags = desired_tags.clone();
-        user.live_profile_state.tags.submitted = desired_tags.clone();
-        user.live_profile_state.tags.effective = desired_tags.clone();
-        user.live_profile_state.tags.transport = "synced".to_string();
-        user.live_profile_state.tags.review = "none".to_string();
-        user.live_profile_state.tags.message.clear();
-        user.live_profile_state.tags.updated_at = current_timestamp();
-        clear_user_auth_flags(user);
+    let final_value = fetch_live_tags_remote(&state, &cookie).await?;
+    let final_code = final_value["code"].as_i64().unwrap_or(-1);
+    if final_code != 0 {
+        if is_auth_invalid_code(final_code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "update_live_tags(refetch) code={final_code}, msg={}",
+                    error_message(&final_value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &final_value,
+            "i18n.live.error.update_tags_remove_failed",
+        ));
     }
-    runtime.session.current_tags = desired_tags.clone();
-    save_config(&state.config_path, &runtime.config, &state.master_key);
+    let final_tags = parse_live_tag_entries(&final_value);
+    let snapshot = apply_tag_profile_snapshot(&state, &uid, &final_tags).await;
 
     Ok(wrap_ok(json!({
-        "tags": desired_tags,
+        "tags": snapshot["tag_contents"],
+        "tag_items": snapshot["tags"],
         "added": to_add,
-        "removed": to_del,
-        "profile_state": runtime
-            .config
-            .users
-            .get(&uid)
-            .map(|user| user.live_profile_state.clone())
+        "removed": to_del.iter().map(|tag| tag.tag_content.clone()).collect::<Vec<_>>(),
+        "profile_state": snapshot["profile_state"]
+    })))
+}
+
+pub(crate) async fn get_live_tags(state: State<'_, AppState>) -> CmdResult {
+    let (uid, cookie) = {
+        let runtime = state.runtime.lock().await;
+        let (uid, _room_id, _csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (uid, cookie)
+    };
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+    let value = fetch_live_tags_remote(&state, &cookie).await?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("get_live_tags code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(&value, "i18n.live.error.update_tags_remove_failed"));
+    }
+    let tags = parse_live_tag_entries(&value);
+    Ok(wrap_ok(apply_tag_profile_snapshot(&state, &uid, &tags).await))
+}
+
+pub(crate) async fn add_live_tag(req: AddLiveTagReq, state: State<'_, AppState>) -> CmdResult {
+    let tag = req.tag.trim().to_string();
+    if tag.is_empty() {
+        return Err("i18n.live.error.update_tags_add_failed".into());
+    }
+
+    let (uid, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        let (uid, _room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (uid, csrf, cookie)
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let form = build_live_tag_update_form(&csrf, "tag_content", tag.clone());
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/liveTagService/AddLiveTag"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "add_live_tag tag={tag}, code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(format!(
+            "i18n.live.error.update_tags_add_failed({tag}): {}",
+            error_message(&value, "i18n.live.error.update_tags_add_failed")
+        ));
+    }
+
+    let final_value = fetch_live_tags_remote(&state, &cookie).await?;
+    let final_code = final_value["code"].as_i64().unwrap_or(-1);
+    if final_code != 0 {
+        return Err(error_message(
+            &final_value,
+            "i18n.live.error.update_tags_add_failed",
+        ));
+    }
+    let final_tags = parse_live_tag_entries(&final_value);
+    let snapshot = apply_tag_profile_snapshot(&state, &uid, &final_tags).await;
+
+    Ok(wrap_ok(json!({
+        "added": tag,
+        "tags": snapshot["tag_contents"],
+        "tag_items": snapshot["tags"],
+        "profile_state": snapshot["profile_state"]
+    })))
+}
+
+pub(crate) async fn remove_live_tag(req: RemoveLiveTagReq, state: State<'_, AppState>) -> CmdResult {
+    let target_tag = req.tag.trim().to_string();
+    if target_tag.is_empty() {
+        return Err("i18n.live.error.update_tags_remove_failed".into());
+    }
+
+    let (uid, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        let (uid, _room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (uid, csrf, cookie)
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let current_value = fetch_live_tags_remote(&state, &cookie).await?;
+    let current_code = current_value["code"].as_i64().unwrap_or(-1);
+    if current_code != 0 {
+        return Err(error_message(
+            &current_value,
+            "i18n.live.error.update_tags_remove_failed",
+        ));
+    }
+    let current_tags = parse_live_tag_entries(&current_value);
+    let target = current_tags
+        .iter()
+        .find(|tag| tag.tag_content == target_tag)
+        .ok_or_else(|| "i18n.live.error.update_tags_remove_failed".to_string())?;
+
+    let form = build_live_tag_update_form(&csrf, "tag_id", target.tag_id.to_string());
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/liveTagService/DeleteLiveTag"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "remove_live_tag tag={target_tag}, code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(format!(
+            "i18n.live.error.update_tags_remove_failed({target_tag}): {}",
+            error_message(&value, "i18n.live.error.update_tags_remove_failed")
+        ));
+    }
+
+    let final_value = fetch_live_tags_remote(&state, &cookie).await?;
+    let final_code = final_value["code"].as_i64().unwrap_or(-1);
+    if final_code != 0 {
+        return Err(error_message(
+            &final_value,
+            "i18n.live.error.update_tags_remove_failed",
+        ));
+    }
+    let final_tags = parse_live_tag_entries(&final_value);
+    let snapshot = apply_tag_profile_snapshot(&state, &uid, &final_tags).await;
+
+    Ok(wrap_ok(json!({
+        "removed": target_tag,
+        "tags": snapshot["tag_contents"],
+        "tag_items": snapshot["tags"],
+        "profile_state": snapshot["profile_state"]
     })))
 }

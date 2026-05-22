@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg, LiveProfileState, StreamInfo, User } from "../../types/studio";
@@ -45,19 +45,20 @@ type UseLiveInteractionActionsParams = {
   setParent: Dispatch<SetStateAction<string>>;
   setChild: Dispatch<SetStateAction<string>>;
   setTags: Dispatch<SetStateAction<string[]>>;
+  setTagAuditStatusMap: Dispatch<SetStateAction<Record<string, number>>>;
   setTagInput: Dispatch<SetStateAction<string>>;
   setProfileState: Dispatch<SetStateAction<LiveProfileState>>;
   setCurrentUser: Dispatch<SetStateAction<User | null>>;
   parent: string;
   child: string;
   title: string;
-  tags: string[];
   tagInput: string;
   applyProfileState: (nextState?: LiveProfileState | null) => void;
   refreshSession: () => Promise<void>;
   loadLinkageStatus: () => Promise<void>;
   pendingLiveFlowHintSkipRef: MutableRefObject<"start" | "stop" | null>;
   areaDirtyRef: MutableRefObject<boolean>;
+  notifyActionResult?: (payload: { text: string; tone: "success" | "error" }) => void;
 };
 
 export function useLiveInteractionActions({
@@ -85,62 +86,137 @@ export function useLiveInteractionActions({
   setParent,
   setChild,
   setTags,
+  setTagAuditStatusMap,
   setTagInput,
   setProfileState,
   setCurrentUser,
   parent,
   child,
   title,
-  tags,
   tagInput,
   applyProfileState,
   refreshSession,
   loadLinkageStatus,
   pendingLiveFlowHintSkipRef,
   areaDirtyRef,
+  notifyActionResult,
 }: UseLiveInteractionActionsParams) {
+  const addTagSubmittingRef = useRef(false);
+
+  const emitActionResult = useCallback((text: string, tone: "success" | "error") => {
+    const message = text.trim();
+    if (!message) {
+      return;
+    }
+    notifyActionResult?.({ text: message, tone });
+  }, [notifyActionResult]);
+
+  const applyRemoteLiveTags = useCallback((
+    nextTags: string[] | undefined,
+    tagItems: Array<{ tag_content: string; audit_status: number }> | undefined,
+    nextProfileState?: LiveProfileState | null,
+  ) => {
+    const normalizedTags = normalizeTags(nextTags || []);
+    setTags([...normalizedTags]);
+    const nextAuditMap: Record<string, number> = {};
+    for (const item of tagItems || []) {
+      const key = item.tag_content?.trim() || "";
+      if (!key) {
+        continue;
+      }
+      nextAuditMap[key] = Number(item.audit_status ?? -1);
+    }
+    setTagAuditStatusMap(nextAuditMap);
+    if (nextProfileState) {
+      applyProfileState(nextProfileState);
+    }
+    setCurrentUser((prev) =>
+      prev
+        ? {
+            ...prev,
+            last_tags: normalizedTags,
+            live_profile_state: nextProfileState ?? prev.live_profile_state,
+          }
+        : prev,
+    );
+    return normalizedTags;
+  }, [applyProfileState, setCurrentUser, setTagAuditStatusMap, setTags]);
+
+  const refreshLiveTags = useCallback(async () => {
+    const requestUid = activeUidRef.current;
+    const res = await studioApi.getLiveTags();
+    if (requestUid !== activeUidRef.current) {
+      return;
+    }
+    if (res.code === 0 && res.data) {
+      applyRemoteLiveTags(res.data.tag_contents, res.data.tags, res.data.profile_state);
+      return;
+    }
+    const message = tf(localeSetting, "ui.ctrl.tags_set_failed", {
+      msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.tags_set_failed_default"), localeSetting),
+    });
+    append(message);
+    emitActionResult(message, "error");
+  }, [activeUidRef, append, applyRemoteLiveTags, emitActionResult, localeSetting]);
+
   const submitArea = useCallback(
     async (event: React.FormEvent) => {
       event.preventDefault();
       const requestUid = activeUidRef.current;
       const submittedParent = parent;
       const submittedChild = child;
-      setProfileState((prev) => ({
-        ...prev,
-        area: {
-          ...prev.area,
-          transport: "saving",
-          message: "",
-        },
-      }));
-      const res = await studioApi.updateArea(submittedParent, submittedChild);
-      if (requestUid !== activeUidRef.current) {
-        return;
+      try {
+        setProfileState((prev) => ({
+          ...prev,
+          area: {
+            ...prev.area,
+            transport: "saving",
+            message: "",
+          },
+        }));
+        const res = await studioApi.updateArea(submittedParent, submittedChild);
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        if (res.code === 0 && res.data?.profile_state) {
+          applyProfileState(res.data.profile_state);
+          setCurrentUser((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  last_area_name: [submittedParent, submittedChild],
+                  live_profile_state: res.data?.profile_state,
+                }
+              : prev,
+          );
+          areaDirtyRef.current = false;
+          append(tf(localeSetting, "ui.ctrl.area_set_ok", { parent: submittedParent, child: submittedChild }));
+          return;
+        }
+        setProfileState((prev) => ({
+          ...prev,
+          area: {
+            ...prev.area,
+            transport: "failed",
+            message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.area_set_failed_default"), localeSetting),
+          },
+        }));
+        append(tf(localeSetting, "ui.ctrl.area_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
+      } catch (error) {
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        const message = resolveBackendMessage(String(error), localeSetting);
+        setProfileState((prev) => ({
+          ...prev,
+          area: {
+            ...prev.area,
+            transport: "failed",
+            message,
+          },
+        }));
+        append(tf(localeSetting, "ui.ctrl.area_set_failed", { msg: message }));
       }
-      if (res.code === 0 && res.data?.profile_state) {
-        applyProfileState(res.data.profile_state);
-        setCurrentUser((prev) =>
-          prev
-            ? {
-                ...prev,
-                last_area_name: [submittedParent, submittedChild],
-                live_profile_state: res.data?.profile_state,
-              }
-            : prev,
-        );
-        areaDirtyRef.current = false;
-        append(tf(localeSetting, "ui.ctrl.area_set_ok", { parent: submittedParent, child: submittedChild }));
-        return;
-      }
-      setProfileState((prev) => ({
-        ...prev,
-        area: {
-          ...prev.area,
-          transport: "failed",
-          message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.area_set_failed_default"), localeSetting),
-        },
-      }));
-      append(tf(localeSetting, "ui.ctrl.area_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     },
     [activeUidRef, append, applyProfileState, areaDirtyRef, child, localeSetting, parent, setCurrentUser, setProfileState],
   );
@@ -150,35 +226,51 @@ export function useLiveInteractionActions({
       event.preventDefault();
       const requestUid = activeUidRef.current;
       const submittedTitle = title;
-      setProfileState((prev) => ({
-        ...prev,
-        title: {
-          ...prev.title,
-          transport: "saving",
-          message: "",
-        },
-      }));
-      const res = await studioApi.updateTitle(submittedTitle);
-      if (requestUid !== activeUidRef.current) {
-        return;
+      try {
+        setProfileState((prev) => ({
+          ...prev,
+          title: {
+            ...prev.title,
+            transport: "saving",
+            message: "",
+          },
+        }));
+        const res = await studioApi.updateTitle(submittedTitle);
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        if (res.code === 0 && res.data?.profile_state) {
+          applyProfileState(res.data.profile_state);
+          setCurrentUser((prev) =>
+            prev ? { ...prev, last_title: submittedTitle, live_profile_state: res.data?.profile_state } : prev,
+          );
+          append(t(localeSetting, "ui.ctrl.title_set_ok"));
+          return;
+        }
+        setProfileState((prev) => ({
+          ...prev,
+          title: {
+            ...prev.title,
+            transport: "failed",
+            message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.title_set_failed_default"), localeSetting),
+          },
+        }));
+        append(tf(localeSetting, "ui.ctrl.title_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
+      } catch (error) {
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        const message = resolveBackendMessage(String(error), localeSetting);
+        setProfileState((prev) => ({
+          ...prev,
+          title: {
+            ...prev.title,
+            transport: "failed",
+            message,
+          },
+        }));
+        append(tf(localeSetting, "ui.ctrl.title_set_failed", { msg: message }));
       }
-      if (res.code === 0 && res.data?.profile_state) {
-        applyProfileState(res.data.profile_state);
-        setCurrentUser((prev) =>
-          prev ? { ...prev, last_title: submittedTitle, live_profile_state: res.data?.profile_state } : prev,
-        );
-        append(t(localeSetting, "ui.ctrl.title_set_ok"));
-        return;
-      }
-      setProfileState((prev) => ({
-        ...prev,
-        title: {
-          ...prev.title,
-          transport: "failed",
-          message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.title_set_failed_default"), localeSetting),
-        },
-      }));
-      append(tf(localeSetting, "ui.ctrl.title_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
     },
     [activeUidRef, append, applyProfileState, localeSetting, setCurrentUser, setProfileState, title],
   );
@@ -186,33 +278,143 @@ export function useLiveInteractionActions({
   const submitTags = useCallback(
     async (event: React.FormEvent) => {
       event.preventDefault();
-      const requestUid = activeUidRef.current;
-      const normalized = normalizeTags(tags);
-      setProfileState((prev) => ({
-        ...prev,
-        tags: {
-          ...prev.tags,
-          transport: "saving",
-          message: "",
-        },
-      }));
-      const res = await studioApi.updateLiveTags(normalized.join(","));
+      await refreshLiveTags();
+    },
+    [refreshLiveTags],
+  );
+
+  const addTag = useCallback(async () => {
+    if (addTagSubmittingRef.current) {
+      return;
+    }
+    const requestUid = activeUidRef.current;
+    const parsed = splitTagInput(tagInput);
+    if (parsed.length === 0) {
+      return;
+    }
+    addTagSubmittingRef.current = true;
+    setProfileState((prev) => ({
+      ...prev,
+      tags: {
+        ...prev.tags,
+        transport: "saving",
+        message: "",
+      },
+    }));
+    try {
+      for (let index = 0; index < parsed.length; index += 1) {
+        const normalizedTag = parsed[index].trim();
+        if (!normalizedTag) {
+          continue;
+        }
+        try {
+          const res = await studioApi.addLiveTag(normalizedTag);
+          if (requestUid !== activeUidRef.current) {
+            return;
+          }
+          if (res.code === 0 && res.data) {
+            applyRemoteLiveTags(res.data.tags, res.data.tag_items, res.data.profile_state);
+            const addedTag = (res.data.tag_items || []).find((item) => item.tag_content === normalizedTag);
+            const auditStatus = Number(addedTag?.audit_status ?? -1);
+            const message = tf(localeSetting, "ui.ctrl.tag_add_ok", {
+              tag: normalizedTag,
+              status: t(localeSetting, `ui.stream.tags.audit.status.${String(auditStatus)}`),
+            });
+            append(message);
+            emitActionResult(message, "success");
+          } else {
+            const failMessage = tf(localeSetting, "ui.ctrl.tag_add_failed", {
+              tag: normalizedTag,
+              msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.tags_set_failed_default"), localeSetting),
+            });
+            setProfileState((prev) => ({
+              ...prev,
+              tags: {
+                ...prev.tags,
+                transport: "failed",
+                message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.tags_set_failed_default"), localeSetting),
+              },
+            }));
+            append(failMessage);
+            emitActionResult(failMessage, "error");
+          }
+        } catch (error) {
+          if (requestUid !== activeUidRef.current) {
+            return;
+          }
+          const message = resolveBackendMessage(String(error), localeSetting);
+          const failMessage = tf(localeSetting, "ui.ctrl.tag_add_failed", {
+            tag: normalizedTag,
+            msg: message,
+          });
+          setProfileState((prev) => ({
+            ...prev,
+            tags: {
+              ...prev.tags,
+              transport: "failed",
+              message,
+            },
+          }));
+          append(failMessage);
+          emitActionResult(failMessage, "error");
+        }
+        if (index < parsed.length - 1) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 1000);
+          });
+        }
+      }
+      setTagInput("");
+    } finally {
+      addTagSubmittingRef.current = false;
+    }
+  }, [
+    activeUidRef,
+    append,
+    addTagSubmittingRef,
+    applyRemoteLiveTags,
+    emitActionResult,
+    localeSetting,
+    setProfileState,
+    setTagInput,
+    tagInput,
+  ]);
+
+  const removeTag = useCallback(async (tag: string) => {
+    const requestUid = activeUidRef.current;
+    const accepted = await requestConfirm({
+      title: t(localeSetting, "ui.stream.tags.confirm_remove.title"),
+      description: tf(localeSetting, "ui.stream.tags.confirm_remove.desc", { tag }),
+      confirmText: t(localeSetting, "ui.stream.tags.confirm_remove.confirm"),
+      tone: "danger",
+    });
+    if (!accepted) {
+      return;
+    }
+    setProfileState((prev) => ({
+      ...prev,
+      tags: {
+        ...prev.tags,
+        transport: "saving",
+        message: "",
+      },
+    }));
+    try {
+      const res = await studioApi.removeLiveTag(tag);
       if (requestUid !== activeUidRef.current) {
         return;
       }
       if (res.code === 0 && res.data) {
-        const nextTags = normalizeTags(res.data.tags || []);
-        setTags([...nextTags]);
-        setTagInput("");
-        if (res.data.profile_state) {
-          applyProfileState(res.data.profile_state);
-        }
-        setCurrentUser((prev) =>
-          prev ? { ...prev, last_tags: nextTags, live_profile_state: res.data?.profile_state } : prev,
-        );
-        append(tf(localeSetting, "ui.ctrl.tags_set_ok", { added: res.data.added.length, removed: res.data.removed.length }));
+        applyRemoteLiveTags(res.data.tags, res.data.tag_items, res.data.profile_state);
+        const message = tf(localeSetting, "ui.ctrl.tag_remove_ok", { tag });
+        append(message);
+        emitActionResult(message, "success");
         return;
       }
+      const failMessage = tf(localeSetting, "ui.ctrl.tag_remove_failed", {
+        tag,
+        msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.tags_set_failed_default"), localeSetting),
+      });
       setProfileState((prev) => ({
         ...prev,
         tags: {
@@ -221,31 +423,26 @@ export function useLiveInteractionActions({
           message: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.tags_set_failed_default"), localeSetting),
         },
       }));
-      append(tf(localeSetting, "ui.ctrl.tags_set_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
-    },
-    [activeUidRef, append, applyProfileState, localeSetting, setCurrentUser, setProfileState, setTagInput, setTags, tags],
-  );
-
-  const addTag = useCallback(() => {
-    const parsed = splitTagInput(tagInput);
-    if (parsed.length === 0) {
-      return;
-    }
-    setTags((prev) => {
-      const merged = [...prev];
-      for (const tag of parsed) {
-        if (!merged.includes(tag)) {
-          merged.push(tag);
-        }
+      append(failMessage);
+      emitActionResult(failMessage, "error");
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
       }
-      return merged;
-    });
-    setTagInput("");
-  }, [setTagInput, setTags, tagInput]);
-
-  const removeTag = useCallback((tag: string) => {
-    setTags((prev) => prev.filter((value) => value !== tag));
-  }, [setTags]);
+      const message = resolveBackendMessage(String(error), localeSetting);
+      const failMessage = tf(localeSetting, "ui.ctrl.tag_remove_failed", { tag, msg: message });
+      setProfileState((prev) => ({
+        ...prev,
+        tags: {
+          ...prev.tags,
+          transport: "failed",
+          message,
+        },
+      }));
+      append(failMessage);
+      emitActionResult(failMessage, "error");
+    }
+  }, [activeUidRef, append, applyRemoteLiveTags, emitActionResult, localeSetting, requestConfirm, setProfileState]);
 
   const resolveFaceQrImage = useCallback(async (qr: string) => {
     const content = qr.trim();
@@ -532,6 +729,7 @@ export function useLiveInteractionActions({
       submitArea,
       submitTitle,
       submitTags,
+      refreshLiveTags,
       addTag,
       removeTag,
       startLive,

@@ -188,8 +188,35 @@ export type UpdateTitleResp = {
 
 export type UpdateTagsResp = {
   tags: string[];
+  tag_items?: LiveTagItem[];
   added: string[];
   removed: string[];
+  profile_state?: LiveProfileState;
+};
+
+export type LiveTagItem = {
+  tag_id: number;
+  tag_content: string;
+  audit_status: number;
+};
+
+export type GetLiveTagsResp = {
+  tags: LiveTagItem[];
+  tag_contents: string[];
+  profile_state?: LiveProfileState;
+};
+
+export type AddLiveTagResp = {
+  added: string;
+  tags: string[];
+  tag_items: LiveTagItem[];
+  profile_state?: LiveProfileState;
+};
+
+export type RemoveLiveTagResp = {
+  removed: string;
+  tags: string[];
+  tag_items: LiveTagItem[];
   profile_state?: LiveProfileState;
 };
 

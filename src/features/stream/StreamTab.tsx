@@ -36,6 +36,7 @@ type StreamTabProps = {
   linkageStatus: LinkageStatus | null;
   tagInput: string;
   tags: string[];
+  tagAuditStatusMap: Record<string, number>;
   title: string;
   recentAreas: Array<{ parent: string; child: string }>;
   hasUnsavedChanges: boolean;
@@ -61,7 +62,6 @@ type StreamTabProps = {
   onStopLive: () => Promise<void>;
   onApplyRecentArea: (parent: string, child: string) => void;
   onSubmitArea: (event: React.FormEvent) => Promise<void>;
-  onSubmitTags: (event: React.FormEvent) => Promise<void>;
   onSubmitTitle: (event: React.FormEvent) => Promise<void>;
 };
 
@@ -109,6 +109,7 @@ export function StreamTab({
   linkageStatus,
   tagInput,
   tags,
+  tagAuditStatusMap,
   title,
   recentAreas,
   hasUnsavedChanges,
@@ -130,7 +131,6 @@ export function StreamTab({
   onStopLive,
   onApplyRecentArea,
   onSubmitArea,
-  onSubmitTags,
   onSubmitTitle,
 }: StreamTabProps) {
   const streamEndpoints = buildStreamEndpoints(rtmp);
@@ -366,7 +366,7 @@ export function StreamTab({
             <div className="h-px bg-white/5" />
 
             {/* Tags setting */}
-            <form onSubmit={(event) => void onSubmitTags(event)} className="space-y-3">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
                   {t(locale, "ui.stream.tags.title")}
@@ -397,6 +397,9 @@ export function StreamTab({
                         className="inline-flex items-center rounded border border-bili-blue/20 bg-bili-blue/8 px-2 py-0.5 text-xs font-semibold text-bili-blue"
                       >
                         {tag}
+                        <span className="ml-1 rounded bg-white/10 px-1.5 py-[1px] text-[10px] font-medium text-gray-300">
+                          {t(locale, `ui.stream.tags.audit.status.${String(tagAuditStatusMap[tag] ?? -1)}`)}
+                        </span>
                         <button
                           type="button"
                           onClick={() => onRemoveTag(tag)}
@@ -433,14 +436,8 @@ export function StreamTab({
                 >
                   <Plus className="h-4 w-4" />
                 </button>
-                <button
-                  type="submit"
-                  className="flex h-9 items-center justify-center rounded-lg border border-bili-blue/20 bg-bili-blue/10 px-5 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue hover:text-white active:scale-95"
-                >
-                  {t(locale, "ui.stream.tags.save")}
-                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
 

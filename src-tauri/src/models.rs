@@ -400,6 +400,16 @@ pub struct UpdateTagsReq {
 }
 
 #[derive(Deserialize)]
+pub struct AddLiveTagReq {
+    pub tag: String,
+}
+
+#[derive(Deserialize)]
+pub struct RemoveLiveTagReq {
+    pub tag: String,
+}
+
+#[derive(Deserialize)]
 pub struct DanmuReq {
     pub msg: String,
 }
