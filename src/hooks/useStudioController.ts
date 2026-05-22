@@ -11,6 +11,7 @@ import type {
   User,
 } from "../types/studio";
 import { writeClipboardText } from "../utils/clipboard";
+import { prepareLiveCoverUpload } from "../utils/coverUpload";
 import { resolveBackendMessage, t, tf } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
 import {
@@ -856,21 +857,16 @@ export function useStudioController() {
       return;
     }
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("read_failed"));
-        reader.readAsDataURL(file);
-      });
+      const prepared = await prepareLiveCoverUpload(file);
       coverDirtyRef.current = true;
       coverDraftVersionRef.current += 1;
       setPendingCoverUpload({
-        dataUrl,
-        fileName: file.name,
-        mimeType: file.type || "image/jpeg",
+        dataUrl: prepared.dataUrl,
+        fileName: prepared.fileName,
+        mimeType: prepared.mimeType,
       });
-      setCover(dataUrl);
-      setCoverRenderSrc(dataUrl);
+      setCover(prepared.dataUrl);
+      setCoverRenderSrc(prepared.dataUrl);
       setCoverAdvice(null);
     } catch {
       const message = t(localeSetting, "ui.ctrl.cover_read_failed");

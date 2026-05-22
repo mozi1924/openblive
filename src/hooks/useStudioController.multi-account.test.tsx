@@ -64,8 +64,16 @@ const { mockStudioApi } = vi.hoisted(() => ({
   },
 }));
 
+const { mockPrepareLiveCoverUpload } = vi.hoisted(() => ({
+  mockPrepareLiveCoverUpload: vi.fn(),
+}));
+
 vi.mock("../services/studioApi", () => ({
   studioApi: mockStudioApi,
+}));
+
+vi.mock("../utils/coverUpload", () => ({
+  prepareLiveCoverUpload: mockPrepareLiveCoverUpload,
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -240,6 +248,11 @@ beforeEach(() => {
       history: [],
     }),
   );
+  mockPrepareLiveCoverUpload.mockResolvedValue({
+    dataUrl: "data:image/jpeg;base64,prepared-cover",
+    fileName: "cover.jpg",
+    mimeType: "image/jpeg",
+  });
   mockStudioApi.createLiveVote.mockResolvedValue(ok({ interaction_id: 0 }));
   mockStudioApi.terminateLiveVote.mockResolvedValue(ok({}));
   mockStudioApi.generateHttpUserAgent.mockResolvedValue(ok({ user_agent: "ua" }));
@@ -762,24 +775,10 @@ describe("useStudioController multi-account regressions", () => {
 
   it("replaces upload preview data url with persisted cover after submit", async () => {
     const user = makeUser("1", "A", "A-old");
-    const fileReaderResult = "data:image/png;base64,upload-preview";
+    const preparedDataUrl = "data:image/jpeg;base64,prepared-cover";
     const persistedCover = "http://example.com/uploaded.jpg";
     const persistedCoverNormalized = "https://example.com/uploaded.jpg";
     const persistedAsset = "data:image/png;base64,uploaded-asset";
-    const originalFileReader = globalThis.FileReader;
-
-    class MockFileReader {
-      public result: string | ArrayBuffer | null = null;
-      public onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
-      public onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
-
-      readAsDataURL() {
-        this.result = fileReaderResult;
-        this.onload?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
-      }
-    }
-
-    globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
 
     mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
     mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
@@ -792,34 +791,31 @@ describe("useStudioController multi-account regressions", () => {
       }),
     );
 
-    try {
-      const { result } = renderHook(() => useStudioController());
-      await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
 
-      const file = new File(["cover"], "cover.png", { type: "image/png" });
-      await act(async () => {
-        await result.current.actions.selectCoverFile(file);
-      });
+    const file = new File(["cover"], "cover.png", { type: "image/png" });
+    await act(async () => {
+      await result.current.actions.selectCoverFile(file);
+    });
 
-      expect(result.current.state.cover).toBe(fileReaderResult);
-      expect(result.current.state.coverRenderSrc).toBe(fileReaderResult);
-      expect(result.current.state.dirtyStatus.cover).toBe(true);
+    expect(mockPrepareLiveCoverUpload).toHaveBeenCalledWith(file);
+    expect(result.current.state.cover).toBe(preparedDataUrl);
+    expect(result.current.state.coverRenderSrc).toBe(preparedDataUrl);
+    expect(result.current.state.dirtyStatus.cover).toBe(true);
 
-      await act(async () => {
-        await result.current.actions.submitCover();
-      });
+    await act(async () => {
+      await result.current.actions.submitCover();
+    });
 
-      expect(mockStudioApi.uploadLiveCover).toHaveBeenCalledWith(
-        fileReaderResult,
-        "cover.png",
-        "image/png",
-      );
-      expect(result.current.state.cover).toBe(persistedCoverNormalized);
-      expect(result.current.state.coverRenderSrc).toBe(persistedAsset);
-      expect(result.current.state.pendingCoverUpload).toBeNull();
-      expect(result.current.state.dirtyStatus.cover).toBe(false);
-    } finally {
-      globalThis.FileReader = originalFileReader;
-    }
+    expect(mockStudioApi.uploadLiveCover).toHaveBeenCalledWith(
+      preparedDataUrl,
+      "cover.jpg",
+      "image/jpeg",
+    );
+    expect(result.current.state.cover).toBe(persistedCoverNormalized);
+    expect(result.current.state.coverRenderSrc).toBe(persistedAsset);
+    expect(result.current.state.pendingCoverUpload).toBeNull();
+    expect(result.current.state.dirtyStatus.cover).toBe(false);
   });
 });
