@@ -12,17 +12,26 @@ type LiveUserManagePanelProps = {
   silentListLoading: boolean;
   silentList: LiveSilentUserItem[];
   silentTotal: number;
+  silentPage: number;
+  silentTotalPage: number;
   onRefreshSilentList: () => Promise<void>;
+  onChangeSilentPage: (page: number) => void;
   onRequestRemoveSilentUser: (item: LiveSilentUserItem) => Promise<void>;
   blackListLoading: boolean;
   blackList: LiveBlackUserItem[];
   blackTotal: number;
+  blackPage: number;
+  blackTotalPage: number;
   onRefreshBlackList: () => Promise<void>;
+  onChangeBlackPage: (page: number) => void;
   onRequestRemoveBlackUser: (item: LiveBlackUserItem) => Promise<void>;
   roomAdminListLoading: boolean;
   roomAdminList: LiveRoomAdminItem[];
   roomAdminTotal: number;
+  roomAdminPage: number;
+  roomAdminTotalPage: number;
   onRefreshRoomAdminList: () => Promise<void>;
+  onChangeRoomAdminPage: (page: number) => void;
   onRequestRemoveRoomAdmin: (item: LiveRoomAdminItem) => Promise<void>;
   onClose: () => void;
 };
@@ -34,17 +43,26 @@ export function LiveUserManagePanel({
   silentListLoading,
   silentList,
   silentTotal,
+  silentPage,
+  silentTotalPage,
   onRefreshSilentList,
+  onChangeSilentPage,
   onRequestRemoveSilentUser,
   blackListLoading,
   blackList,
   blackTotal,
+  blackPage,
+  blackTotalPage,
   onRefreshBlackList,
+  onChangeBlackPage,
   onRequestRemoveBlackUser,
   roomAdminListLoading,
   roomAdminList,
   roomAdminTotal,
+  roomAdminPage,
+  roomAdminTotalPage,
   onRefreshRoomAdminList,
+  onChangeRoomAdminPage,
   onRequestRemoveRoomAdmin,
   onClose,
 }: LiveUserManagePanelProps) {
@@ -82,6 +100,39 @@ export function LiveUserManagePanel({
     return new Date(value * 1000).toLocaleString(locale === "en-US" ? "en-US" : "zh-CN", {
       hour12: false,
     });
+  };
+  const renderPagination = (
+    page: number,
+    totalPage: number,
+    loading: boolean,
+    onChange: (nextPage: number) => void,
+  ) => {
+    if (totalPage <= 1) {
+      return null;
+    }
+    return (
+      <div className="mt-4 flex items-center justify-end gap-2 text-xs text-gray-300">
+        <button
+          type="button"
+          disabled={page <= 1 || loading}
+          onClick={() => onChange(page - 1)}
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 transition-all hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {t(locale, "ui.danmu.user_manage.page.prev")}
+        </button>
+        <span className="rounded-lg border border-white/8 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-gray-200">
+          {page} / {totalPage}
+        </span>
+        <button
+          type="button"
+          disabled={page >= totalPage || loading}
+          onClick={() => onChange(page + 1)}
+          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 transition-all hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {t(locale, "ui.danmu.user_manage.page.next")}
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -214,6 +265,12 @@ export function LiveUserManagePanel({
                 })}
               </div>
             )}
+            {renderPagination(
+              silentPage,
+              silentTotalPage,
+              silentListLoading,
+              onChangeSilentPage,
+            )}
           </div>
         ) : activeTab === "blacklist" ? (
           <div className="max-h-[60vh] overflow-y-auto p-5 app-scrollbar">
@@ -264,6 +321,7 @@ export function LiveUserManagePanel({
                 })}
               </div>
             )}
+            {renderPagination(blackPage, blackTotalPage, blackListLoading, onChangeBlackPage)}
           </div>
         ) : (
           <div className="max-h-[60vh] overflow-y-auto p-5 app-scrollbar">
@@ -313,6 +371,12 @@ export function LiveUserManagePanel({
                   );
                 })}
               </div>
+            )}
+            {renderPagination(
+              roomAdminPage,
+              roomAdminTotalPage,
+              roomAdminListLoading,
+              onChangeRoomAdminPage,
             )}
           </div>
         )}

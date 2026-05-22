@@ -1,7 +1,7 @@
 use crate::bili::get_danmu_info;
 use crate::constants::CmdResult;
-use crate::emoticon::{parse_live_emoticon_packages, LiveEmoticonResource};
 use crate::danmu::decode_and_emit;
+use crate::emoticon::{parse_live_emoticon_packages, LiveEmoticonResource};
 use crate::endpoints;
 use crate::state::AppState;
 use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
@@ -239,7 +239,10 @@ async fn fetch_history_emoticon_map(
     let value = match client
         .get_json_with_cookie(
             &endpoints::live_api("/xlive/web-ucenter/v2/emoticon/GetEmoticons"),
-            &[("platform", "pc".to_string()), ("room_id", room_id.to_string())],
+            &[
+                ("platform", "pc".to_string()),
+                ("room_id", room_id.to_string()),
+            ],
             cookie,
         )
         .await

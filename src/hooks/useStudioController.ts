@@ -878,7 +878,7 @@ export function useStudioController() {
 
   const refreshSilentUserList = useCallback(
     async (options?: { silent?: boolean; page?: number }) => {
-      const page = Math.max(options?.page ?? 1, 1);
+      const page = Math.max(options?.page ?? liveSilentUserList?.page ?? 1, 1);
       setLiveSilentUserListLoading(true);
       try {
         const res = await studioApi.getSilentUserList(page);
@@ -905,13 +905,13 @@ export function useStudioController() {
         setLiveSilentUserListLoading(false);
       }
     },
-    [append, localeSetting],
+    [append, liveSilentUserList?.page, localeSetting],
   );
 
   const refreshBlackUserList = useCallback(
     async (options?: { silent?: boolean; page?: number; pageSize?: number }) => {
-      const page = Math.max(options?.page ?? 1, 1);
-      const pageSize = Math.max(options?.pageSize ?? 50, 1);
+      const page = Math.max(options?.page ?? liveBlackUserList?.page ?? 1, 1);
+      const pageSize = Math.max(options?.pageSize ?? liveBlackUserList?.page_size ?? 50, 1);
       setLiveBlackUserListLoading(true);
       try {
         const res = await studioApi.getBlackUserList(page, pageSize);
@@ -938,12 +938,12 @@ export function useStudioController() {
         setLiveBlackUserListLoading(false);
       }
     },
-    [append, localeSetting],
+    [append, liveBlackUserList?.page, liveBlackUserList?.page_size, localeSetting],
   );
 
   const refreshRoomAdminList = useCallback(
     async (options?: { silent?: boolean; page?: number }) => {
-      const page = Math.max(options?.page ?? 1, 1);
+      const page = Math.max(options?.page ?? liveRoomAdminList?.page ?? 1, 1);
       setLiveRoomAdminListLoading(true);
       try {
         const res = await studioApi.getRoomAdminList(page);
@@ -954,7 +954,7 @@ export function useStudioController() {
         if (!options?.silent) {
           append(
             tf(localeSetting, "ui.ctrl.live_room_admin_list_load_failed", {
-              msg: resolveBackendMessage(res.msg, localeSetting),
+              msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
             }),
           );
         }
@@ -970,7 +970,7 @@ export function useStudioController() {
         setLiveRoomAdminListLoading(false);
       }
     },
-    [append, localeSetting],
+    [append, liveRoomAdminList?.page, localeSetting],
   );
 
   const requestMuteUserByDanmu = useCallback(
@@ -1126,7 +1126,7 @@ export function useStudioController() {
       }
       append(
         tf(localeSetting, "ui.ctrl.live_room_admin_add_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
+          msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
         }),
       );
     },
@@ -1226,11 +1226,32 @@ export function useStudioController() {
       }
       append(
         tf(localeSetting, "ui.ctrl.live_room_admin_remove_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
+          msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
         }),
       );
     },
     [append, localeSetting, refreshRoomAdminList, requestConfirm],
+  );
+
+  const changeRoomAdminPage = useCallback(
+    (page: number) => {
+      void refreshRoomAdminList({ page, silent: true });
+    },
+    [refreshRoomAdminList],
+  );
+
+  const changeSilentUserPage = useCallback(
+    (page: number) => {
+      void refreshSilentUserList({ page, silent: true });
+    },
+    [refreshSilentUserList],
+  );
+
+  const changeBlackUserPage = useCallback(
+    (page: number) => {
+      void refreshBlackUserList({ page, silent: true });
+    },
+    [refreshBlackUserList],
   );
 
   const changeUserManageTab = useCallback(
@@ -1511,6 +1532,9 @@ export function useStudioController() {
       refreshSilentUserList: () => refreshSilentUserList(),
       refreshBlackUserList: () => refreshBlackUserList(),
       refreshRoomAdminList: () => refreshRoomAdminList(),
+      changeSilentUserPage,
+      changeBlackUserPage,
+      changeRoomAdminPage,
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       checkAppUpdate: () => checkAppUpdate({ promptOnAvailable: true, silent: false }),

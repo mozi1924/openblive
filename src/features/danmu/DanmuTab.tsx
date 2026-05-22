@@ -38,6 +38,9 @@ type DanmuTabProps = {
   liveVoteOptionB: string;
   liveVoteDuration: number;
   liveVoteSelectedTemplateId: number | null;
+  silentUserIds: number[];
+  blackUserIds: number[];
+  roomAdminUserIds: number[];
   onChangeDanmuText: React.Dispatch<React.SetStateAction<string>>;
   onRefreshLiveVoteData: () => Promise<void>;
   onApplyLiveVoteTemplate: (templateId: number) => void;
@@ -72,6 +75,9 @@ export function DanmuTab({
   liveVoteOptionB,
   liveVoteDuration,
   liveVoteSelectedTemplateId,
+  silentUserIds,
+  blackUserIds,
+  roomAdminUserIds,
   onChangeDanmuText,
   onRefreshLiveVoteData,
   onApplyLiveVoteTemplate,
@@ -100,6 +106,9 @@ export function DanmuTab({
     () => liveEmoticonPackages.some((pkg) => pkg.emoticons.length > 0),
     [liveEmoticonPackages],
   );
+  const silentUidSet = useMemo(() => new Set(silentUserIds), [silentUserIds]);
+  const blackUidSet = useMemo(() => new Set(blackUserIds), [blackUserIds]);
+  const roomAdminUidSet = useMemo(() => new Set(roomAdminUserIds), [roomAdminUserIds]);
   type DanmuGroupItem = {
     id: string;
     messages: DanmuMsg[];
@@ -293,42 +302,84 @@ export function DanmuTab({
           style={{ top: contextMenu.y + 6, left: contextMenu.x + 6 }}
           onMouseDown={(event) => event.stopPropagation()}
         >
+          {(() => {
+            const senderUid =
+              typeof contextMenu.message.sender_uid === "number"
+                ? contextMenu.message.sender_uid
+                : Number.NaN;
+            const isMuted = Number.isFinite(senderUid) ? silentUidSet.has(senderUid) : false;
+            const isBlocked = Number.isFinite(senderUid) ? blackUidSet.has(senderUid) : false;
+            const isRoomAdminByRole = contextMenu.message.sender_role === "admin";
+            const isRoomAdminByList = Number.isFinite(senderUid)
+              ? roomAdminUidSet.has(senderUid)
+              : false;
+            const isRoomAdmin = isRoomAdminByRole || isRoomAdminByList;
+
+            return (
+              <>
           <button
             type="button"
+            disabled={isMuted}
             onClick={() => {
+              if (isMuted) {
+                return;
+              }
               const target = contextMenu.message;
               setContextMenu(null);
               void onRequestMuteUser(target);
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-rose-200 transition-all hover:bg-rose-500/14"
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-all ${
+              isMuted
+                ? "cursor-not-allowed text-gray-500"
+                : "text-rose-200 hover:bg-rose-500/14"
+            }`}
           >
             <Ban className="h-3.5 w-3.5" />
             <span>{t(locale, "ui.danmu.user_manage.context.silent")}</span>
           </button>
           <button
             type="button"
+            disabled={isBlocked}
             onClick={() => {
+              if (isBlocked) {
+                return;
+              }
               const target = contextMenu.message;
               setContextMenu(null);
               void onRequestBlackUser(target);
             }}
-            className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-amber-100 transition-all hover:bg-amber-500/14"
+            className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-all ${
+              isBlocked
+                ? "cursor-not-allowed text-gray-500"
+                : "text-amber-100 hover:bg-amber-500/14"
+            }`}
           >
             <UserX className="h-3.5 w-3.5" />
             <span>{t(locale, "ui.danmu.user_manage.context.blacklist")}</span>
           </button>
           <button
             type="button"
+            disabled={isRoomAdmin}
             onClick={() => {
+              if (isRoomAdmin) {
+                return;
+              }
               const target = contextMenu.message;
               setContextMenu(null);
               void onRequestRoomAdmin(target);
             }}
-            className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-cyan-100 transition-all hover:bg-cyan-500/14"
+            className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-all ${
+              isRoomAdmin
+                ? "cursor-not-allowed text-gray-500"
+                : "text-cyan-100 hover:bg-cyan-500/14"
+            }`}
           >
             <Shield className="h-3.5 w-3.5" />
             <span>{t(locale, "ui.danmu.user_manage.context.room_admin")}</span>
           </button>
+              </>
+            );
+          })()}
         </div>
       ) : null}
 

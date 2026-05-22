@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t } from "../../utils/i18n";
 
@@ -57,17 +57,20 @@ export function ConfirmActionModal({
             <span className="mb-2 block text-[11px] font-semibold tracking-[0.04em] text-gray-300">
               {selectLabel}
             </span>
-            <select
-              value={selectValue || selectOptions[0].value}
-              onChange={(event) => onSelectValueChange(event.target.value)}
-              className="w-full rounded-xl border border-white/12 bg-[#0b1018] px-3 py-2 text-xs text-white outline-none transition-all focus:border-bili-blue/45"
-            >
-              {selectOptions.map((option) => (
-                <option key={option.value} value={option.value} className="bg-[#0b1018] text-white">
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={selectValue || selectOptions[0].value}
+                onChange={(event) => onSelectValueChange(event.target.value)}
+                className="h-10 w-full appearance-none rounded-lg border border-white/8 bg-[#0b111c] px-3.5 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none"
+              >
+                {selectOptions.map((option) => (
+                  <option key={option.value} value={option.value} className="bg-[#090b0f]">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+            </div>
           </label>
         ) : null}
 

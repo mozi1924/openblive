@@ -157,6 +157,9 @@ function App() {
               liveVoteOptionB={state.liveVoteOptionB}
               liveVoteDuration={state.liveVoteDuration}
               liveVoteSelectedTemplateId={state.liveVoteSelectedTemplateId}
+              silentUserIds={(state.liveSilentUserList?.items || []).map((item) => item.tuid)}
+              blackUserIds={(state.liveBlackUserList?.items || []).map((item) => item.mid)}
+              roomAdminUserIds={(state.liveRoomAdminList?.items || []).map((item) => item.uid)}
               onChangeDanmuText={actions.setDanmuText}
               onRefreshLiveVoteData={actions.refreshLiveVoteData}
               onApplyLiveVoteTemplate={actions.applyLiveVoteTemplate}
@@ -230,17 +233,26 @@ function App() {
             silentListLoading={state.liveSilentUserListLoading}
             silentList={state.liveSilentUserList?.items || []}
             silentTotal={state.liveSilentUserList?.total || 0}
+            silentPage={state.liveSilentUserList?.page || 1}
+            silentTotalPage={state.liveSilentUserList?.total_page || 1}
             onRefreshSilentList={actions.refreshSilentUserList}
+            onChangeSilentPage={actions.changeSilentUserPage}
             onRequestRemoveSilentUser={actions.requestRemoveSilentUser}
             blackListLoading={state.liveBlackUserListLoading}
             blackList={state.liveBlackUserList?.items || []}
             blackTotal={state.liveBlackUserList?.total || 0}
+            blackPage={state.liveBlackUserList?.page || 1}
+            blackTotalPage={state.liveBlackUserList?.total_page || 1}
             onRefreshBlackList={actions.refreshBlackUserList}
+            onChangeBlackPage={actions.changeBlackUserPage}
             onRequestRemoveBlackUser={actions.requestRemoveBlackUser}
             roomAdminListLoading={state.liveRoomAdminListLoading}
             roomAdminList={state.liveRoomAdminList?.items || []}
             roomAdminTotal={state.liveRoomAdminList?.total || 0}
+            roomAdminPage={state.liveRoomAdminList?.page || 1}
+            roomAdminTotalPage={state.liveRoomAdminList?.total_page || 1}
             onRefreshRoomAdminList={actions.refreshRoomAdminList}
+            onChangeRoomAdminPage={actions.changeRoomAdminPage}
             onRequestRemoveRoomAdmin={actions.requestRemoveRoomAdmin}
             onClose={actions.closeUserManagePanel}
           />

@@ -86,7 +86,10 @@ pub(crate) async fn add_black_user_inner(req: AddBlackUserReq, state: &AppState)
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        Err(error_message(&value, "i18n.live.error.add_black_user_failed"))
+        Err(error_message(
+            &value,
+            "i18n.live.error.add_black_user_failed",
+        ))
     }
 }
 
@@ -153,7 +156,8 @@ pub(crate) async fn get_black_user_list_inner(
 
         let mut avatar_requests = HashMap::new();
         for (_, uid, face_hint) in &avatar_targets {
-            if uid.is_empty() || avatar::load_cached_face_data_url(&state.config_path, uid).is_some()
+            if uid.is_empty()
+                || avatar::load_cached_face_data_url(&state.config_path, uid).is_some()
             {
                 continue;
             }
@@ -337,7 +341,10 @@ pub(crate) async fn add_room_admin_inner(req: AddRoomAdminReq, state: &AppState)
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        Err(error_message(&value, "i18n.live.error.add_room_admin_failed"))
+        Err(error_message(
+            &value,
+            "i18n.live.error.add_room_admin_failed",
+        ))
     }
 }
 
@@ -406,7 +413,8 @@ pub(crate) async fn get_room_admin_list_inner(
 
         let mut avatar_requests = HashMap::new();
         for (_, uid, face_hint) in &avatar_targets {
-            if uid.is_empty() || avatar::load_cached_face_data_url(&state.config_path, uid).is_some()
+            if uid.is_empty()
+                || avatar::load_cached_face_data_url(&state.config_path, uid).is_some()
             {
                 continue;
             }
@@ -669,7 +677,8 @@ pub(crate) async fn get_silent_user_list_inner(
 
         let mut avatar_requests = HashMap::new();
         for (_, uid, face_hint) in &avatar_targets {
-            if uid.is_empty() || avatar::load_cached_face_data_url(&state.config_path, uid).is_some()
+            if uid.is_empty()
+                || avatar::load_cached_face_data_url(&state.config_path, uid).is_some()
             {
                 continue;
             }
