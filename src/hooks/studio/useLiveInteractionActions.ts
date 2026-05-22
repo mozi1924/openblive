@@ -4,6 +4,7 @@ import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg, LiveProfileState, StreamInfo, User } from "../../types/studio";
 import { createSelfDanmuMessage } from "../../utils/danmu";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
+import { clearLiveStreamInfoCache, saveLiveStreamInfoCache } from "../../utils/liveStreamCache";
 import { normalizeTags, splitTagInput, type RecentArea, type StartLiveSource } from "./controllerHelpers";
 
 type RequestConfirmPayload = {
@@ -510,7 +511,9 @@ export function useLiveInteractionActions({
       }
       if (res.code === 0) {
         const flow = res.data;
-        setRtmp(flow?.stream_info || null);
+        const streamInfo = flow?.stream_info || null;
+        setRtmp(streamInfo);
+        saveLiveStreamInfoCache(activeUidRef.current, streamInfo);
         setRecentAreas(flow?.recent_areas || []);
         append(t(localeSetting, "ui.ctrl.start_live_ok"));
         const danmuStarted = Boolean(flow?.danmu_monitor_started);
@@ -636,6 +639,7 @@ export function useLiveInteractionActions({
         setRtmp(null);
       }
       if (res.code === 0) {
+        clearLiveStreamInfoCache();
         await refreshSession();
         await loadLinkageStatus();
         return;

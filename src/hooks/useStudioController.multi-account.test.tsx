@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useStudioController } from "./useStudioController";
 import { defaultProfileState } from "./studio/controllerHelpers";
 import type { LiveRoomProfile, Resp, User } from "../types/studio";
+import {
+  clearLiveStreamInfoCache,
+  readLiveStreamInfoCache,
+  saveLiveStreamInfoCache,
+} from "../utils/liveStreamCache";
 
 const { mockStudioApi } = vi.hoisted(() => ({
   mockStudioApi: {
@@ -157,6 +162,7 @@ let studioStateListener: ((payload: { kind: string; source: string; at: number; 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearLiveStreamInfoCache();
   studioStateListener = null;
 
   mockStudioApi.syncLiveStatus.mockResolvedValue(ok(null));
@@ -718,6 +724,129 @@ describe("useStudioController multi-account regressions", () => {
     });
 
     expect(mockStudioApi.syncLiveStatus.mock.calls.length).toBeGreaterThan(syncCallsBefore);
+  });
+
+  it("hydrates stream info from local cache when startup sync reports live", async () => {
+    const user = makeUser("1", "A", "A-old");
+    const cachedStreamInfo = {
+      rtmp1: {
+        addr: "rtmp://cache-host/live",
+        code: "?streamname=live_1_2&key=cache",
+      },
+    };
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.syncLiveStatus.mockResolvedValue(
+      ok({
+        uid: 1,
+        room_id: "1001",
+        csrf: "csrf",
+        live_status: 1,
+        from_cache: false,
+      }),
+    );
+    saveLiveStreamInfoCache("1", cachedStreamInfo);
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    await waitFor(() => expect(result.current.state.session?.live_status).toBe(1));
+    await waitFor(() => expect(result.current.state.rtmp).toEqual(cachedStreamInfo));
+  });
+
+  it("clears local stream cache when startup sync reports offline", async () => {
+    const user = makeUser("1", "A", "A-old");
+    const cachedStreamInfo = {
+      rtmp1: {
+        addr: "rtmp://cache-host/live",
+        code: "?streamname=live_1_2&key=cache",
+      },
+    };
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.syncLiveStatus.mockResolvedValue(
+      ok({
+        uid: 1,
+        room_id: "1001",
+        csrf: "csrf",
+        live_status: 0,
+        from_cache: false,
+      }),
+    );
+    saveLiveStreamInfoCache("1", cachedStreamInfo);
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    await waitFor(() => expect(result.current.state.session?.live_status).toBe(0));
+    await waitFor(() => expect(readLiveStreamInfoCache("1")).toBeNull());
+    expect(result.current.state.rtmp).toBeNull();
+  });
+
+  it("saves stream info to local cache after start live success", async () => {
+    const user = makeUser("1", "A", "A-old");
+    const syncedProfileState = defaultProfileState();
+    syncedProfileState.title.submitted = user.last_title;
+    syncedProfileState.title.effective = user.last_title;
+    syncedProfileState.title.transport = "synced";
+    syncedProfileState.area.submitted_parent = user.last_area_name[0];
+    syncedProfileState.area.submitted_child = user.last_area_name[1];
+    syncedProfileState.area.effective_parent = user.last_area_name[0];
+    syncedProfileState.area.effective_child = user.last_area_name[1];
+    syncedProfileState.area.transport = "synced";
+    syncedProfileState.tags.submitted = [...(user.last_tags || [])];
+    syncedProfileState.tags.effective = [...(user.last_tags || [])];
+    syncedProfileState.tags.transport = "synced";
+    syncedProfileState.cover.submitted = user.last_cover || "";
+    syncedProfileState.cover.effective = user.last_cover || "";
+    syncedProfileState.cover.transport = "synced";
+    user.live_profile_state = syncedProfileState;
+    const streamInfo = {
+      rtmp1: {
+        addr: "rtmp://push.example.com/live",
+        code: "?streamname=live_1_2&key=abc",
+      },
+    };
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.syncLiveRoomProfile.mockResolvedValue(
+      ok({
+        title: user.last_title,
+        parent: user.last_area_name[0],
+        child: user.last_area_name[1],
+        tags: user.last_tags || [],
+        cover: user.last_cover || "",
+        from_cache: false,
+        profile_state: syncedProfileState,
+      }),
+    );
+    mockStudioApi.syncLiveStatus.mockResolvedValue(
+      ok({
+        uid: 1,
+        room_id: "1001",
+        csrf: "csrf",
+        live_status: 1,
+        from_cache: false,
+      }),
+    );
+    mockStudioApi.startLiveFlow.mockResolvedValue(
+      ok({
+        stream_info: streamInfo,
+        danmu_monitor_started: true,
+        danmu_monitor_msg: "i18n.live.danmu_monitor_started",
+      }),
+    );
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+
+    await act(async () => {
+      await result.current.actions.startLive("face_retry");
+      await flush();
+    });
+
+    expect(readLiveStreamInfoCache("1")).toEqual(streamInfo);
   });
 
   it("keeps applied history cover instead of forcing an immediate stale profile sync", async () => {

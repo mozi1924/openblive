@@ -5,7 +5,6 @@ import {
   Copy,
   History,
   ImageUp,
-  Link,
   Plus,
   Radio,
   RefreshCw,
@@ -138,7 +137,6 @@ export function StreamTab({
   hasAttentionStatus,
   profileState,
   sectionStatus,
-  dirtyStatus,
   unsavedItems,
   onSelectTab,
   onChangeChild,
@@ -229,11 +227,6 @@ export function StreamTab({
         ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
         : "text-amber-400 border-amber-500/20 bg-amber-500/10"
       : "text-gray-400 border-white/8 bg-white/4";
-  const linkageHint = activeLinkageMode === "obs_ws"
-    ? t(locale, "ui.stream.linkage.hint.obs")
-    : activeLinkageMode === "command"
-      ? t(locale, "ui.stream.linkage.hint.command")
-      : t(locale, "ui.stream.linkage.hint.none");
   const coverPreview = normalizeCoverValue(
     coverRenderSrc || (cover.startsWith("data:") ? cover : ""),
   );
@@ -621,78 +614,11 @@ export function StreamTab({
           </div>
         </div>
 
-        {/* RTMP Server info */}
-        {rtmp && (
-          <div className="flat-panel rounded-xl border border-emerald-500/20 bg-emerald-500/[0.01] p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Link className="h-4 w-4 text-emerald-400" />
-                <span className="text-[10px] font-extrabold tracking-widest text-emerald-400 uppercase">
-                  RTMP STREAM ENDPOINTS
-                </span>
-              </div>
-              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
-                {t(locale, "ui.stream.ready")}
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-lg border border-white/5 bg-[#05090a] p-3.5 space-y-2.5 font-mono text-[11px]">
-                
-                {/* Server URL field */}
-                <div className="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-white/2 px-3 py-1.5">
-                  <div className="flex items-center space-x-2 truncate">
-                    <Server className="h-3.5 w-3.5 text-gray-500 shrink-0" />
-                    <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.addr")}</span>
-                    <span className="truncate text-gray-300 select-text">{primaryEndpoint?.addr || t(locale, "ui.stream.unavailable")}</span>
-                  </div>
-                  <button
-                    onClick={() => void onCopyToClipboard(primaryEndpoint?.addr || "", "server")}
-                    disabled={!primaryEndpoint?.addr}
-                    className="flex items-center rounded bg-white/4 px-2 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/8 hover:text-white active:scale-95"
-                  >
-                    {copiedKey === "server" ? (
-                      <Check className="mr-1 h-3 w-3 text-emerald-400" />
-                    ) : (
-                      <Copy className="mr-1 h-3 w-3" />
-                    )}
-                    {t(locale, "ui.stream.copy")}
-                  </button>
-                </div>
-
-                {/* Key field */}
-                <div className="flex items-center justify-between gap-3 rounded-md border border-white/5 bg-white/2 px-3 py-1.5">
-                  <div className="flex items-center space-x-2 truncate">
-                    <Key className="h-3.5 w-3.5 text-gray-500 shrink-0" />
-                    <span className="text-gray-400 shrink-0">{t(locale, "ui.stream.key")}</span>
-                    <span className="truncate text-gray-300 select-text">
-                      {primaryEndpoint?.code ? "••••••••••••••••••••••••" : t(locale, "ui.stream.unavailable")}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => void onCopyToClipboard(primaryEndpoint?.code || "", "key")}
-                    disabled={!primaryEndpoint?.code}
-                    className="flex items-center rounded bg-white/4 px-2 py-1 text-[10px] font-bold text-gray-300 transition-all hover:bg-white/8 hover:text-white active:scale-95"
-                  >
-                    {copiedKey === "key" ? (
-                      <Check className="mr-1 h-3 w-3 text-emerald-400" />
-                    ) : (
-                      <Copy className="mr-1 h-3 w-3" />
-                    )}
-                    {t(locale, "ui.stream.copy")}
-                  </button>
-                </div>
-
-              </div>
-
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Right Column: Live cockpit control */}
       <div className="lg:col-span-5 lg:self-start">
-        <div className="flat-panel flex flex-col justify-between space-y-5 rounded-xl p-5 text-center lg:sticky lg:top-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto app-scrollbar">
+        <div className="flat-panel flex flex-col justify-between space-y-5 rounded-xl p-5 text-center lg:fixed lg:right-[calc(2rem+max(0px,((100vw-20rem-72rem)/2)))] lg:top-[5rem] lg:z-20 lg:w-[min(29.125rem,calc(((100vw-20rem)*0.4166667)-0.875rem))] lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto app-scrollbar">
           <div>
             <div className="mb-5 flex items-center justify-between">
               <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
@@ -714,25 +640,73 @@ export function StreamTab({
                   <Radio className={`h-10 w-10 ${isLive ? "text-emerald-400 animate-pulse" : "text-gray-600"}`} />
                 </div>
               </div>
-              <h4 className="mt-4 text-xs font-bold text-white tracking-wide">
+              <h4 className="mt-3 text-[11px] font-bold text-white tracking-wide">
                 {tf(locale, "ui.stream.live_status", { status: statusLabel })}
               </h4>
-              <p className="mt-1 max-w-xs text-[11px] leading-relaxed text-gray-500 font-medium">
+              <p className="mt-1 max-w-[17rem] text-[10px] leading-tight text-gray-500 font-medium">
                 {statusHint}
               </p>
+              {rtmp && (
+                <div className="mt-3 w-full max-w-sm rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-2.5 text-left">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[9px] font-extrabold tracking-widest text-emerald-400 uppercase">
+                      RTMP
+                    </span>
+                    <span className="rounded border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                      {t(locale, "ui.stream.ready")}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                        {t(locale, "ui.stream.addr")}
+                      </span>
+                      <div className="relative mt-1">
+                        <div className="flex h-8 items-center rounded-md border border-white/8 bg-[#05090a] px-2 pr-12 font-mono text-[10px] text-gray-300">
+                          <Server className="mr-1.5 h-3 w-3 shrink-0 text-gray-500" />
+                          <span className="truncate">{truncateStreamValue(primaryEndpoint?.addr || "") || t(locale, "ui.stream.unavailable")}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void onCopyToClipboard(primaryEndpoint?.addr || "", "server")}
+                          disabled={!primaryEndpoint?.addr}
+                          title={t(locale, "ui.stream.copy")}
+                          className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded border border-white/8 bg-white/6 text-gray-300 transition-all hover:bg-white/12 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          {copiedKey === "server" ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wide text-gray-500">
+                        {t(locale, "ui.stream.key")}
+                      </span>
+                      <div className="relative mt-1">
+                        <div className="flex h-8 items-center rounded-md border border-white/8 bg-[#05090a] px-2 pr-12 font-mono text-[10px] text-gray-300">
+                          <Key className="mr-1.5 h-3 w-3 shrink-0 text-gray-500" />
+                          <span className="truncate">
+                            {maskStreamCode(primaryEndpoint?.code || "") || t(locale, "ui.stream.unavailable")}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void onCopyToClipboard(primaryEndpoint?.code || "", "key")}
+                          disabled={!primaryEndpoint?.code}
+                          title={t(locale, "ui.stream.copy")}
+                          className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded border border-white/8 bg-white/6 text-gray-300 transition-all hover:bg-white/12 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          {copiedKey === "key" ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               {(hasUnsavedChanges || hasAttentionStatus) && (
                 <div className="mt-3.5 w-full max-w-sm rounded-lg border border-white/8 bg-white/2.5 p-3 text-left">
                   {hasUnsavedChanges ? (
                     <div className="mb-2.5 rounded border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-[10px] leading-relaxed text-amber-300 font-medium">
                       <p>{tf(locale, "ui.stream.unsaved.detected", { items: unsavedItems.join("、") })}</p>
-                      <p className="mt-1 text-amber-200/90 font-medium">
-                        {tf(locale, "ui.stream.unsaved.detail", {
-                          cover: dirtyStatus.cover ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
-                          title: dirtyStatus.title ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
-                          area: dirtyStatus.area ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
-                          tags: dirtyStatus.tags ? t(locale, "ui.stream.changed") : t(locale, "ui.stream.unchanged"),
-                        })}
-                      </p>
                     </div>
                   ) : (
                     <p className="mb-2.5 text-[10px] leading-relaxed text-gray-400 font-medium">
@@ -756,9 +730,6 @@ export function StreamTab({
                   <span className="text-[10px] font-extrabold tracking-widest text-gray-500 uppercase">
                     EQUIPMENT LINKAGE
                   </span>
-                  <p className="mt-0.5 text-[11px] text-gray-500 font-medium">
-                    {linkageHint}
-                  </p>
                 </div>
               </div>
 
@@ -993,4 +964,21 @@ function buildStreamEndpoints(rtmp: StreamInfo | null): StreamEndpoint[] {
   }
 
   return [];
+}
+
+function truncateStreamValue(value: string): string {
+  if (!value) {
+    return "";
+  }
+  if (value.length <= 28) {
+    return value;
+  }
+  return `${value.slice(0, 16)}...${value.slice(-9)}`;
+}
+
+function maskStreamCode(code: string): string {
+  if (!code) {
+    return "";
+  }
+  return "•".repeat(Math.max(8, Math.min(14, code.length)));
 }

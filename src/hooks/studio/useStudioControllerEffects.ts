@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "reac
 import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg, LiveProfileState, Session } from "../../types/studio";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
+import { clearLiveStreamInfoCache, readLiveStreamInfoCache } from "../../utils/liveStreamCache";
 import { normalizeCoverValue, tagsToKey } from "./controllerHelpers";
 import { useTauriEvent } from "../useTauriEvent";
 
@@ -228,6 +229,12 @@ export function useStudioControllerEffects({
           const liveStatus = nextSession.live_status ?? (nextSession.is_live ? 1 : 0);
           if (liveStatus !== 1) {
             setRtmp(null);
+            clearLiveStreamInfoCache();
+          } else {
+            const cachedStreamInfo = readLiveStreamInfoCache(nextSession.uid ?? currentUserUid);
+            if (cachedStreamInfo) {
+              setRtmp((prev) => prev || cachedStreamInfo);
+            }
           }
         }
         if (typeof event.data?.danmu_running === "boolean") {
@@ -260,6 +267,8 @@ export function useStudioControllerEffects({
         } else if (event.data?.session_consistent === false) {
           append(t(localeSetting, "ui.ctrl.stop_live_session_mismatch"));
         } else {
+          setRtmp(null);
+          clearLiveStreamInfoCache();
           append(t(localeSetting, "ui.ctrl.tray_stop"));
         }
         break;

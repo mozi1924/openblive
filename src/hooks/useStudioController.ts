@@ -13,6 +13,7 @@ import type {
 import { writeClipboardText } from "../utils/clipboard";
 import { prepareLiveCoverUpload } from "../utils/coverUpload";
 import { resolveBackendMessage, t, tf } from "../utils/i18n";
+import { clearLiveStreamInfoCache, readLiveStreamInfoCache } from "../utils/liveStreamCache";
 import { useWindowDrag } from "./useWindowDrag";
 import {
   buildSectionStatus,
@@ -619,6 +620,13 @@ export function useStudioController() {
     const liveStatus = nextSession?.live_status ?? (nextSession?.is_live ? 1 : 0);
     if (liveStatus !== 1) {
       setRtmp(null);
+      clearLiveStreamInfoCache();
+    } else {
+      const cacheUid = nextSession?.uid ?? activeUidRef.current;
+      const cachedStreamInfo = readLiveStreamInfoCache(cacheUid);
+      if (cachedStreamInfo) {
+        setRtmp((prev) => prev || cachedStreamInfo);
+      }
     }
     if (nextSession?.from_cache) {
       const errorCode = nextSession.error_code || "SYNC_FAILED";
