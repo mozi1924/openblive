@@ -62,9 +62,6 @@ function App() {
           }}
           onToggleUserManagePanel={() => {
             actions.toggleUserManagePanel();
-            if (!state.showUserManagePanel) {
-              void actions.refreshSilentUserList();
-            }
           }}
           onClearDanmus={actions.clearDanmus}
         />
@@ -172,6 +169,7 @@ function App() {
               onTerminateLiveVote={actions.terminateLiveVote}
               onSendDanmu={actions.submitDanmu}
               onRequestMuteUser={actions.requestMuteUserByDanmu}
+              onRequestBlackUser={actions.requestBlackUserByDanmu}
             />
           )}
 
@@ -233,6 +231,11 @@ function App() {
             silentTotal={state.liveSilentUserList?.total || 0}
             onRefreshSilentList={actions.refreshSilentUserList}
             onRequestRemoveSilentUser={actions.requestRemoveSilentUser}
+            blackListLoading={state.liveBlackUserListLoading}
+            blackList={state.liveBlackUserList?.items || []}
+            blackTotal={state.liveBlackUserList?.total || 0}
+            onRefreshBlackList={actions.refreshBlackUserList}
+            onRequestRemoveBlackUser={actions.requestRemoveBlackUser}
             onClose={actions.closeUserManagePanel}
           />
         )}

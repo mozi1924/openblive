@@ -7,6 +7,8 @@ import type {
   AppConfig,
   DanmuMsg,
   LinkageStatus,
+  LiveBlackUserItem,
+  LiveBlackUserListData,
   LiveProfileState,
   LiveSilentUserListData,
   LiveSilentUserItem,
@@ -101,9 +103,13 @@ export function useStudioController() {
   const [showLogs, setShowLogs] = useState(false);
   const [showLiveOnlineRankPanel, setShowLiveOnlineRankPanel] = useState(false);
   const [showUserManagePanel, setShowUserManagePanel] = useState(false);
-  const [userManageActiveTab, setUserManageActiveTab] = useState<"silent">("silent");
+  const [userManageActiveTab, setUserManageActiveTab] = useState<"silent" | "blacklist">(
+    "silent",
+  );
   const [liveSilentUserListLoading, setLiveSilentUserListLoading] = useState(false);
   const [liveSilentUserList, setLiveSilentUserList] = useState<LiveSilentUserListData | null>(null);
+  const [liveBlackUserListLoading, setLiveBlackUserListLoading] = useState(false);
+  const [liveBlackUserList, setLiveBlackUserList] = useState<LiveBlackUserListData | null>(null);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
@@ -898,6 +904,39 @@ export function useStudioController() {
     [append, localeSetting],
   );
 
+  const refreshBlackUserList = useCallback(
+    async (options?: { silent?: boolean; page?: number; pageSize?: number }) => {
+      const page = Math.max(options?.page ?? 1, 1);
+      const pageSize = Math.max(options?.pageSize ?? 50, 1);
+      setLiveBlackUserListLoading(true);
+      try {
+        const res = await studioApi.getBlackUserList(page, pageSize);
+        if (res.code === 0 && res.data) {
+          setLiveBlackUserList(res.data);
+          return;
+        }
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_black_user_list_load_failed", {
+              msg: resolveBackendMessage(res.msg, localeSetting),
+            }),
+          );
+        }
+      } catch (error) {
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_black_user_list_load_failed", {
+              msg: resolveBackendMessage(String(error), localeSetting),
+            }),
+          );
+        }
+      } finally {
+        setLiveBlackUserListLoading(false);
+      }
+    },
+    [append, localeSetting],
+  );
+
   const requestMuteUserByDanmu = useCallback(
     async (message: DanmuMsg) => {
       const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
@@ -965,6 +1004,55 @@ export function useStudioController() {
     ],
   );
 
+  const requestBlackUserByDanmu = useCallback(
+    async (message: DanmuMsg) => {
+      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
+      const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
+      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
+        append(t(localeSetting, "ui.ctrl.live_black_user_invalid_target"));
+        return;
+      }
+
+      const senderName =
+        resolveBackendMessage(message.sender, localeSetting).trim() ||
+        t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.black.title", { name: senderName }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.black.desc", {
+          name: senderName,
+          uid: senderUid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.black.confirm"),
+        tone: "danger",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const res = await studioApi.addBlackUser(senderUid);
+      if (res.code === 0) {
+        append(tf(localeSetting, "ui.ctrl.live_black_user_added", { name: senderName }));
+        if (showUserManagePanel) {
+          void refreshBlackUserList({ silent: true });
+        }
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_black_user_add_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    },
+    [
+      append,
+      currentUser?.uid,
+      localeSetting,
+      refreshBlackUserList,
+      requestConfirm,
+      showUserManagePanel,
+    ],
+  );
+
   const requestRemoveSilentUser = useCallback(
     async (item: LiveSilentUserItem) => {
       const name = item.tname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
@@ -994,6 +1082,49 @@ export function useStudioController() {
       );
     },
     [append, localeSetting, refreshSilentUserList, requestConfirm],
+  );
+
+  const requestRemoveBlackUser = useCallback(
+    async (item: LiveBlackUserItem) => {
+      const name = item.uname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unblack.title", { name }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unblack.desc", {
+          name,
+          uid: item.mid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unblack.confirm"),
+        tone: "primary",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const res = await studioApi.removeBlackUser(item.mid);
+      if (res.code === 0) {
+        append(tf(localeSetting, "ui.ctrl.live_black_user_removed", { name }));
+        await refreshBlackUserList({ silent: true });
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_black_user_remove_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    },
+    [append, localeSetting, refreshBlackUserList, requestConfirm],
+  );
+
+  const changeUserManageTab = useCallback(
+    (tab: "silent" | "blacklist") => {
+      setUserManageActiveTab(tab);
+      if (tab === "silent") {
+        void refreshSilentUserList({ silent: true });
+      } else {
+        void refreshBlackUserList({ silent: true });
+      }
+    },
+    [refreshBlackUserList, refreshSilentUserList],
   );
 
   const liveInteractionActions = useLiveInteractionActions({
@@ -1155,6 +1286,8 @@ export function useStudioController() {
       liveOnlineRankLoading,
       liveSilentUserList,
       liveSilentUserListLoading,
+      liveBlackUserList,
+      liveBlackUserListLoading,
       liveVoteLoading,
       liveVoteSubmitting,
       liveVoteTerminating,
@@ -1224,9 +1357,14 @@ export function useStudioController() {
         setShowUserManagePanel(false);
       },
       toggleUserManagePanel: () => {
-        setShowUserManagePanel((prev) => !prev);
+        setShowUserManagePanel((prev) => {
+          const next = !prev;
+          if (next) {
+            changeUserManageTab("silent");
+          }
+          return next;
+        });
         setShowLiveOnlineRankPanel(false);
-        setUserManageActiveTab("silent");
       },
       closeLiveOnlineRankPanel: () => setShowLiveOnlineRankPanel(false),
       closeUserManagePanel: () => setShowUserManagePanel(false),
@@ -1235,7 +1373,7 @@ export function useStudioController() {
       setDanmuText,
       setConfirmSelectValue,
       setLiveVoteDuration,
-      setUserManageActiveTab,
+      setUserManageActiveTab: changeUserManageTab,
       updateAppConfig,
       generateHttpUserAgent,
       updateLocaleConfig,
@@ -1249,6 +1387,7 @@ export function useStudioController() {
       refreshLiveVoteData: () => loadLiveVoteData(),
       refreshLiveOnlineRank: () => loadLiveOnlineRank(),
       refreshSilentUserList: () => refreshSilentUserList(),
+      refreshBlackUserList: () => refreshBlackUserList(),
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       checkAppUpdate: () => checkAppUpdate({ promptOnAvailable: true, silent: false }),
@@ -1269,7 +1408,9 @@ export function useStudioController() {
       submitTags,
       submitTitle,
       requestMuteUserByDanmu,
+      requestBlackUserByDanmu,
       requestRemoveSilentUser,
+      requestRemoveBlackUser,
       switchAccount,
       syncLiveRoomProfile: async () => syncLiveRoomProfile(true),
       toggleLogs: () => setShowLogs((prev) => !prev),

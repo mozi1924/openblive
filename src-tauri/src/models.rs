@@ -439,6 +439,24 @@ pub struct RemoveSilentUserReq {
 }
 
 #[derive(Deserialize)]
+pub struct AddBlackUserReq {
+    pub fid: u64,
+}
+
+#[derive(Deserialize)]
+pub struct GetBlackUserListReq {
+    #[serde(default)]
+    pub page: Option<u32>,
+    #[serde(default)]
+    pub page_size: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct RemoveBlackUserReq {
+    pub fid: u64,
+}
+
+#[derive(Deserialize)]
 pub struct UidReq {
     pub uid: String,
 }

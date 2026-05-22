@@ -5,8 +5,9 @@ use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
-    AddSilentUserReq, CreateLiveVoteReq, DanmuReq, GetSilentUserListReq, RemoveSilentUserReq,
-    TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
+    AddBlackUserReq, AddSilentUserReq, CreateLiveVoteReq, DanmuReq, GetBlackUserListReq,
+    GetSilentUserListReq, RemoveBlackUserReq, RemoveSilentUserReq, TerminateLiveVoteReq,
+    UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -48,7 +49,10 @@ use profile_sync::{
     sync_live_status as sync_live_status_inner,
 };
 use session::resolve_room_scoped_auth_context;
-use user_manage::{add_silent_user_inner, get_silent_user_list_inner, remove_silent_user_inner};
+use user_manage::{
+    add_black_user_inner, add_silent_user_inner, get_black_user_list_inner,
+    get_silent_user_list_inner, remove_black_user_inner, remove_silent_user_inner,
+};
 
 pub async fn start_danmu_monitor_for_ws(app: &AppHandle, state: &AppState) -> CmdResult {
     start_danmu_monitor_inner(app, state).await
@@ -589,6 +593,24 @@ pub async fn get_silent_user_list(
 #[tauri::command]
 pub async fn remove_silent_user(req: RemoveSilentUserReq, state: State<'_, AppState>) -> CmdResult {
     remove_silent_user_inner(req, &state).await
+}
+
+#[tauri::command]
+pub async fn add_black_user(req: AddBlackUserReq, state: State<'_, AppState>) -> CmdResult {
+    add_black_user_inner(req, &state).await
+}
+
+#[tauri::command]
+pub async fn get_black_user_list(
+    req: GetBlackUserListReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    get_black_user_list_inner(req, &state).await
+}
+
+#[tauri::command]
+pub async fn remove_black_user(req: RemoveBlackUserReq, state: State<'_, AppState>) -> CmdResult {
+    remove_black_user_inner(req, &state).await
 }
 
 #[tauri::command]

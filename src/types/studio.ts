@@ -348,6 +348,23 @@ export type LiveSilentUserListData = {
   items: LiveSilentUserItem[];
 };
 
+export type LiveBlackUserItem = {
+  mid: number;
+  uname: string;
+  face: string;
+  mtime: number;
+  attribute?: number;
+  sign?: string;
+};
+
+export type LiveBlackUserListData = {
+  page: number;
+  page_size: number;
+  total: number;
+  total_page: number;
+  items: LiveBlackUserItem[];
+};
+
 export type LiveVoteHistoryData = {
   history: LiveVoteInfo[];
 };

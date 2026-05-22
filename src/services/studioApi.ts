@@ -13,6 +13,7 @@ import type {
   LiveVoteCreateResp,
   LiveDashboardSnapshot,
   LiveOnlineRankData,
+  LiveBlackUserListData,
   LiveVoteHistoryData,
   LiveVotePanelData,
   LiveSilentUserListData,
@@ -108,6 +109,18 @@ export const studioApi = {
   getSilentUserList: (page = 1) =>
     invokeCommand<LiveSilentUserListData>("get_silent_user_list", { req: { page } }),
   removeSilentUser: (id: number) => invokeCommand("remove_silent_user", { req: { id } }),
+  addBlackUser: (fid: number) =>
+    invokeCommand("add_black_user", {
+      req: { fid },
+    }),
+  getBlackUserList: (page = 1, pageSize = 50) =>
+    invokeCommand<LiveBlackUserListData>("get_black_user_list", {
+      req: { page, page_size: pageSize },
+    }),
+  removeBlackUser: (fid: number) =>
+    invokeCommand("remove_black_user", {
+      req: { fid },
+    }),
   getLiveVotePanel: () => invokeCommand<LiveVotePanelData>("get_live_vote_panel"),
   getLiveVoteHistory: () => invokeCommand<LiveVoteHistoryData>("get_live_vote_history"),
   createLiveVote: (
