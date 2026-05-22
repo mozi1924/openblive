@@ -20,6 +20,7 @@ type AlertPayload = ConfirmPayload;
 type UseAppUpdateControllerParams = {
   localeSetting: LocaleSetting;
   append: (line: string) => void;
+  notifyActionResult: (payload: { text: string; tone: "success" | "error" }) => void;
   requestConfirm: (payload: ConfirmPayload) => Promise<boolean>;
   requestAlert: (payload: AlertPayload) => Promise<void>;
   revealMainWindowForAction: () => Promise<void>;
@@ -29,6 +30,7 @@ type UseAppUpdateControllerParams = {
 export function useAppUpdateController({
   localeSetting,
   append,
+  notifyActionResult,
   requestConfirm,
   requestAlert,
   revealMainWindowForAction,
@@ -79,11 +81,11 @@ export function useAppUpdateController({
           appUpdatePromptedVersionRef.current = null;
           replacePendingAppUpdate(null);
           if (!options?.silent) {
-            append(
-              tf(localeSetting, "ui.project.update.none", {
-                version: appVersion || "--",
-              }),
-            );
+            const message = tf(localeSetting, "ui.project.update.none", {
+              version: appVersion || "--",
+            });
+            append(message);
+            notifyActionResult({ text: message, tone: "success" });
           }
           return;
         }
@@ -114,11 +116,11 @@ export function useAppUpdateController({
         }
       } catch (error) {
         if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.project.update.error.check", {
-              msg: resolveBackendMessage(String(error), localeSetting),
-            }),
-          );
+          const message = tf(localeSetting, "ui.project.update.error.check", {
+            msg: resolveBackendMessage(String(error), localeSetting),
+          });
+          append(message);
+          notifyActionResult({ text: message, tone: "error" });
         }
       } finally {
         setCheckingAppUpdate(false);
@@ -153,19 +155,28 @@ export function useAppUpdateController({
     setInstallingAppUpdate(true);
     try {
       await update.downloadAndInstall();
-      append(tf(localeSetting, "ui.project.update.install.done", { version: update.version }));
+      const message = tf(localeSetting, "ui.project.update.install.done", { version: update.version });
+      append(message);
+      notifyActionResult({ text: message, tone: "success" });
       setAvailableAppUpdateVersion(null);
       replacePendingAppUpdate(null);
     } catch (error) {
-      append(
-        tf(localeSetting, "ui.project.update.error.install", {
-          msg: resolveBackendMessage(String(error), localeSetting),
-        }),
-      );
+      const message = tf(localeSetting, "ui.project.update.error.install", {
+        msg: resolveBackendMessage(String(error), localeSetting),
+      });
+      append(message);
+      notifyActionResult({ text: message, tone: "error" });
     } finally {
       setInstallingAppUpdate(false);
     }
-  }, [append, checkAppUpdate, installingAppUpdate, localeSetting, replacePendingAppUpdate]);
+  }, [
+    append,
+    checkAppUpdate,
+    installingAppUpdate,
+    localeSetting,
+    notifyActionResult,
+    replacePendingAppUpdate,
+  ]);
 
   const openReleasePage = useCallback(async () => {
     try {
@@ -206,6 +217,7 @@ export function useAppUpdateController({
     downloadAndInstallAppUpdate,
     localeSetting,
     openReleasePage,
+    notifyActionResult,
     requestAlert,
   ]);
 

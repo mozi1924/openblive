@@ -268,6 +268,7 @@ export function useStudioController() {
   const appUpdateController = useAppUpdateController({
     localeSetting,
     append,
+    notifyActionResult: pushTopNotice,
     requestConfirm,
     requestAlert,
     revealMainWindowForAction,
