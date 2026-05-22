@@ -49,7 +49,6 @@ type StreamTabProps = {
   linkageStatus: LinkageStatus | null;
   tagInput: string;
   tags: string[];
-  tagAuditStatusMap: Record<string, number>;
   title: string;
   recentAreas: Array<{ parent: string; child: string }>;
   hasUnsavedChanges: boolean;
@@ -133,7 +132,6 @@ export function StreamTab({
   linkageStatus,
   tagInput,
   tags,
-  tagAuditStatusMap,
   title,
   recentAreas,
   hasUnsavedChanges,
@@ -582,9 +580,6 @@ export function StreamTab({
                         className="inline-flex items-center rounded border border-bili-blue/20 bg-bili-blue/8 px-2 py-0.5 text-xs font-semibold text-bili-blue"
                       >
                         {tag}
-                        <span className="ml-1 rounded bg-white/10 px-1.5 py-[1px] text-[10px] font-medium text-gray-300">
-                          {t(locale, `ui.stream.tags.audit.status.${String(tagAuditStatusMap[tag] ?? -1)}`)}
-                        </span>
                         <button
                           type="button"
                           onClick={() => onRemoveTag(tag)}

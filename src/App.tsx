@@ -121,7 +121,6 @@ function App() {
               linkageStatus={state.linkageStatus}
               tagInput={state.tagInput}
               tags={state.tags}
-              tagAuditStatusMap={state.tagAuditStatusMap}
               title={state.title}
               onSelectTab={actions.setActiveTab}
               onChangeChild={actions.setChild}
