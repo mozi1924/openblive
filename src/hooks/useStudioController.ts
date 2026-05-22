@@ -141,6 +141,7 @@ export function useStudioController() {
   const topNoticeSeqRef = useRef(0);
   const topNoticeTimersRef = useRef<Map<number, number>>(new Map());
   const tagAuditBootstrapKeyRef = useRef("");
+  const tagReviewBootstrapKeyRef = useRef("");
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   useWindowDrag(sidebarDragRef, headerDragRef);
@@ -414,6 +415,10 @@ export function useStudioController() {
   const needsTagAuditBootstrap = useMemo(
     () => tags.length > 0 && tags.some((tag) => !(tag in tagAuditStatusMap)),
     [tagAuditStatusMap, tags],
+  );
+  const needsTagReviewBootstrap = useMemo(
+    () => tags.length > 0 && profileState.tags.review === "unknown",
+    [profileState.tags.review, tags.length],
   );
 
   const hasLiveAuth = Boolean(currentUser?.uid?.trim() && !currentUser?.login_invalid);
@@ -1024,6 +1029,8 @@ export function useStudioController() {
   useEffect(() => {
     if (!hasLiveAuth) {
       setTagAuditStatusMap({});
+      tagAuditBootstrapKeyRef.current = "";
+      tagReviewBootstrapKeyRef.current = "";
       return;
     }
     if (!hasPendingReviewOption) {
@@ -1033,16 +1040,33 @@ export function useStudioController() {
   }, [hasLiveAuth, hasPendingReviewOption, currentUser?.uid, refreshLiveTags]);
 
   useEffect(() => {
-    if (!hasLiveAuth || !currentUser?.uid || !needsTagAuditBootstrap) {
+    if (!hasLiveAuth || !currentUser?.uid) {
       return;
     }
-    const key = `${currentUser.uid}:${tagsToKey(tags)}`;
-    if (tagAuditBootstrapKeyRef.current === key) {
+    if (!needsTagAuditBootstrap && !needsTagReviewBootstrap) {
       return;
     }
-    tagAuditBootstrapKeyRef.current = key;
+    const baseKey = `${currentUser.uid}:${tagsToKey(tags)}`;
+    const shouldBootstrapAudit = needsTagAuditBootstrap && tagAuditBootstrapKeyRef.current !== baseKey;
+    const shouldBootstrapReview = needsTagReviewBootstrap && tagReviewBootstrapKeyRef.current !== baseKey;
+    if (!shouldBootstrapAudit && !shouldBootstrapReview) {
+      return;
+    }
+    if (shouldBootstrapAudit) {
+      tagAuditBootstrapKeyRef.current = baseKey;
+    }
+    if (shouldBootstrapReview) {
+      tagReviewBootstrapKeyRef.current = baseKey;
+    }
     void refreshLiveTags();
-  }, [currentUser?.uid, hasLiveAuth, needsTagAuditBootstrap, refreshLiveTags, tags]);
+  }, [
+    currentUser?.uid,
+    hasLiveAuth,
+    needsTagAuditBootstrap,
+    needsTagReviewBootstrap,
+    refreshLiveTags,
+    tags,
+  ]);
 
   const copyToClipboard = useCallback(
     async (text: string, type: string) => {

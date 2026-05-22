@@ -1,4 +1,4 @@
-import type { LiveProfileState, User } from "../../types/studio";
+import type { LiveProfileState, ReviewStatus, TransportStatus, User } from "../../types/studio";
 import { resolveBackendMessage, t, type LocaleSetting } from "../../utils/i18n";
 
 export const isValidUser = (value: User | null | undefined): value is User =>
@@ -90,6 +90,30 @@ export const normalizeProfileState = (
   state: LiveProfileState | null | undefined,
 ): LiveProfileState => {
   const fallback = defaultProfileState();
+  const normalizeTransport = (value?: string): TransportStatus => {
+    switch (value) {
+      case "idle":
+      case "saving":
+      case "synced":
+      case "conflict":
+      case "failed":
+        return value;
+      default:
+        return "idle";
+    }
+  };
+  const normalizeReview = (value?: string): ReviewStatus => {
+    switch (value) {
+      case "none":
+      case "pending":
+      case "approved":
+      case "rejected":
+      case "unknown":
+        return value;
+      default:
+        return "unknown";
+    }
+  };
   if (!state) {
     return fallback;
   }
@@ -97,20 +121,28 @@ export const normalizeProfileState = (
     title: {
       ...fallback.title,
       ...state.title,
+      transport: normalizeTransport(state.title?.transport),
+      review: normalizeReview(state.title?.review),
     },
     area: {
       ...fallback.area,
       ...state.area,
+      transport: normalizeTransport(state.area?.transport),
+      review: normalizeReview(state.area?.review),
     },
     tags: {
       ...fallback.tags,
       ...state.tags,
       submitted: normalizeTags(state.tags?.submitted || []),
       effective: normalizeTags(state.tags?.effective || []),
+      transport: normalizeTransport(state.tags?.transport),
+      review: normalizeReview(state.tags?.review),
     },
     cover: {
       ...fallback.cover,
       ...state.cover,
+      transport: normalizeTransport(state.cover?.transport),
+      review: normalizeReview(state.cover?.review),
     },
   };
 };
@@ -158,6 +190,13 @@ export const buildSectionStatus = (
     };
   }
   if (state.review === "unknown") {
+    return {
+      tone: "yellow",
+      label: t(locale, "ui.profile.unknown"),
+      detail: resolveBackendMessage(state.message, locale) || t(locale, "ui.profile.unknown.desc"),
+    };
+  }
+  if (state.review !== "approved" && state.review !== "none") {
     return {
       tone: "yellow",
       label: t(locale, "ui.profile.unknown"),
