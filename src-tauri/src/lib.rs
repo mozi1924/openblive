@@ -37,10 +37,23 @@ use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
 use state::{restore_session_from_current, AppState, RuntimeState};
 use tauri::{webview::PageLoadEvent, Manager};
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 #[cfg(desktop)]
 use tauri_plugin_window_state::StateFlags;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
+
+#[cfg(target_os = "macos")]
+fn ensure_macos_main_window_titlebar_overlay(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    if let Err(error) = window.set_title_bar_style(TitleBarStyle::Overlay) {
+        crate::runtime_warn!("set main window title bar style to overlay failed: {error}");
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -107,6 +120,9 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            ensure_macos_main_window_titlebar_overlay(app.handle());
+
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let state = app_handle.state::<AppState>();
