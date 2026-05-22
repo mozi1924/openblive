@@ -5,7 +5,8 @@ use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
-    CreateLiveVoteReq, DanmuReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
+    AddSilentUserReq, CreateLiveVoteReq, DanmuReq, GetSilentUserListReq, RemoveSilentUserReq,
+    TerminateLiveVoteReq, UpdateAreaReq, UpdateTagsReq, UpdateTitleReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -25,6 +26,7 @@ mod profile_api;
 mod profile_sync;
 mod session;
 mod stream;
+mod user_manage;
 use client_version::refresh_live_client_version as refresh_live_client_version_inner_cmd;
 pub use client_version::refresh_live_client_version_inner;
 use common::{
@@ -46,6 +48,7 @@ use profile_sync::{
     sync_live_status as sync_live_status_inner,
 };
 use session::resolve_room_scoped_auth_context;
+use user_manage::{add_silent_user_inner, get_silent_user_list_inner, remove_silent_user_inner};
 
 pub async fn start_danmu_monitor_for_ws(app: &AppHandle, state: &AppState) -> CmdResult {
     start_danmu_monitor_inner(app, state).await
@@ -568,6 +571,24 @@ pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
             "i18n.live.error.fetch_live_online_rank_failed",
         ))
     }
+}
+
+#[tauri::command]
+pub async fn add_silent_user(req: AddSilentUserReq, state: State<'_, AppState>) -> CmdResult {
+    add_silent_user_inner(req, &state).await
+}
+
+#[tauri::command]
+pub async fn get_silent_user_list(
+    req: GetSilentUserListReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    get_silent_user_list_inner(req, &state).await
+}
+
+#[tauri::command]
+pub async fn remove_silent_user(req: RemoveSilentUserReq, state: State<'_, AppState>) -> CmdResult {
+    remove_silent_user_inner(req, &state).await
 }
 
 #[tauri::command]

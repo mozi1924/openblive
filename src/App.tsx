@@ -8,6 +8,7 @@ import { FaceAuthModal } from "./components/shared/FaceAuthModal";
 import { AccountTab } from "./features/account/AccountTab";
 import { DanmuTab } from "./features/danmu/DanmuTab";
 import { LiveOnlineRankPanel } from "./features/danmu/LiveOnlineRankPanel";
+import { LiveUserManagePanel } from "./features/danmu/LiveUserManagePanel";
 import { SettingsTab } from "./features/settings/SettingsTab";
 import { ProjectTab } from "./features/project/ProjectTab";
 import { StreamTab } from "./features/stream/StreamTab";
@@ -50,12 +51,19 @@ function App() {
           danmuCount={state.danmus.length}
           danmuOverlayVisible={state.danmuOverlayVisible}
           liveOnlineRankPanelOpen={state.showLiveOnlineRankPanel}
+          userManagePanelOpen={state.showUserManagePanel}
           onShowDanmuOverlay={actions.showDanmuOverlay}
           onHideDanmuOverlay={actions.hideDanmuOverlay}
           onToggleLiveOnlineRankPanel={() => {
             actions.toggleLiveOnlineRankPanel();
             if (!state.showLiveOnlineRankPanel) {
               void actions.refreshLiveOnlineRank();
+            }
+          }}
+          onToggleUserManagePanel={() => {
+            actions.toggleUserManagePanel();
+            if (!state.showUserManagePanel) {
+              void actions.refreshSilentUserList();
             }
           }}
           onClearDanmus={actions.clearDanmus}
@@ -163,6 +171,7 @@ function App() {
               onCreateLiveVote={actions.createLiveVote}
               onTerminateLiveVote={actions.terminateLiveVote}
               onSendDanmu={actions.submitDanmu}
+              onRequestMuteUser={actions.requestMuteUserByDanmu}
             />
           )}
 
@@ -213,6 +222,20 @@ function App() {
             onClose={actions.closeLiveOnlineRankPanel}
           />
         )}
+
+        {state.activeTab === "danmu" && state.showUserManagePanel && (
+          <LiveUserManagePanel
+            locale={locale}
+            activeTab={state.userManageActiveTab}
+            onChangeTab={actions.setUserManageActiveTab}
+            silentListLoading={state.liveSilentUserListLoading}
+            silentList={state.liveSilentUserList?.items || []}
+            silentTotal={state.liveSilentUserList?.total || 0}
+            onRefreshSilentList={actions.refreshSilentUserList}
+            onRequestRemoveSilentUser={actions.requestRemoveSilentUser}
+            onClose={actions.closeUserManagePanel}
+          />
+        )}
       </main>
 
       {state.showFaceModal && (
@@ -232,6 +255,10 @@ function App() {
           confirmText={state.confirmModalConfirmText}
           showCancel={state.confirmModalShowCancel}
           tone={state.confirmModalTone}
+          selectLabel={state.confirmModalSelectLabel}
+          selectOptions={state.confirmModalSelectOptions}
+          selectValue={state.confirmModalSelectValue}
+          onSelectValueChange={actions.setConfirmSelectValue}
           onCancel={actions.cancelConfirmAction}
           onConfirm={actions.confirmAction}
         />

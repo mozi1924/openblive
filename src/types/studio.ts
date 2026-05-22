@@ -329,6 +329,25 @@ export type LiveOnlineRankData = {
   online_rank_items: LiveOnlineRankItem[];
 };
 
+export type LiveSilentUserItem = {
+  tuid: number;
+  tname: string;
+  uid: number;
+  name: string;
+  ctime: string;
+  id: number;
+  is_anchor: number;
+  face: string;
+  admin_level: number;
+};
+
+export type LiveSilentUserListData = {
+  page: number;
+  total: number;
+  total_page: number;
+  items: LiveSilentUserItem[];
+};
+
 export type LiveVoteHistoryData = {
   history: LiveVoteInfo[];
 };

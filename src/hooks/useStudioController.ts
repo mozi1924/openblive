@@ -8,6 +8,8 @@ import type {
   DanmuMsg,
   LinkageStatus,
   LiveProfileState,
+  LiveSilentUserListData,
+  LiveSilentUserItem,
   Session,
   StreamInfo,
   User,
@@ -30,6 +32,10 @@ import { useLiveInteractionActions } from "./studio/useLiveInteractionActions";
 import { useDanmuMessageFeed } from "./studio/useDanmuMessageFeed";
 
 type ConfirmModalTone = "primary" | "danger";
+type ConfirmModalSelectOption = {
+  value: string;
+  label: string;
+};
 
 type ConfirmModalState = {
   show: boolean;
@@ -38,7 +44,11 @@ type ConfirmModalState = {
   confirmText: string;
   showCancel: boolean;
   tone: ConfirmModalTone;
+  selectLabel?: string;
+  selectOptions?: ConfirmModalSelectOption[];
+  selectValue?: string;
 };
+type ConfirmRequestPayload = Omit<ConfirmModalState, "show" | "showCancel">;
 
 const MANUAL_SAVE_APP_CONFIG_KEYS = [
   "min_to_tray",
@@ -90,6 +100,10 @@ export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
   const [showLiveOnlineRankPanel, setShowLiveOnlineRankPanel] = useState(false);
+  const [showUserManagePanel, setShowUserManagePanel] = useState(false);
+  const [userManageActiveTab, setUserManageActiveTab] = useState<"silent">("silent");
+  const [liveSilentUserListLoading, setLiveSilentUserListLoading] = useState(false);
+  const [liveSilentUserList, setLiveSilentUserList] = useState<LiveSilentUserListData | null>(null);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
@@ -160,6 +174,7 @@ export function useStudioController() {
   const syncStatusCacheHintRef = useRef("");
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
   const liveOnlineRankPollingRef = useRef(false);
+  const confirmSelectValueRef = useRef("");
   const appUpdateRef = useRef<TauriUpdate | null>(null);
   const appUpdatePromptedVersionRef = useRef<string | null>(null);
   const appUpdateCheckBusyRef = useRef(false);
@@ -185,14 +200,18 @@ export function useStudioController() {
   }, []);
 
   const requestConfirm = useCallback(
-    (payload: Omit<ConfirmModalState, "show" | "showCancel">) =>
+    (payload: ConfirmRequestPayload) =>
       new Promise<boolean>((resolve) => {
         if (confirmResolverRef.current) {
           confirmResolverRef.current(false);
         }
+        const options = payload.selectOptions ?? [];
+        const selectValue = payload.selectValue ?? options[0]?.value ?? "";
+        confirmSelectValueRef.current = selectValue;
         confirmResolverRef.current = resolve;
         setConfirmModal({
           ...payload,
+          selectValue,
           showCancel: true,
           show: true,
         });
@@ -201,19 +220,43 @@ export function useStudioController() {
   );
 
   const requestAlert = useCallback(
-    (payload: Omit<ConfirmModalState, "show" | "showCancel">) =>
+    (payload: ConfirmRequestPayload) =>
       new Promise<void>((resolve) => {
         if (confirmResolverRef.current) {
           confirmResolverRef.current(false);
         }
+        const options = payload.selectOptions ?? [];
+        const selectValue = payload.selectValue ?? options[0]?.value ?? "";
+        confirmSelectValueRef.current = selectValue;
         confirmResolverRef.current = () => resolve();
         setConfirmModal({
           ...payload,
+          selectValue,
           showCancel: false,
           show: true,
         });
       }),
     [],
+  );
+
+  const setConfirmSelectValue = useCallback((value: string) => {
+    confirmSelectValueRef.current = value;
+    setConfirmModal((prev) => ({
+      ...prev,
+      selectValue: value,
+    }));
+  }, []);
+
+  const muteDurationOptions = useMemo<ConfirmModalSelectOption[]>(
+    () => [
+      { value: "10", label: t(localeSetting, "ui.danmu.user_manage.duration.10m") },
+      { value: "30", label: t(localeSetting, "ui.danmu.user_manage.duration.30m") },
+      { value: "60", label: t(localeSetting, "ui.danmu.user_manage.duration.1h") },
+      { value: "360", label: t(localeSetting, "ui.danmu.user_manage.duration.6h") },
+      { value: "0", label: t(localeSetting, "ui.danmu.user_manage.duration.session") },
+      { value: "-1", label: t(localeSetting, "ui.danmu.user_manage.duration.forever") },
+    ],
+    [localeSetting],
   );
 
   const revealMainWindowForAction = useCallback(async () => {
@@ -448,6 +491,7 @@ export function useStudioController() {
   useEffect(() => {
     if (activeTab !== "danmu") {
       setShowLiveOnlineRankPanel(false);
+      setShowUserManagePanel(false);
     }
   }, [activeTab]);
 
@@ -822,6 +866,136 @@ export function useStudioController() {
     append(t(localeSetting, "ui.ctrl.partitions_synced"));
   }, [append, localeSetting]);
 
+  const refreshSilentUserList = useCallback(
+    async (options?: { silent?: boolean; page?: number }) => {
+      const page = Math.max(options?.page ?? 1, 1);
+      setLiveSilentUserListLoading(true);
+      try {
+        const res = await studioApi.getSilentUserList(page);
+        if (res.code === 0 && res.data) {
+          setLiveSilentUserList(res.data);
+          return;
+        }
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_silent_user_list_load_failed", {
+              msg: resolveBackendMessage(res.msg, localeSetting),
+            }),
+          );
+        }
+      } catch (error) {
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_silent_user_list_load_failed", {
+              msg: resolveBackendMessage(String(error), localeSetting),
+            }),
+          );
+        }
+      } finally {
+        setLiveSilentUserListLoading(false);
+      }
+    },
+    [append, localeSetting],
+  );
+
+  const requestMuteUserByDanmu = useCallback(
+    async (message: DanmuMsg) => {
+      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
+      const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
+      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
+        append(t(localeSetting, "ui.ctrl.live_silent_user_invalid_target"));
+        return;
+      }
+
+      const senderName =
+        resolveBackendMessage(message.sender, localeSetting).trim() ||
+        t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.silent.title", { name: senderName }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.silent.desc", {
+          name: senderName,
+          uid: senderUid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.silent.confirm"),
+        tone: "danger",
+        selectLabel: t(localeSetting, "ui.danmu.user_manage.confirm.silent.duration"),
+        selectOptions: muteDurationOptions,
+        selectValue: "-1",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const duration = Number.parseInt(confirmSelectValueRef.current || "-1", 10);
+      const muteHours = Number.isFinite(duration) ? duration : -1;
+      const res = await studioApi.addSilentUser(
+        senderUid,
+        muteHours,
+        resolveBackendMessage(message.content, localeSetting).trim() || undefined,
+      );
+      if (res.code === 0) {
+        const durationLabel =
+          muteDurationOptions.find((option) => option.value === String(muteHours))?.label ||
+          String(muteHours);
+        append(
+          tf(localeSetting, "ui.ctrl.live_silent_user_added", {
+            name: senderName,
+            duration: durationLabel,
+          }),
+        );
+        if (showUserManagePanel) {
+          void refreshSilentUserList({ silent: true });
+        }
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_silent_user_add_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    },
+    [
+      append,
+      currentUser?.uid,
+      localeSetting,
+      muteDurationOptions,
+      refreshSilentUserList,
+      requestConfirm,
+      showUserManagePanel,
+    ],
+  );
+
+  const requestRemoveSilentUser = useCallback(
+    async (item: LiveSilentUserItem) => {
+      const name = item.tname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unsilent.title", { name }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unsilent.desc", {
+          name,
+          uid: item.tuid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unsilent.confirm"),
+        tone: "primary",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const res = await studioApi.removeSilentUser(item.id);
+      if (res.code === 0) {
+        append(tf(localeSetting, "ui.ctrl.live_silent_user_removed", { name }));
+        await refreshSilentUserList({ silent: true });
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_silent_user_remove_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    },
+    [append, localeSetting, refreshSilentUserList, requestConfirm],
+  );
+
   const liveInteractionActions = useLiveInteractionActions({
     localeSetting,
     append,
@@ -962,6 +1136,9 @@ export function useStudioController() {
       copiedKey,
       confirmModalConfirmText: confirmModal.confirmText,
       confirmModalDescription: confirmModal.description,
+      confirmModalSelectLabel: confirmModal.selectLabel,
+      confirmModalSelectOptions: confirmModal.selectOptions,
+      confirmModalSelectValue: confirmModal.selectValue,
       confirmModalShowCancel: confirmModal.showCancel,
       confirmModalTitle: confirmModal.title,
       confirmModalTone: confirmModal.tone,
@@ -976,6 +1153,8 @@ export function useStudioController() {
       liveVoteHistory,
       liveOnlineRankData,
       liveOnlineRankLoading,
+      liveSilentUserList,
+      liveSilentUserListLoading,
       liveVoteLoading,
       liveVoteSubmitting,
       liveVoteTerminating,
@@ -1004,6 +1183,7 @@ export function useStudioController() {
       rtmp,
       session,
       showLiveOnlineRankPanel,
+      showUserManagePanel,
       showConfirmModal: confirmModal.show,
       showFaceModal,
       showLogs,
@@ -1013,6 +1193,7 @@ export function useStudioController() {
       tagInput,
       tags,
       title,
+      userManageActiveTab,
     },
     actions: {
       changeParent,
@@ -1038,12 +1219,23 @@ export function useStudioController() {
         setShowFaceModal(false);
         await startLive("face_retry");
       },
-      toggleLiveOnlineRankPanel: () => setShowLiveOnlineRankPanel((prev) => !prev),
+      toggleLiveOnlineRankPanel: () => {
+        setShowLiveOnlineRankPanel((prev) => !prev);
+        setShowUserManagePanel(false);
+      },
+      toggleUserManagePanel: () => {
+        setShowUserManagePanel((prev) => !prev);
+        setShowLiveOnlineRankPanel(false);
+        setUserManageActiveTab("silent");
+      },
       closeLiveOnlineRankPanel: () => setShowLiveOnlineRankPanel(false),
+      closeUserManagePanel: () => setShowUserManagePanel(false),
       setActiveTab,
       setChild: changeChild,
       setDanmuText,
+      setConfirmSelectValue,
       setLiveVoteDuration,
+      setUserManageActiveTab,
       updateAppConfig,
       generateHttpUserAgent,
       updateLocaleConfig,
@@ -1056,6 +1248,7 @@ export function useStudioController() {
       removeTag,
       refreshLiveVoteData: () => loadLiveVoteData(),
       refreshLiveOnlineRank: () => loadLiveOnlineRank(),
+      refreshSilentUserList: () => refreshSilentUserList(),
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       checkAppUpdate: () => checkAppUpdate({ promptOnAvailable: true, silent: false }),
@@ -1075,6 +1268,8 @@ export function useStudioController() {
       submitDanmu,
       submitTags,
       submitTitle,
+      requestMuteUserByDanmu,
+      requestRemoveSilentUser,
       switchAccount,
       syncLiveRoomProfile: async () => syncLiveRoomProfile(true),
       toggleLogs: () => setShowLogs((prev) => !prev),

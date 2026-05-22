@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Ban,
   BarChart3,
   Send,
   SmilePlus,
@@ -46,6 +47,7 @@ type DanmuTabProps = {
   onCreateLiveVote: () => Promise<void>;
   onTerminateLiveVote: (interactionId: number) => Promise<void>;
   onSendDanmu: (event: React.FormEvent) => Promise<void>;
+  onRequestMuteUser: (message: DanmuMsg) => Promise<void>;
 };
 
 export function DanmuTab({
@@ -77,8 +79,14 @@ export function DanmuTab({
   onCreateLiveVote,
   onTerminateLiveVote,
   onSendDanmu,
+  onRequestMuteUser,
 }: DanmuTabProps) {
   const [openPanel, setOpenPanel] = useState<"emoticon" | "vote" | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    message: DanmuMsg;
+  } | null>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const floatingPanelRef = useRef<HTMLDivElement>(null);
@@ -181,6 +189,33 @@ export function DanmuTab({
     };
   }, [openPanel]);
 
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const onPointerDown = () => setContextMenu(null);
+    const onScroll = () => setContextMenu(null);
+    const onResize = () => setContextMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setContextMenu(null);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [contextMenu]);
+
   const insertEmoticon = (text: string) => {
     const input = textareaRef.current;
     const start = input?.selectionStart ?? danmuText.length;
@@ -196,6 +231,26 @@ export function DanmuTab({
       const nextCursor = start + text.length;
       nextInput.focus();
       nextInput.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handleBubbleContextMenu = (
+    event: React.MouseEvent<HTMLDivElement>,
+    message: DanmuMsg,
+  ) => {
+    const rawType = String(message.type ?? "");
+    if (rawType !== "danmu") {
+      return;
+    }
+    const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
+    if (!Number.isFinite(senderUid) || senderUid <= 0 || isSelfMessage(message, currentUser, locale)) {
+      return;
+    }
+    event.preventDefault();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      message,
     });
   };
 
@@ -221,10 +276,31 @@ export function DanmuTab({
               messages={item.messages}
               locale={locale}
               currentUser={currentUser}
+              onBubbleContextMenu={handleBubbleContextMenu}
             />
           ))
         )}
       </div>
+      {contextMenu ? (
+        <div
+          className="fixed z-50 min-w-[9rem] rounded-xl border border-white/12 bg-[#0a0f17]/95 p-1.5 shadow-[0_14px_36px_rgba(0,0,0,0.5)] backdrop-blur-md"
+          style={{ top: contextMenu.y + 6, left: contextMenu.x + 6 }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              const target = contextMenu.message;
+              setContextMenu(null);
+              void onRequestMuteUser(target);
+            }}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-rose-200 transition-all hover:bg-rose-500/14"
+          >
+            <Ban className="h-3.5 w-3.5" />
+            <span>{t(locale, "ui.danmu.user_manage.context.silent")}</span>
+          </button>
+        </div>
+      ) : null}
 
       <div className="border-t border-white/5 bg-[#090d16]/80 p-4">
         <div ref={composerRef} className="relative">

@@ -420,6 +420,25 @@ pub struct TerminateLiveVoteReq {
 }
 
 #[derive(Deserialize)]
+pub struct AddSilentUserReq {
+    pub tuid: u64,
+    #[serde(default)]
+    pub msg: Option<String>,
+    pub hour: i32,
+}
+
+#[derive(Deserialize)]
+pub struct GetSilentUserListReq {
+    #[serde(default)]
+    pub page: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct RemoveSilentUserReq {
+    pub id: u64,
+}
+
+#[derive(Deserialize)]
 pub struct UidReq {
     pub uid: String,
 }

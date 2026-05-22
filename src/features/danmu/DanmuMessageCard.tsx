@@ -61,19 +61,25 @@ function DanmuBubbleContent({
   className,
   emoticonHeight = 24,
   style,
+  onContextMenu,
 }: {
   message: DanmuMsg;
   locale: LocaleSetting;
   className: string;
   emoticonHeight?: number;
   style?: CSSProperties;
+  onContextMenu?: React.MouseEventHandler<HTMLDivElement>;
 }) {
   if (!message.segments?.length) {
-    return <div className={className} style={style}>{resolveBackendMessage(message.content, locale)}</div>;
+    return (
+      <div className={className} style={style} onContextMenu={onContextMenu}>
+        {resolveBackendMessage(message.content, locale)}
+      </div>
+    );
   }
 
   return (
-    <div className={className} style={style}>
+    <div className={className} style={style} onContextMenu={onContextMenu}>
       {message.segments.map((segment, index) =>
         segment.type === "text" ? (
           <span key={`${message.id}-text-${index}`} className="whitespace-pre-wrap break-all">
@@ -243,11 +249,13 @@ export function DanmuCard({
   messages,
   locale,
   currentUser,
+  onBubbleContextMenu,
 }: {
   message?: DanmuMsg;
   messages?: DanmuMsg[];
   locale: LocaleSetting;
   currentUser: User | null;
+  onBubbleContextMenu?: (event: React.MouseEvent<HTMLDivElement>, message: DanmuMsg) => void;
 }) {
   const msgList = messages ? messages : message ? [message] : [];
   const firstMessage = msgList[0];
@@ -528,6 +536,7 @@ export function DanmuCard({
                   message={message}
                   locale={locale}
                   style={borderInlineStyle}
+                  onContextMenu={(event) => onBubbleContextMenu?.(event, message)}
                   className={`${bubbleShapeClass} bg-bili-blue/[0.08] hover:bg-bili-blue/[0.12] text-white border-r-4 ${borderClass || ""} border-t border-l border-b border-white/5 px-4 py-2.5 text-[13px] leading-[1.45] select-text break-all transition-all duration-150`}
                 />
               );
@@ -581,6 +590,7 @@ export function DanmuCard({
                 message={message}
                 locale={locale}
                 style={borderInlineStyle}
+                onContextMenu={(event) => onBubbleContextMenu?.(event, message)}
                 className={`${bubbleShapeClass} bg-[rgba(20,26,36,0.5)] border-l-4 ${borderClass || ""} border-t border-r border-b border-white/5 px-4 py-2.5 text-[13px] leading-[1.45] text-gray-100 select-text break-all hover:bg-[rgba(24,31,43,0.7)] hover:border-white/10 transition-all duration-150`}
               />
             );

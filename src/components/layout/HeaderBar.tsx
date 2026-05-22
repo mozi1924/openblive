@@ -1,4 +1,4 @@
-import { PanelTop, RefreshCw, Trash2, Users } from "lucide-react";
+import { PanelTop, RefreshCw, Shield, Trash2, Users } from "lucide-react";
 import type { ActiveTab } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t, tf } from "../../utils/i18n";
@@ -12,9 +12,11 @@ type HeaderBarProps = {
   danmuCount: number;
   danmuOverlayVisible: boolean;
   liveOnlineRankPanelOpen: boolean;
+  userManagePanelOpen: boolean;
   onShowDanmuOverlay: () => Promise<void>;
   onHideDanmuOverlay: () => Promise<void>;
   onToggleLiveOnlineRankPanel: () => void;
+  onToggleUserManagePanel: () => void;
   onClearDanmus: () => void;
 };
 
@@ -27,9 +29,11 @@ export function HeaderBar({
   danmuCount,
   danmuOverlayVisible,
   liveOnlineRankPanelOpen,
+  userManagePanelOpen,
   onShowDanmuOverlay,
   onHideDanmuOverlay,
   onToggleLiveOnlineRankPanel,
+  onToggleUserManagePanel,
   onClearDanmus,
 }: HeaderBarProps) {
   const title = t(locale, `ui.header.title.${activeTab}`);
@@ -63,6 +67,32 @@ export function HeaderBar({
 
           <div data-tauri-drag-region="false" className="no-drag flex shrink-0 items-center gap-2">
             <button
+              onClick={onToggleLiveOnlineRankPanel}
+              className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                liveOnlineRankPanelOpen
+                  ? "border border-bili-blue/30 bg-bili-blue/15 text-bili-blue"
+                  : "border border-white/8 bg-white/5 text-gray-200 hover:border-white/15 hover:bg-white/10"
+              }`}
+              title={t(locale, "ui.danmu.online_rank.toggle")}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>{t(locale, "ui.danmu.online_rank.panel_title")}</span>
+            </button>
+
+            <button
+              onClick={onToggleUserManagePanel}
+              className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
+                userManagePanelOpen
+                  ? "border border-rose-300/30 bg-rose-500/16 text-rose-200"
+                  : "border border-white/8 bg-white/5 text-gray-200 hover:border-white/15 hover:bg-white/10"
+              }`}
+              title={t(locale, "ui.danmu.user_manage.toggle")}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <span>{t(locale, "ui.danmu.user_manage.panel_title")}</span>
+            </button>
+
+            <button
               onClick={() =>
                 void (danmuOverlayVisible ? onHideDanmuOverlay() : onShowDanmuOverlay())
               }
@@ -78,19 +108,6 @@ export function HeaderBar({
                   ? t(locale, "ui.overlay.hide")
                   : t(locale, "ui.overlay.show")}
               </span>
-            </button>
-
-            <button
-              onClick={onToggleLiveOnlineRankPanel}
-              className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all active:scale-95 ${
-                liveOnlineRankPanelOpen
-                  ? "border border-bili-blue/30 bg-bili-blue/15 text-bili-blue"
-                  : "border border-white/8 bg-white/5 text-gray-200 hover:border-white/15 hover:bg-white/10"
-              }`}
-              title={t(locale, "ui.danmu.online_rank.toggle")}
-            >
-              <Users className="h-3.5 w-3.5" />
-              <span>{t(locale, "ui.danmu.online_rank.panel_title")}</span>
             </button>
 
             <button
