@@ -3,6 +3,7 @@ import {
   Ban,
   BarChart3,
   Send,
+  Shield,
   SmilePlus,
   Terminal,
   UserX,
@@ -50,6 +51,7 @@ type DanmuTabProps = {
   onSendDanmu: (event: React.FormEvent) => Promise<void>;
   onRequestMuteUser: (message: DanmuMsg) => Promise<void>;
   onRequestBlackUser: (message: DanmuMsg) => Promise<void>;
+  onRequestRoomAdmin: (message: DanmuMsg) => Promise<void>;
 };
 
 export function DanmuTab({
@@ -83,6 +85,7 @@ export function DanmuTab({
   onSendDanmu,
   onRequestMuteUser,
   onRequestBlackUser,
+  onRequestRoomAdmin,
 }: DanmuTabProps) {
   const [openPanel, setOpenPanel] = useState<"emoticon" | "vote" | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -313,6 +316,18 @@ export function DanmuTab({
           >
             <UserX className="h-3.5 w-3.5" />
             <span>{t(locale, "ui.danmu.user_manage.context.blacklist")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const target = contextMenu.message;
+              setContextMenu(null);
+              void onRequestRoomAdmin(target);
+            }}
+            className="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold text-cyan-100 transition-all hover:bg-cyan-500/14"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            <span>{t(locale, "ui.danmu.user_manage.context.room_admin")}</span>
           </button>
         </div>
       ) : null}

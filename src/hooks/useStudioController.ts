@@ -9,6 +9,8 @@ import type {
   LinkageStatus,
   LiveBlackUserItem,
   LiveBlackUserListData,
+  LiveRoomAdminItem,
+  LiveRoomAdminListData,
   LiveProfileState,
   LiveSilentUserListData,
   LiveSilentUserItem,
@@ -103,13 +105,15 @@ export function useStudioController() {
   const [showLogs, setShowLogs] = useState(false);
   const [showLiveOnlineRankPanel, setShowLiveOnlineRankPanel] = useState(false);
   const [showUserManagePanel, setShowUserManagePanel] = useState(false);
-  const [userManageActiveTab, setUserManageActiveTab] = useState<"silent" | "blacklist">(
-    "silent",
-  );
+  const [userManageActiveTab, setUserManageActiveTab] = useState<
+    "silent" | "blacklist" | "room_admin"
+  >("silent");
   const [liveSilentUserListLoading, setLiveSilentUserListLoading] = useState(false);
   const [liveSilentUserList, setLiveSilentUserList] = useState<LiveSilentUserListData | null>(null);
   const [liveBlackUserListLoading, setLiveBlackUserListLoading] = useState(false);
   const [liveBlackUserList, setLiveBlackUserList] = useState<LiveBlackUserListData | null>(null);
+  const [liveRoomAdminListLoading, setLiveRoomAdminListLoading] = useState(false);
+  const [liveRoomAdminList, setLiveRoomAdminList] = useState<LiveRoomAdminListData | null>(null);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
@@ -937,6 +941,38 @@ export function useStudioController() {
     [append, localeSetting],
   );
 
+  const refreshRoomAdminList = useCallback(
+    async (options?: { silent?: boolean; page?: number }) => {
+      const page = Math.max(options?.page ?? 1, 1);
+      setLiveRoomAdminListLoading(true);
+      try {
+        const res = await studioApi.getRoomAdminList(page);
+        if (res.code === 0 && res.data) {
+          setLiveRoomAdminList(res.data);
+          return;
+        }
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_room_admin_list_load_failed", {
+              msg: resolveBackendMessage(res.msg, localeSetting),
+            }),
+          );
+        }
+      } catch (error) {
+        if (!options?.silent) {
+          append(
+            tf(localeSetting, "ui.ctrl.live_room_admin_list_load_failed", {
+              msg: resolveBackendMessage(String(error), localeSetting),
+            }),
+          );
+        }
+      } finally {
+        setLiveRoomAdminListLoading(false);
+      }
+    },
+    [append, localeSetting],
+  );
+
   const requestMuteUserByDanmu = useCallback(
     async (message: DanmuMsg) => {
       const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
@@ -1053,6 +1089,57 @@ export function useStudioController() {
     ],
   );
 
+  const requestRoomAdminByDanmu = useCallback(
+    async (message: DanmuMsg) => {
+      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
+      const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
+      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
+        append(t(localeSetting, "ui.ctrl.live_room_admin_invalid_target"));
+        return;
+      }
+
+      const senderName =
+        resolveBackendMessage(message.sender, localeSetting).trim() ||
+        t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.room_admin.title", {
+          name: senderName,
+        }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.room_admin.desc", {
+          name: senderName,
+          uid: senderUid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.room_admin.confirm"),
+        tone: "danger",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const res = await studioApi.addRoomAdmin(senderUid);
+      if (res.code === 0) {
+        append(tf(localeSetting, "ui.ctrl.live_room_admin_added", { name: senderName }));
+        if (showUserManagePanel) {
+          void refreshRoomAdminList({ silent: true });
+        }
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_room_admin_add_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    },
+    [
+      append,
+      currentUser?.uid,
+      localeSetting,
+      refreshRoomAdminList,
+      requestConfirm,
+      showUserManagePanel,
+    ],
+  );
+
   const requestRemoveSilentUser = useCallback(
     async (item: LiveSilentUserItem) => {
       const name = item.tname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
@@ -1115,16 +1202,49 @@ export function useStudioController() {
     [append, localeSetting, refreshBlackUserList, requestConfirm],
   );
 
+  const requestRemoveRoomAdmin = useCallback(
+    async (item: LiveRoomAdminItem) => {
+      const name = item.uname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.title", { name }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.desc", {
+          name,
+          uid: item.uid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.confirm"),
+        tone: "primary",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const res = await studioApi.removeRoomAdmin(item.uid);
+      if (res.code === 0) {
+        append(tf(localeSetting, "ui.ctrl.live_room_admin_removed", { name }));
+        await refreshRoomAdminList({ silent: true });
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.live_room_admin_remove_failed", {
+          msg: resolveBackendMessage(res.msg, localeSetting),
+        }),
+      );
+    },
+    [append, localeSetting, refreshRoomAdminList, requestConfirm],
+  );
+
   const changeUserManageTab = useCallback(
-    (tab: "silent" | "blacklist") => {
+    (tab: "silent" | "blacklist" | "room_admin") => {
       setUserManageActiveTab(tab);
       if (tab === "silent") {
         void refreshSilentUserList({ silent: true });
-      } else {
+      } else if (tab === "blacklist") {
         void refreshBlackUserList({ silent: true });
+      } else {
+        void refreshRoomAdminList({ silent: true });
       }
     },
-    [refreshBlackUserList, refreshSilentUserList],
+    [refreshBlackUserList, refreshRoomAdminList, refreshSilentUserList],
   );
 
   const liveInteractionActions = useLiveInteractionActions({
@@ -1288,6 +1408,8 @@ export function useStudioController() {
       liveSilentUserListLoading,
       liveBlackUserList,
       liveBlackUserListLoading,
+      liveRoomAdminList,
+      liveRoomAdminListLoading,
       liveVoteLoading,
       liveVoteSubmitting,
       liveVoteTerminating,
@@ -1388,6 +1510,7 @@ export function useStudioController() {
       refreshLiveOnlineRank: () => loadLiveOnlineRank(),
       refreshSilentUserList: () => refreshSilentUserList(),
       refreshBlackUserList: () => refreshBlackUserList(),
+      refreshRoomAdminList: () => refreshRoomAdminList(),
       applyLiveVoteTemplate,
       clearLiveVoteDraft: resetLiveVoteDraft,
       checkAppUpdate: () => checkAppUpdate({ promptOnAvailable: true, silent: false }),
@@ -1409,8 +1532,10 @@ export function useStudioController() {
       submitTitle,
       requestMuteUserByDanmu,
       requestBlackUserByDanmu,
+      requestRoomAdminByDanmu,
       requestRemoveSilentUser,
       requestRemoveBlackUser,
+      requestRemoveRoomAdmin,
       switchAccount,
       syncLiveRoomProfile: async () => syncLiveRoomProfile(true),
       toggleLogs: () => setShowLogs((prev) => !prev),

@@ -365,6 +365,24 @@ export type LiveBlackUserListData = {
   items: LiveBlackUserItem[];
 };
 
+export type LiveRoomAdminItem = {
+  uid: number;
+  uname: string;
+  face: string;
+  ctime: string;
+  admin_level: number;
+  permissions?: number[];
+};
+
+export type LiveRoomAdminListData = {
+  page: number;
+  page_size: number;
+  total: number;
+  total_page: number;
+  max_room_anchors_number?: number;
+  items: LiveRoomAdminItem[];
+};
+
 export type LiveVoteHistoryData = {
   history: LiveVoteInfo[];
 };

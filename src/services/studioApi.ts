@@ -14,6 +14,7 @@ import type {
   LiveDashboardSnapshot,
   LiveOnlineRankData,
   LiveBlackUserListData,
+  LiveRoomAdminListData,
   LiveVoteHistoryData,
   LiveVotePanelData,
   LiveSilentUserListData,
@@ -120,6 +121,18 @@ export const studioApi = {
   removeBlackUser: (fid: number) =>
     invokeCommand("remove_black_user", {
       req: { fid },
+    }),
+  addRoomAdmin: (uid: number) =>
+    invokeCommand("add_room_admin", {
+      req: { uid },
+    }),
+  getRoomAdminList: (page = 1) =>
+    invokeCommand<LiveRoomAdminListData>("get_room_admin_list", {
+      req: { page },
+    }),
+  removeRoomAdmin: (uid: number) =>
+    invokeCommand("remove_room_admin", {
+      req: { uid },
     }),
   getLiveVotePanel: () => invokeCommand<LiveVotePanelData>("get_live_vote_panel"),
   getLiveVoteHistory: () => invokeCommand<LiveVoteHistoryData>("get_live_vote_history"),

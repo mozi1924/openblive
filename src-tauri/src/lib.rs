@@ -18,19 +18,18 @@ mod tray;
 mod ws_server;
 
 use commands::{
-    add_black_user, add_silent_user, clear_app_logs, create_live_vote,
+    add_black_user, add_room_admin, add_silent_user, clear_app_logs, create_live_vote,
     ensure_auto_start_danmu_monitor, generate_http_user_agent, get_account_list, get_app_config,
-    get_app_logs, get_black_user_list, get_linkage_status, get_live_dashboard_snapshot,
-    get_live_emoticons, get_live_online_rank, get_live_vote_history, get_live_vote_panel,
-    get_login_qrcode, get_partitions, get_recent_danmu, get_session, get_silent_user_list,
-    get_version, hide_danmu_overlay, load_saved_config, logout, poll_login_status, push_app_log,
-    refresh_all_account_cookies, refresh_all_account_profiles, refresh_all_account_profiles_inner,
-    refresh_current_user, refresh_live_client_version, refresh_live_client_version_inner,
-    refresh_tray_menu, remove_black_user, remove_silent_user, render_qrcode, reveal_main_window,
-    send_danmu, set_app_config, set_app_configs, set_danmu_overlay_pinned, show_danmu_overlay,
-    start_danmu_monitor, start_live, start_live_flow, stop_danmu_monitor, stop_live,
-    stop_live_flow, switch_account, sync_live_room_profile, sync_live_status, terminate_live_vote,
-    update_area, update_live_tags, update_title,
+    get_app_logs, get_black_user_list, get_linkage_status, get_live_dashboard_snapshot, get_live_emoticons,
+    get_live_online_rank, get_live_vote_history, get_live_vote_panel, get_login_qrcode, get_partitions,
+    get_recent_danmu, get_room_admin_list, get_session, get_silent_user_list, get_version, hide_danmu_overlay,
+    load_saved_config, logout, poll_login_status, push_app_log, refresh_all_account_cookies,
+    refresh_all_account_profiles, refresh_all_account_profiles_inner, refresh_current_user,
+    refresh_live_client_version, refresh_live_client_version_inner, refresh_tray_menu, remove_black_user,
+    remove_room_admin, remove_silent_user, render_qrcode, reveal_main_window, send_danmu, set_app_config,
+    set_app_configs, set_danmu_overlay_pinned, show_danmu_overlay, start_danmu_monitor, start_live,
+    start_live_flow, stop_danmu_monitor, stop_live, stop_live_flow, switch_account, sync_live_room_profile,
+    sync_live_status, terminate_live_vote, update_area, update_live_tags, update_title,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -185,6 +184,9 @@ pub fn run() {
             add_black_user,
             get_black_user_list,
             remove_black_user,
+            add_room_admin,
+            get_room_admin_list,
+            remove_room_admin,
             get_live_vote_panel,
             get_live_vote_history,
             create_live_vote,

@@ -170,6 +170,7 @@ function App() {
               onSendDanmu={actions.submitDanmu}
               onRequestMuteUser={actions.requestMuteUserByDanmu}
               onRequestBlackUser={actions.requestBlackUserByDanmu}
+              onRequestRoomAdmin={actions.requestRoomAdminByDanmu}
             />
           )}
 
@@ -236,6 +237,11 @@ function App() {
             blackTotal={state.liveBlackUserList?.total || 0}
             onRefreshBlackList={actions.refreshBlackUserList}
             onRequestRemoveBlackUser={actions.requestRemoveBlackUser}
+            roomAdminListLoading={state.liveRoomAdminListLoading}
+            roomAdminList={state.liveRoomAdminList?.items || []}
+            roomAdminTotal={state.liveRoomAdminList?.total || 0}
+            onRefreshRoomAdminList={actions.refreshRoomAdminList}
+            onRequestRemoveRoomAdmin={actions.requestRemoveRoomAdmin}
             onClose={actions.closeUserManagePanel}
           />
         )}

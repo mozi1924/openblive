@@ -457,6 +457,22 @@ pub struct RemoveBlackUserReq {
 }
 
 #[derive(Deserialize)]
+pub struct AddRoomAdminReq {
+    pub uid: u64,
+}
+
+#[derive(Deserialize)]
+pub struct GetRoomAdminListReq {
+    #[serde(default)]
+    pub page: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct RemoveRoomAdminReq {
+    pub uid: u64,
+}
+
+#[derive(Deserialize)]
 pub struct UidReq {
     pub uid: String,
 }
