@@ -107,7 +107,14 @@ function App() {
               child={state.child}
               children={state.children}
               copiedKey={state.copiedKey}
+              cover={state.cover}
+              coverRenderSrc={state.coverRenderSrc}
+              coverAdvice={state.coverAdvice}
+              coverAdviceLoading={state.coverAdviceLoading}
+              coverHistory={state.coverHistory}
+              coverHistoryLoading={state.coverHistoryLoading}
               parent={state.parent}
+              pendingCoverUpload={state.pendingCoverUpload}
               partitions={state.partitions}
               rtmp={state.rtmp}
               session={state.session}
@@ -122,6 +129,8 @@ function App() {
               onChangeTagInput={actions.setTagInput}
               onChangeTitle={actions.setTitle}
               onAddTag={actions.addTag}
+              onSelectCoverFile={actions.selectCoverFile}
+              onSelectHistoryCover={actions.selectHistoryCover}
               onRemoveTag={actions.removeTag}
               onCopyToClipboard={actions.copyToClipboard}
               onSyncProfile={actions.syncLiveRoomProfile}
@@ -136,6 +145,7 @@ function App() {
               unsavedItems={state.unsavedItems}
               onApplyRecentArea={actions.applyRecentArea}
               onSubmitArea={actions.submitArea}
+              onSubmitCover={actions.submitCover}
               onSubmitTitle={actions.submitTitle}
             />
           )}

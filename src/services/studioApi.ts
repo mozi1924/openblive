@@ -19,7 +19,9 @@ import type {
   LiveVotePanelData,
   LiveSilentUserListData,
   GetLiveTagsResp,
+  GetLiveCoverHistoryResp,
   AddLiveTagResp,
+  LiveCoverAdvice,
   RemoveLiveTagResp,
   QrPayload,
   LiveRoomProfile,
@@ -28,8 +30,10 @@ import type {
   StudioStateEvent,
   StreamInfo,
   UpdateAreaResp,
+  UpdateLiveCoverResp,
   UpdateTagsResp,
   UpdateTitleResp,
+  UploadLiveCoverResp,
   User,
 } from "../types/studio";
 
@@ -85,6 +89,20 @@ export const studioApi = {
   syncLiveStatus: () => invokeCommand<Session>("sync_live_status"),
   syncLiveRoomProfile: () =>
     invokeCommand<LiveRoomProfile>("sync_live_room_profile"),
+  getLiveCoverHistory: () =>
+    invokeCommand<GetLiveCoverHistoryResp>("get_live_cover_history"),
+  getLiveCoverAdvice: (coverUrl: string) =>
+    invokeCommand<LiveCoverAdvice | null>("get_live_cover_advice", {
+      req: { cover_url: coverUrl },
+    }),
+  uploadLiveCover: (dataUrl: string, fileName?: string, mimeType?: string) =>
+    invokeCommand<UploadLiveCoverResp>("upload_live_cover", {
+      req: { data_url: dataUrl, file_name: fileName, mime_type: mimeType },
+    }),
+  updateLiveCover: (cover: string, visitId?: string) =>
+    invokeCommand<UpdateLiveCoverResp>("update_live_cover", {
+      req: { cover, visit_id: visitId },
+    }),
   updateLiveTags: (tags: string) =>
     invokeCommand<UpdateTagsResp>(
       "update_live_tags",

@@ -87,6 +87,8 @@ export type User = {
   last_title: string;
   last_area_name: string[];
   last_tags?: string[];
+  last_cover?: string;
+  last_cover_asset?: string;
   recent_areas?: RecentArea[];
   live_profile_state?: LiveProfileState;
   login_invalid?: boolean;
@@ -128,10 +130,20 @@ export type TagsProfileState = {
   updated_at: number;
 };
 
+export type CoverProfileState = {
+  submitted: string;
+  effective: string;
+  transport: TransportStatus;
+  review: ReviewStatus;
+  message: string;
+  updated_at: number;
+};
+
 export type LiveProfileState = {
   title: TitleProfileState;
   area: AreaProfileState;
   tags: TagsProfileState;
+  cover: CoverProfileState;
 };
 
 export type StreamInfo = {
@@ -173,6 +185,8 @@ export type LiveRoomProfile = {
   child: string;
   area_id?: number;
   tags: string[];
+  cover: string;
+  cover_asset_url?: string;
   profile_state?: LiveProfileState;
   from_cache: boolean;
 };
@@ -218,6 +232,67 @@ export type RemoveLiveTagResp = {
   tags: string[];
   tag_items: LiveTagItem[];
   profile_state?: LiveProfileState;
+};
+
+export type LiveCoverInfo = {
+  url: string;
+  cover_asset_url?: string;
+  auditStatus?: number;
+  auditReason?: string;
+  selectStatus?: number;
+};
+
+export type LiveCoverHistoryItem = {
+  cover_url: string;
+  cover_asset_url?: string;
+  score?: number;
+  score_tag?: number;
+  score_color?: string;
+  cover_id?: number;
+  upload_time?: number;
+  use_status?: number;
+};
+
+export type LiveCoverAdviceItem = {
+  title: string;
+  content: string;
+  example?: string;
+  error_example?: string;
+};
+
+export type LiveCoverAdvice = {
+  cover_url?: string;
+  score?: number;
+  score_tag?: number;
+  advice?: LiveCoverAdviceItem[];
+  audit_status?: number;
+  advice_status?: number;
+  score_color?: string;
+  show_bubble?: boolean;
+  icon?: string;
+  show_history?: boolean;
+  show_status?: number;
+  ecology_audit_status?: number;
+  ecology_audit_reason?: string;
+  audit_reason?: string;
+  is_ban?: boolean;
+  ban_tips?: string;
+  ban_end_time?: number;
+};
+
+export type GetLiveCoverHistoryResp = {
+  history: LiveCoverHistoryItem[];
+};
+
+export type UpdateLiveCoverResp = {
+  cover: string;
+  cover_asset_url?: string;
+  profile_state?: LiveProfileState;
+};
+
+export type UploadLiveCoverResp = {
+  location: string;
+  etag?: string;
 };
 
 export type DanmuMsg = {

@@ -3,15 +3,17 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "reac
 import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg, LiveProfileState, Session } from "../../types/studio";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
-import { tagsToKey } from "./controllerHelpers";
+import { normalizeCoverValue, tagsToKey } from "./controllerHelpers";
 import { useTauriEvent } from "../useTauriEvent";
 
 type UseStudioControllerEffectsParams = {
+  cover: string;
   title: string;
   parent: string;
   child: string;
   tags: string[];
   profileState: LiveProfileState;
+  coverDirtyRef: MutableRefObject<boolean>;
   titleDirtyRef: MutableRefObject<boolean>;
   areaDirtyRef: MutableRefObject<boolean>;
   tagsDirtyRef: MutableRefObject<boolean>;
@@ -27,7 +29,7 @@ type UseStudioControllerEffectsParams = {
   currentUserUid: string | undefined;
   hasLiveAuth: boolean;
   clearDanmuAssetsAndVoteState: () => void;
-  syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<void>;
+  syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<unknown>;
   loadLiveEmoticons: () => Promise<void>;
   clearLiveVoteState: () => void;
   loadLiveVoteData: (options?: { silent?: boolean }) => Promise<void>;
@@ -53,11 +55,13 @@ const QR_LOGIN_POLL_INTERVAL_MS = 2000;
 const LIVE_CONTROL_STATUS_POLL_INTERVAL_MS = 10_000;
 
 export function useStudioControllerEffects({
+  cover,
   title,
   parent,
   child,
   tags,
   profileState,
+  coverDirtyRef,
   titleDirtyRef,
   areaDirtyRef,
   tagsDirtyRef,
@@ -95,12 +99,13 @@ export function useStudioControllerEffects({
   setLogs,
 }: UseStudioControllerEffectsParams) {
   useEffect(() => {
+    coverDirtyRef.current = normalizeCoverValue(cover) !== normalizeCoverValue(profileState.cover.submitted);
     titleDirtyRef.current = title.trim() !== profileState.title.submitted.trim();
     areaDirtyRef.current =
       parent !== profileState.area.submitted_parent ||
       child !== profileState.area.submitted_child;
     tagsDirtyRef.current = tagsToKey(tags) !== tagsToKey(profileState.tags.submitted);
-  }, [child, parent, profileState, tags, title, titleDirtyRef, areaDirtyRef, tagsDirtyRef]);
+  }, [child, cover, parent, profileState, tags, title, coverDirtyRef, titleDirtyRef, areaDirtyRef, tagsDirtyRef]);
 
   useEffect(
     () => () => {
@@ -151,7 +156,7 @@ export function useStudioControllerEffects({
       clearDanmuAssetsAndVoteState();
       return;
     }
-    void syncLiveRoomProfile(true);
+    void syncLiveRoomProfile(false);
   }, [clearDanmuAssetsAndVoteState, currentUserUid, syncLiveRoomProfile]);
 
   useEffect(() => {

@@ -2,17 +2,25 @@ use super::common::{
     build_room_update_form, clear_user_auth_flags, error_message, is_auth_invalid_code,
     live_platform, mark_current_user_login_invalid,
 };
-use super::profile::{split_tags, title_review_from_audit_status};
+use super::profile::{
+    cover_review_from_audit_status, normalize_cover_url, split_tags,
+    title_review_from_audit_status,
+};
+use super::profile_sync::fetch_pre_live_info;
 use super::session::{current_timestamp, resolve_current_auth_context};
 use crate::config::save_config;
 use crate::constants::CmdResult;
+use crate::cover_cache::ensure_cover_data_url;
 use crate::endpoints;
 use crate::models::{
-    sync_live_profile_state_defaults, AddLiveTagReq, RemoveLiveTagReq, UpdateAreaReq,
-    UpdateTagsReq, UpdateTitleReq,
+    sync_live_profile_state_defaults, AddLiveTagReq, GetLiveCoverAdviceReq,
+    RemoveLiveTagReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateTagsReq, UpdateTitleReq,
+    UploadLiveCoverReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
+use base64::Engine;
+use reqwest::multipart::{Form, Part};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
 use tauri::State;
@@ -82,6 +90,68 @@ fn build_live_tag_update_form(csrf: &str, key: &str, value: String) -> BTreeMap<
     form.insert("csrf".into(), csrf.to_string());
     form.insert("csrf_token".into(), csrf.to_string());
     form
+}
+
+fn build_live_cover_update_form(
+    csrf: &str,
+    cover: &str,
+    visit_id: Option<&str>,
+) -> BTreeMap<String, String> {
+    let mut form = BTreeMap::new();
+    form.insert("platform".into(), "web".into());
+    form.insert("mobi_app".into(), "web".into());
+    form.insert("build".into(), "1".into());
+    form.insert("cover".into(), cover.to_string());
+    form.insert("coverVertical".into(), String::new());
+    form.insert("liveDirectionType".into(), "1".into());
+    form.insert("csrf".into(), csrf.to_string());
+    form.insert("csrf_token".into(), csrf.to_string());
+    if let Some(value) = visit_id.map(str::trim).filter(|value| !value.is_empty()) {
+        form.insert("visit_id".into(), value.to_string());
+    }
+    form
+}
+
+fn decode_cover_data_url(
+    data_url: &str,
+    mime_type_hint: Option<&str>,
+) -> Result<(Vec<u8>, String), String> {
+    let trimmed = data_url.trim();
+    let Some(payload) = trimmed.strip_prefix("data:") else {
+        return Err("i18n.live.error.upload_cover_invalid_data".into());
+    };
+    let Some((meta, encoded)) = payload.split_once(',') else {
+        return Err("i18n.live.error.upload_cover_invalid_data".into());
+    };
+    if !meta.contains(";base64") {
+        return Err("i18n.live.error.upload_cover_invalid_data".into());
+    }
+    let mime = meta
+        .split(';')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| mime_type_hint.map(str::trim).filter(|value| !value.is_empty()))
+        .unwrap_or("image/jpeg")
+        .to_string();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|_| "i18n.live.error.upload_cover_invalid_data".to_string())?;
+    Ok((bytes, mime))
+}
+
+fn normalize_cover_file_name(file_name: Option<&str>, mime_type: &str) -> String {
+    let trimmed = file_name.unwrap_or("").trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+    let extension = match mime_type {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        _ => "jpg",
+    };
+    format!("live-cover.{extension}")
 }
 
 async fn apply_tag_profile_snapshot(
@@ -158,6 +228,291 @@ pub(crate) async fn get_partitions(state: State<'_, AppState>) -> CmdResult {
     }
 
     Ok(wrap_ok(json!(out)))
+}
+
+pub(crate) async fn get_live_cover_history(state: State<'_, AppState>) -> CmdResult {
+    let cookie = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, _room_id, _csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        cookie
+    };
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/preLive/GetCoverHistory"),
+            &[
+                ("platform", "web".to_string()),
+                ("build", "1".to_string()),
+            ],
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "get_live_cover_history code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &value,
+            "i18n.live.error.fetch_cover_history_failed",
+        ));
+    }
+
+    let mut history = Vec::new();
+    for mut item in value["data"]["cover_history"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+    {
+        if let Some(object) = item.as_object_mut() {
+            let cover_url = object
+                .get("cover_url")
+                .and_then(serde_json::Value::as_str)
+                .map(normalize_cover_url)
+                .unwrap_or_default();
+            let cover_asset_url = ensure_cover_data_url(&state.client, &state.config_path, &cover_url)
+                .await
+                .unwrap_or_default();
+            object.insert("cover_url".into(), json!(cover_url));
+            object.insert("cover_asset_url".into(), json!(cover_asset_url));
+        }
+        history.push(item);
+    }
+    Ok(wrap_ok(json!({ "history": history })))
+}
+
+pub(crate) async fn get_live_cover_advice(
+    req: GetLiveCoverAdviceReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let cookie = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, _room_id, _csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        cookie
+    };
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+    let cover_url = normalize_cover_url(&req.cover_url);
+    if cover_url.is_empty() {
+        return Ok(wrap_ok(json!(null)));
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/preLive/GetCoverAdviceAndQualityScore"),
+            &[
+                ("cover_url", cover_url.clone()),
+                ("platform", "web".to_string()),
+            ],
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "get_live_cover_advice code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &value,
+            "i18n.live.error.fetch_cover_advice_failed",
+        ));
+    }
+
+    let mut advice = value["data"].clone();
+    if let Some(object) = advice.as_object_mut() {
+        object.insert("cover_url".into(), json!(cover_url));
+    }
+    Ok(wrap_ok(advice))
+}
+
+pub(crate) async fn upload_live_cover(
+    req: UploadLiveCoverReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let cookie = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, _room_id, _csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        cookie
+    };
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let (bytes, mime_type) =
+        decode_cover_data_url(&req.data_url, req.mime_type.as_deref())?;
+    let file_name = normalize_cover_file_name(req.file_name.as_deref(), &mime_type);
+    let part = Part::bytes(bytes)
+        .file_name(file_name)
+        .mime_str(&mime_type)
+        .map_err(|error| error.to_string())?;
+    let form = Form::new()
+        .text("bucket", "live")
+        .text("dir", "new_room_cover")
+        .part("file", part);
+
+    let csrf = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, _room_id, csrf, _cookie) = resolve_current_auth_context(&runtime)?;
+        csrf
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+
+    let value = state
+        .client
+        .post_multipart_with_cookie(
+            &format!("{}?csrf={}", endpoints::api("/x/upload/web/image"), csrf),
+            form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("upload_live_cover code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &value,
+            "i18n.live.error.upload_cover_failed",
+        ));
+    }
+
+    Ok(wrap_ok(json!({
+        "location": normalize_cover_url(value["data"]["location"].as_str().unwrap_or("")),
+        "etag": value["data"]["etag"].as_str().unwrap_or(""),
+    })))
+}
+
+pub(crate) async fn update_live_cover(
+    req: UpdateLiveCoverReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let cover = normalize_cover_url(&req.cover);
+    if cover.is_empty() {
+        return Err("i18n.live.error.update_cover_failed".into());
+    }
+
+    let (uid, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        let (uid, _room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        (uid, csrf, cookie)
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let form = build_live_cover_update_form(&csrf, &cover, req.visit_id.as_deref());
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/preLive/UpdatePreLiveInfo"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!("update_live_cover code={code}, msg={}", error_message(&value, "")),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &value,
+            "i18n.live.error.update_cover_failed",
+        ));
+    }
+
+    let remote_cover = fetch_pre_live_info(&state, &cookie)
+        .await
+        .ok()
+        .and_then(|data| data["cover"]["url"].as_str().map(|value| value.to_string()))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| cover.clone());
+    let review = fetch_pre_live_info(&state, &cookie)
+        .await
+        .ok()
+        .map(|data| {
+            (
+                cover_review_from_audit_status(
+                    data["cover"]["auditStatus"].as_i64(),
+                    !remote_cover.trim().is_empty(),
+                )
+                .to_string(),
+                data["cover"]["auditReason"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+            )
+        })
+        .unwrap_or_else(|| ("unknown".to_string(), String::new()));
+    let remote_cover_asset = ensure_cover_data_url(&state.client, &state.config_path, &remote_cover)
+        .await
+        .unwrap_or_default();
+
+    let mut runtime = state.runtime.lock().await;
+    if let Some(user) = runtime.config.users.get_mut(&uid) {
+        sync_live_profile_state_defaults(user);
+        user.last_cover = remote_cover.clone();
+        user.last_cover_asset = remote_cover_asset.clone();
+        user.live_profile_state.cover.submitted = cover.clone();
+        user.live_profile_state.cover.effective = remote_cover.clone();
+        user.live_profile_state.cover.transport = "synced".to_string();
+        user.live_profile_state.cover.review = review.0;
+        user.live_profile_state.cover.message = review.1;
+        user.live_profile_state.cover.updated_at = current_timestamp();
+        clear_user_auth_flags(user);
+    }
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+
+    Ok(wrap_ok(json!({
+        "cover": remote_cover,
+        "cover_asset_url": remote_cover_asset,
+        "profile_state": runtime
+            .config
+            .users
+            .get(&uid)
+            .map(|user| user.live_profile_state.clone())
+    })))
 }
 
 pub(crate) async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdResult {

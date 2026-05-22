@@ -11,6 +11,7 @@ use crate::commands::live::ensure_auto_start_danmu_monitor;
 use crate::commands::system::render_qr_data_url;
 use crate::config::save_config;
 use crate::constants::CmdResult;
+use crate::cover_cache::{apply_cached_cover_to_user, has_cached_cover, refresh_cover_cache};
 use crate::endpoints;
 use crate::models::{sync_live_profile_state_defaults, PollReq, UidReq, UserRecord};
 use crate::response::wrap_ok;
@@ -18,6 +19,12 @@ use crate::state::{restore_session_from_current, AppState};
 use crate::state_event::emit_runtime_snapshot;
 use serde_json::json;
 use tauri::{AppHandle, State};
+
+fn to_response_user_with_cover(config_path: &std::path::Path, user: &UserRecord) -> UserRecord {
+    let mut output = to_response_user(config_path, user);
+    apply_cached_cover_to_user(config_path, &mut output);
+    output
+}
 
 #[tauri::command]
 pub async fn get_login_qrcode(state: State<'_, AppState>) -> CmdResult {
@@ -171,6 +178,8 @@ pub async fn poll_login_status(
         last_area_id: old.last_area_id,
         last_area_name: old.last_area_name,
         last_tags: old.last_tags,
+        last_cover: old.last_cover,
+        last_cover_asset: old.last_cover_asset,
         recent_areas: old.recent_areas,
         live_profile_state: old.live_profile_state,
         live_key: None,
@@ -206,7 +215,7 @@ pub async fn poll_login_status(
     runtime.session.last_sync_at = None;
     runtime.session.error_code = None;
     save_config(&state.config_path, &runtime.config, &state.master_key);
-    let response_user = to_response_user(&state.config_path, &user);
+    let response_user = to_response_user_with_cover(&state.config_path, &user);
     drop(runtime);
     crate::tray::refresh_tray_menu(&app);
     ensure_auto_start_danmu_monitor(&app, &state, "command.poll_login_status.auto_start").await;
@@ -233,10 +242,17 @@ pub async fn load_saved_config(state: State<'_, AppState>) -> CmdResult {
                 crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
             }
         }
+        if !user.last_cover.trim().is_empty() && !has_cached_cover(&state.config_path, &user.last_cover) {
+            if let Err(error) =
+                refresh_cover_cache(&state.client, &state.config_path, &user.last_cover).await
+            {
+                crate::runtime_warn!("cover cache warmup failed for uid {}: {}", user.uid, error);
+            }
+        }
     }
     let data = user
         .as_ref()
-        .map(|value| to_response_user(&state.config_path, value));
+        .map(|value| to_response_user_with_cover(&state.config_path, value));
     Ok(wrap_ok(serde_json::to_value(data).unwrap()))
 }
 
@@ -255,7 +271,7 @@ pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
     let refreshed = refresh_cookie_for_uid(&uid, &state, true).await;
     let response = match refreshed {
         RefreshCookieResult::Updated(user) => {
-            let response_user = to_response_user(&state.config_path, &user);
+            let response_user = to_response_user_with_cover(&state.config_path, &user);
             Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
         }
         RefreshCookieResult::Missing => Err("i18n.common.not_logged_in".into()),
@@ -287,7 +303,7 @@ pub async fn get_account_list(state: State<'_, AppState>) -> CmdResult {
     }
     let list: Vec<UserRecord> = users
         .iter()
-        .map(|user| to_response_user(&state.config_path, user))
+        .map(|user| to_response_user_with_cover(&state.config_path, user))
         .collect();
     let current_uid = {
         let runtime = state.runtime.lock().await;
@@ -336,11 +352,18 @@ pub async fn switch_account(app: AppHandle, req: UidReq, state: State<'_, AppSta
             crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
         }
     }
+    if !user.last_cover.trim().is_empty() && !has_cached_cover(&state.config_path, &user.last_cover) {
+        if let Err(error) =
+            refresh_cover_cache(&state.client, &state.config_path, &user.last_cover).await
+        {
+            crate::runtime_warn!("cover cache warmup failed for uid {}: {}", user.uid, error);
+        }
+    }
 
     ensure_auto_start_danmu_monitor(&app, &state, "command.switch_account.auto_start").await;
 
     emit_runtime_snapshot(&app, &state, "command.switch_account").await;
-    let response_user = to_response_user(&state.config_path, &user);
+    let response_user = to_response_user_with_cover(&state.config_path, &user);
     crate::tray::refresh_tray_menu(&app);
     Ok(wrap_ok(serde_json::to_value(response_user).unwrap()))
 }

@@ -25,6 +25,8 @@ type UseAccountControllerParams = {
   titleDirtyRef: MutableRefObject<boolean>;
   areaDirtyRef: MutableRefObject<boolean>;
   tagsDirtyRef: MutableRefObject<boolean>;
+  coverDirtyRef: MutableRefObject<boolean>;
+  coverDraftVersionRef: MutableRefObject<number>;
   loginPollBusyRef: MutableRefObject<boolean>;
   loginStatusCodeRef: MutableRefObject<number | null>;
   qrcodeRefreshBusyRef: MutableRefObject<boolean>;
@@ -42,6 +44,7 @@ type UseAccountControllerParams = {
   setParent: Dispatch<SetStateAction<string>>;
   setChild: Dispatch<SetStateAction<string>>;
   setTags: Dispatch<SetStateAction<string[]>>;
+  setCover: Dispatch<SetStateAction<string>>;
   setTagInput: Dispatch<SetStateAction<string>>;
   setRecentAreas: Dispatch<SetStateAction<import("./controllerHelpers").RecentArea[]>>;
   setAccounts: Dispatch<SetStateAction<User[]>>;
@@ -50,9 +53,11 @@ type UseAccountControllerParams = {
   applyUserDraftValues: (
     user: User,
     options?: {
+      allowCover?: boolean;
       forceTitle?: boolean;
       forceArea?: boolean;
       forceTags?: boolean;
+      forceCover?: boolean;
     },
   ) => void;
   clearDanmuAssetsAndVoteState: () => void;
@@ -74,6 +79,8 @@ export function useAccountController({
   titleDirtyRef,
   areaDirtyRef,
   tagsDirtyRef,
+  coverDirtyRef,
+  coverDraftVersionRef,
   loginPollBusyRef,
   loginStatusCodeRef,
   qrcodeRefreshBusyRef,
@@ -91,6 +98,7 @@ export function useAccountController({
   setParent,
   setChild,
   setTags,
+  setCover,
   setTagInput,
   setRecentAreas,
   setAccounts,
@@ -150,10 +158,12 @@ export function useAccountController({
       titleDirtyRef.current = false;
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
+      coverDirtyRef.current = false;
       setTitle(t(localeSetting, "ui.ctrl.default_title"));
       setParent("");
       setChild("");
       setTags([]);
+      setCover("");
       setTagInput("");
       setRecentAreas([]);
       await syncTrayMenu();
@@ -168,11 +178,13 @@ export function useAccountController({
       forceTitle: isAccountSwitched,
       forceArea: isAccountSwitched,
       forceTags: isAccountSwitched,
+      forceCover: isAccountSwitched,
     });
     if (isAccountSwitched) {
       titleDirtyRef.current = false;
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
+      coverDirtyRef.current = false;
     }
     setRecentAreas(user.recent_areas || []);
     await syncTrayMenu();
@@ -182,8 +194,10 @@ export function useAccountController({
     applyUserDraftValues,
     areaDirtyRef,
     clearDanmuAssetsAndVoteState,
+    coverDirtyRef,
     localeSetting,
     setChild,
+    setCover,
     setCurrentUser,
     setDanmuListening,
     setParent,
@@ -210,13 +224,14 @@ export function useAccountController({
 
   const syncLiveRoomProfile = useCallback(async (forceAllDrafts = false) => {
     const requestUid = activeUidRef.current;
+    const coverDraftVersionAtRequest = coverDraftVersionRef.current;
     try {
       const res = await studioApi.syncLiveRoomProfile();
       if (res.code !== 0 || !res.data) {
-        return;
+        return null;
       }
       if (requestUid !== activeUidRef.current) {
-        return;
+        return null;
       }
 
       const nextProfileState = normalizeProfileState(res.data.profile_state);
@@ -228,8 +243,10 @@ export function useAccountController({
           res.data.child || nextProfileState.area.submitted_child,
         ].filter(Boolean),
         last_tags: Array.isArray(res.data.tags) ? res.data.tags : nextProfileState.tags.submitted,
+        last_cover: res.data.cover || nextProfileState.cover.submitted,
+        last_cover_asset: res.data.cover_asset_url || currentUserRef.current?.last_cover_asset || "",
         live_profile_state: nextProfileState,
-      } as Pick<User, "last_title" | "last_area_name" | "last_tags" | "live_profile_state">;
+      } as Pick<User, "last_title" | "last_area_name" | "last_tags" | "last_cover" | "last_cover_asset" | "live_profile_state">;
       const draftUser = {
         ...(currentUserRef.current || {
           uid: activeUidRef.current || "",
@@ -240,14 +257,18 @@ export function useAccountController({
           last_title: "",
           last_area_name: [],
           last_tags: [],
+          last_cover: "",
+          last_cover_asset: "",
           live_profile_state: nextProfileState,
         }),
         ...profilePatch,
       } as User;
       applyUserDraftValues(draftUser, {
+        allowCover: coverDraftVersionAtRequest === coverDraftVersionRef.current,
         forceTitle: forceAllDrafts,
         forceArea: forceAllDrafts,
         forceTags: forceAllDrafts,
+        forceCover: forceAllDrafts,
       });
       setCurrentUser((prev) => {
         if (!prev) {
@@ -264,14 +285,17 @@ export function useAccountController({
           ? t(localeSetting, "ui.ctrl.sync_profile_failed_rollback")
           : t(localeSetting, "ui.ctrl.sync_profile_ok"),
       );
+      return res.data;
     } catch {
       append(t(localeSetting, "ui.ctrl.sync_profile_failed_keep"));
+      return null;
     }
   }, [
     activeUidRef,
     append,
     applyProfileState,
     applyUserDraftValues,
+    coverDraftVersionRef,
     currentUserRef,
     localeSetting,
     setCurrentUser,
@@ -385,6 +409,7 @@ export function useAccountController({
           forceTitle: true,
           forceArea: true,
           forceTags: true,
+          forceCover: true,
         });
         setRecentAreas(res.data.recent_areas || []);
         append(
@@ -468,6 +493,7 @@ export function useAccountController({
             forceTitle: true,
             forceArea: true,
             forceTags: true,
+            forceCover: true,
           });
           setRecentAreas(res.data.recent_areas || []);
           append(tf(localeSetting, "ui.ctrl.switched_account", { name: res.data.uname }));

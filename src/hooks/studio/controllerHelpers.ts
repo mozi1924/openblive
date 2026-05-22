@@ -18,10 +18,30 @@ export type SectionStatus = { tone: StatusTone; label: string; detail: string };
 export const normalizeTags = (values: string[]) =>
   [...new Set(values.map((tag) => tag.trim()).filter(Boolean))];
 
+export const normalizeRemoteAssetUrl = (value?: string | null) => {
+  const normalized = value?.trim() || "";
+  if (normalized.startsWith("//")) {
+    return `https:${normalized}`;
+  }
+  if (normalized.startsWith("http://")) {
+    return `https://${normalized.slice("http://".length)}`;
+  }
+  return normalized;
+};
+
+export const normalizeCoverValue = (value?: string | null) => {
+  const normalized = value?.trim() || "";
+  if (!normalized || normalized.startsWith("data:")) {
+    return normalized;
+  }
+  return normalizeRemoteAssetUrl(normalized);
+};
+
 export const tagsToKey = (values: string[]) =>
   normalizeTags(values).slice().sort((left, right) => left.localeCompare(right)).join(",");
 
 export const unsavedLabelMap = {
+  cover: "ui.stream.section.cover",
   title: "ui.stream.section.title",
   area: "ui.stream.section.area",
   tags: "ui.stream.section.tags",
@@ -56,6 +76,14 @@ export const defaultProfileState = (): LiveProfileState => ({
     message: "",
     updated_at: 0,
   },
+  cover: {
+    submitted: "",
+    effective: "",
+    transport: "idle",
+    review: "none",
+    message: "",
+    updated_at: 0,
+  },
 });
 
 export const normalizeProfileState = (
@@ -80,12 +108,16 @@ export const normalizeProfileState = (
       submitted: normalizeTags(state.tags?.submitted || []),
       effective: normalizeTags(state.tags?.effective || []),
     },
+    cover: {
+      ...fallback.cover,
+      ...state.cover,
+    },
   };
 };
 
 export const buildSectionStatus = (
   locale: LocaleSetting,
-  section: "title" | "area" | "tags",
+  section: "cover" | "title" | "area" | "tags",
   isDirty: boolean,
   profileState: LiveProfileState,
 ): SectionStatus => {

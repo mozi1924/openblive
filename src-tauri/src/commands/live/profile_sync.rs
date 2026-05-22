@@ -1,10 +1,14 @@
 use super::common::error_message;
-use super::profile::{apply_profile_state_from_remote, split_tags};
+use super::profile::{
+    apply_profile_state_from_remote, cover_review_from_audit_status, normalize_cover_url,
+    split_tags,
+};
 use super::session::{
     apply_room_area_to_session, apply_room_status_to_session, mark_session_sync_state,
 };
 use crate::config::save_config;
 use crate::constants::CmdResult;
+use crate::cover_cache::{ensure_cover_data_url, load_cached_cover_data_url};
 use crate::endpoints;
 use crate::models::SessionState;
 use crate::response::wrap_ok;
@@ -30,6 +34,41 @@ pub(crate) async fn fetch_room_info_by_room_id(
         .map_err(|error| error.to_string())?;
     if value["code"].as_i64().unwrap_or(-1) != 0 {
         return Err(error_message(&value, "i18n.live.error.sync_status_failed"));
+    }
+    Ok(value["data"].clone())
+}
+
+pub(crate) async fn fetch_pre_live_info(
+    state: &AppState,
+    cookie_header: &str,
+) -> Result<serde_json::Value, String> {
+    let mut value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/preLive/PreLive"),
+            &[
+                ("cover", "true".to_string()),
+                ("platform", "web".to_string()),
+                ("mobi_app", "web".to_string()),
+                ("build", "1".to_string()),
+            ],
+            cookie_header,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    if value["code"].as_i64().unwrap_or(-1) != 0 {
+        return Err(error_message(
+            &value,
+            "i18n.live.error.fetch_live_cover_failed",
+        ));
+    }
+    if let Some(object) = value["data"]["cover"].as_object_mut() {
+        let cover_url = object
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .map(normalize_cover_url)
+            .unwrap_or_default();
+        object.insert("url".into(), json!(cover_url));
     }
     Ok(value["data"].clone())
 }
@@ -126,6 +165,12 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
     };
 
     if user.room_id.is_empty() {
+        let cover = normalize_cover_url(&user.last_cover);
+        let cover_asset_url = if !user.last_cover_asset.trim().is_empty() {
+            user.last_cover_asset.clone()
+        } else {
+            load_cached_cover_data_url(&state.config_path, &cover).unwrap_or_default()
+        };
         let parent = user
             .last_area_name
             .first()
@@ -142,6 +187,8 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
             "child": child,
             "area_id": user.last_area_id.parse::<u64>().ok(),
             "tags": user.last_tags,
+            "cover": cover,
+            "cover_asset_url": cover_asset_url,
             "profile_state": user.live_profile_state,
             "from_cache": true
         })));
@@ -165,13 +212,45 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 .as_i64()
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| user.room_id.clone());
+            let pre_live = fetch_pre_live_info(&state, &user.cookie).await.ok();
+            let remote_cover = pre_live
+                .as_ref()
+                .and_then(|value| value["cover"]["url"].as_str())
+                .unwrap_or(&user.last_cover)
+                .to_string();
+            let remote_cover_asset = ensure_cover_data_url(&state.client, &state.config_path, &remote_cover)
+                .await
+                .unwrap_or_default();
+            let cover_review = cover_review_from_audit_status(
+                pre_live
+                    .as_ref()
+                    .and_then(|value| value["cover"]["auditStatus"].as_i64()),
+                !remote_cover.trim().is_empty(),
+            )
+            .to_string();
+            let cover_message = pre_live
+                .as_ref()
+                .and_then(|value| value["cover"]["auditReason"].as_str())
+                .unwrap_or("")
+                .to_string();
 
             let mut runtime = state.runtime.lock().await;
             if let Some(current) = runtime.config.users.get_mut(&uid) {
-                apply_profile_state_from_remote(current, &title, &parent, &child, area_id, &tags);
+                apply_profile_state_from_remote(
+                    current,
+                    &title,
+                    &parent,
+                    &child,
+                    area_id,
+                    &tags,
+                    &remote_cover,
+                    &cover_review,
+                    &cover_message,
+                );
                 if !room_id.is_empty() {
                     current.room_id = room_id.clone();
                 }
+                current.last_cover_asset = remote_cover_asset.clone();
             }
             runtime.session.current_area_id = area_id;
             runtime.session.current_area_names = if parent.is_empty() || child.is_empty() {
@@ -199,6 +278,8 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 "child": child,
                 "area_id": area_id,
                 "tags": tags,
+                "cover": normalize_cover_url(&remote_cover),
+                "cover_asset_url": remote_cover_asset,
                 "profile_state": runtime
                     .config
                     .users
@@ -230,6 +311,12 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 "child": child,
                 "area_id": user.last_area_id.parse::<u64>().ok(),
                 "tags": user.last_tags,
+                "cover": normalize_cover_url(&user.last_cover),
+                "cover_asset_url": if !user.last_cover_asset.trim().is_empty() {
+                    user.last_cover_asset.clone()
+                } else {
+                    load_cached_cover_data_url(&state.config_path, &user.last_cover).unwrap_or_default()
+                },
                 "profile_state": user.live_profile_state,
                 "from_cache": true
             })))

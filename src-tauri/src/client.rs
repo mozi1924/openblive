@@ -1,5 +1,6 @@
 use crate::endpoints;
 use anyhow::Result;
+use reqwest::multipart::Form;
 use reqwest::cookie::{CookieStore, Jar};
 use reqwest::header::{COOKIE, USER_AGENT};
 use std::collections::BTreeMap;
@@ -85,6 +86,23 @@ impl BiliClient {
             .post(url)
             .header(USER_AGENT, endpoints::http_user_agent())
             .form(form);
+        if !cookie_header.trim().is_empty() {
+            request = request.header(COOKIE, cookie_header.trim());
+        }
+        Ok(request.send().await?.json().await?)
+    }
+
+    pub async fn post_multipart_with_cookie(
+        &self,
+        url: &str,
+        form: Form,
+        cookie_header: &str,
+    ) -> Result<serde_json::Value> {
+        let mut request = self
+            .http
+            .post(url)
+            .header(USER_AGENT, endpoints::http_user_agent())
+            .multipart(form);
         if !cookie_header.trim().is_empty() {
             request = request.header(COOKIE, cookie_header.trim());
         }

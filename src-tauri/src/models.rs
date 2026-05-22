@@ -105,6 +105,22 @@ pub struct TagsProfileState {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CoverProfileState {
+    #[serde(default)]
+    pub submitted: String,
+    #[serde(default)]
+    pub effective: String,
+    #[serde(default = "default_transport_status")]
+    pub transport: String,
+    #[serde(default = "default_review_status")]
+    pub review: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub updated_at: i64,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LiveProfileState {
     #[serde(default)]
     pub title: TitleProfileState,
@@ -112,6 +128,8 @@ pub struct LiveProfileState {
     pub area: AreaProfileState,
     #[serde(default)]
     pub tags: TagsProfileState,
+    #[serde(default)]
+    pub cover: CoverProfileState,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -151,6 +169,10 @@ pub struct UserRecord {
     pub last_area_name: Vec<String>,
     #[serde(default)]
     pub last_tags: Vec<String>,
+    #[serde(default)]
+    pub last_cover: String,
+    #[serde(default)]
+    pub last_cover_asset: String,
     #[serde(default)]
     pub recent_areas: Vec<RecentArea>,
     #[serde(default)]
@@ -232,6 +254,19 @@ pub fn sync_live_profile_state_defaults(user: &mut UserRecord) {
     }
     if user.live_profile_state.tags.review.trim().is_empty() {
         user.live_profile_state.tags.review = default_review_status();
+    }
+
+    if user.live_profile_state.cover.submitted.is_empty() {
+        user.live_profile_state.cover.submitted = user.last_cover.clone();
+    }
+    if user.live_profile_state.cover.effective.is_empty() {
+        user.live_profile_state.cover.effective = user.last_cover.clone();
+    }
+    if user.live_profile_state.cover.transport.trim().is_empty() {
+        user.live_profile_state.cover.transport = default_transport_status();
+    }
+    if user.live_profile_state.cover.review.trim().is_empty() {
+        user.live_profile_state.cover.review = default_review_status();
     }
 }
 
@@ -407,6 +442,27 @@ pub struct AddLiveTagReq {
 #[derive(Deserialize)]
 pub struct RemoveLiveTagReq {
     pub tag: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateLiveCoverReq {
+    pub cover: String,
+    #[serde(default)]
+    pub visit_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct GetLiveCoverAdviceReq {
+    pub cover_url: String,
+}
+
+#[derive(Deserialize)]
+pub struct UploadLiveCoverReq {
+    pub data_url: String,
+    #[serde(default)]
+    pub file_name: Option<String>,
+    #[serde(default)]
+    pub mime_type: Option<String>,
 }
 
 #[derive(Deserialize)]

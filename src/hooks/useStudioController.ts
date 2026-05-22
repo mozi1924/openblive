@@ -3,6 +3,8 @@ import { studioApi } from "../services/studioApi";
 import type {
   ActiveTab,
   DanmuMsg,
+  LiveCoverAdvice,
+  LiveCoverHistoryItem,
   LiveProfileState,
   Session,
   StreamInfo,
@@ -14,6 +16,7 @@ import { useWindowDrag } from "./useWindowDrag";
 import {
   buildSectionStatus,
   defaultProfileState,
+  normalizeCoverValue,
   normalizeProfileState,
   tagsToKey,
   unsavedLabelMap,
@@ -32,6 +35,12 @@ import {
   type TopNoticeItem,
   type TopNoticeTone,
 } from "../types/topNotice";
+
+type PendingCoverUpload = {
+  dataUrl: string;
+  fileName: string;
+  mimeType: string;
+};
 
 type ConfirmModalTone = "primary" | "danger";
 type ConfirmModalSelectOption = {
@@ -72,6 +81,13 @@ export function useStudioController() {
   const [accounts, setAccounts] = useState<User[]>([]);
 
   const [title, setTitle] = useState(t("auto", "ui.ctrl.default_title"));
+  const [cover, setCover] = useState("");
+  const [coverRenderSrc, setCoverRenderSrc] = useState("");
+  const [pendingCoverUpload, setPendingCoverUpload] = useState<PendingCoverUpload | null>(null);
+  const [coverHistory, setCoverHistory] = useState<LiveCoverHistoryItem[]>([]);
+  const [coverAdvice, setCoverAdvice] = useState<LiveCoverAdvice | null>(null);
+  const [coverHistoryLoading, setCoverHistoryLoading] = useState(false);
+  const [coverAdviceLoading, setCoverAdviceLoading] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [tagAuditStatusMap, setTagAuditStatusMap] = useState<Record<string, number>>({});
   const [tagInput, setTagInput] = useState("");
@@ -111,6 +127,8 @@ export function useStudioController() {
   const titleDirtyRef = useRef(false);
   const areaDirtyRef = useRef(false);
   const tagsDirtyRef = useRef(false);
+  const coverDirtyRef = useRef(false);
+  const coverDraftVersionRef = useRef(0);
   const activeUidRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
   const parentRef = useRef("");
@@ -335,21 +353,25 @@ export function useStudioController() {
 
   const dirtyStatus = useMemo(
     () => ({
+      cover: normalizeCoverValue(cover) !== normalizeCoverValue(profileState.cover.submitted),
       title: title.trim() !== profileState.title.submitted.trim(),
       area:
         parent !== profileState.area.submitted_parent ||
         child !== profileState.area.submitted_child,
       tags: tagsToKey(tags) !== tagsToKey(profileState.tags.submitted),
     }),
-    [child, parent, profileState, tags, title],
+    [child, cover, parent, profileState, tags, title],
   );
 
   const hasUnsavedChanges = useMemo(() => {
-    return dirtyStatus.title || dirtyStatus.area || dirtyStatus.tags;
+    return dirtyStatus.cover || dirtyStatus.title || dirtyStatus.area || dirtyStatus.tags;
   }, [dirtyStatus]);
 
   const unsavedItems = useMemo(() => {
     const items: Array<(typeof unsavedLabelMap)[keyof typeof unsavedLabelMap]> = [];
+    if (dirtyStatus.cover) {
+      items.push(unsavedLabelMap.cover);
+    }
     if (dirtyStatus.title) {
       items.push(unsavedLabelMap.title);
     }
@@ -364,6 +386,7 @@ export function useStudioController() {
 
   const sectionStatus = useMemo(
     () => ({
+      cover: buildSectionStatus(localeSetting, "cover", dirtyStatus.cover, profileState),
       title: buildSectionStatus(localeSetting, "title", dirtyStatus.title, profileState),
       area: buildSectionStatus(localeSetting, "area", dirtyStatus.area, profileState),
       tags: buildSectionStatus(localeSetting, "tags", dirtyStatus.tags, profileState),
@@ -373,6 +396,7 @@ export function useStudioController() {
 
   const hasAttentionStatus = useMemo(
     () =>
+      sectionStatus.cover.tone !== "green" ||
       sectionStatus.title.tone !== "green" ||
       sectionStatus.area.tone !== "green" ||
       sectionStatus.tags.tone !== "green",
@@ -380,6 +404,7 @@ export function useStudioController() {
   );
   const hasPendingReviewOption = useMemo(
     () =>
+      profileState.cover.review === "pending" ||
       profileState.title.review === "pending" ||
       profileState.area.review === "pending" ||
       profileState.tags.review === "pending",
@@ -447,15 +472,24 @@ export function useStudioController() {
     (
       user: User,
       options?: {
+        allowCover?: boolean;
+        forceCover?: boolean;
         forceTitle?: boolean;
         forceArea?: boolean;
         forceTags?: boolean;
       },
     ) => {
+      const allowCover = options?.allowCover ?? true;
+      const forceCover = options?.forceCover ?? false;
       const forceTitle = options?.forceTitle ?? false;
       const forceArea = options?.forceArea ?? false;
       const forceTags = options?.forceTags ?? false;
 
+      if (allowCover && (forceCover || !coverDirtyRef.current)) {
+        setCover(normalizeCoverValue(user.last_cover || ""));
+        setCoverRenderSrc(normalizeCoverValue(user.last_cover_asset || ""));
+        setPendingCoverUpload(null);
+      }
       if (forceTitle || !titleDirtyRef.current) {
         setTitle(user.last_title || "");
       }
@@ -473,6 +507,101 @@ export function useStudioController() {
       }
     },
     [],
+  );
+
+  const resolvePersistedCoverUrl = useCallback((value?: string | null) => {
+    const normalized = normalizeCoverValue(value);
+    return normalized.startsWith("data:") ? "" : normalized;
+  }, []);
+
+  const refreshLiveCoverHistory = useCallback(async () => {
+    const requestUid = activeUidRef.current;
+    if (!requestUid) {
+      setCoverHistory([]);
+      return;
+    }
+    setCoverHistoryLoading(true);
+    try {
+      const res = await studioApi.getLiveCoverHistory();
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      if (res.code === 0 && res.data) {
+        setCoverHistory(res.data.history || []);
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.cover_history_load_failed", {
+          msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.api_error"), localeSetting),
+        }),
+      );
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      append(
+        tf(localeSetting, "ui.ctrl.cover_history_load_failed", {
+          msg: resolveBackendMessage(String(error), localeSetting),
+        }),
+      );
+    } finally {
+      if (requestUid === activeUidRef.current) {
+        setCoverHistoryLoading(false);
+      }
+    }
+  }, [activeUidRef, append, localeSetting]);
+
+  const refreshLiveCoverAdvice = useCallback(
+    async (coverUrl?: string | null) => {
+      const requestUid = activeUidRef.current;
+      const targetCover =
+        resolvePersistedCoverUrl(coverUrl) ||
+        resolvePersistedCoverUrl(currentUserRef.current?.last_cover) ||
+        resolvePersistedCoverUrl(profileState.cover.effective) ||
+        resolvePersistedCoverUrl(profileState.cover.submitted) ||
+        resolvePersistedCoverUrl(cover);
+      if (!requestUid) {
+        setCoverAdvice(null);
+        return;
+      }
+      if (!targetCover) {
+        setCoverAdvice(null);
+        return;
+      }
+
+      setCoverAdviceLoading(true);
+      try {
+        const res = await studioApi.getLiveCoverAdvice(targetCover);
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        if (res.code === 0) {
+          setCoverAdvice(res.data || null);
+          return;
+        }
+        setCoverAdvice(null);
+        append(
+          tf(localeSetting, "ui.ctrl.cover_advice_load_failed", {
+            msg: resolveBackendMessage(res.msg || t(localeSetting, "ui.ctrl.api_error"), localeSetting),
+          }),
+        );
+      } catch (error) {
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        setCoverAdvice(null);
+        append(
+          tf(localeSetting, "ui.ctrl.cover_advice_load_failed", {
+            msg: resolveBackendMessage(String(error), localeSetting),
+          }),
+        );
+      } finally {
+        if (requestUid === activeUidRef.current) {
+          setCoverAdviceLoading(false);
+        }
+      }
+    },
+    [activeUidRef, append, cover, localeSetting, profileState.cover.effective, profileState.cover.submitted, resolvePersistedCoverUrl],
   );
 
   const refreshSession = useCallback(async () => {
@@ -524,6 +653,8 @@ export function useStudioController() {
     titleDirtyRef,
     areaDirtyRef,
     tagsDirtyRef,
+    coverDirtyRef,
+    coverDraftVersionRef,
     loginPollBusyRef,
     loginStatusCodeRef,
     qrcodeRefreshBusyRef,
@@ -541,6 +672,7 @@ export function useStudioController() {
     setParent,
     setChild,
     setTags,
+    setCover,
     setTagInput,
     setRecentAreas,
     setAccounts,
@@ -689,6 +821,168 @@ export function useStudioController() {
     },
   } = liveInteractionActions;
 
+  const syncLiveRoomProfileRef = useRef(syncLiveRoomProfile);
+  const refreshLiveCoverHistoryRef = useRef(refreshLiveCoverHistory);
+  const refreshLiveCoverAdviceRef = useRef(refreshLiveCoverAdvice);
+  syncLiveRoomProfileRef.current = syncLiveRoomProfile;
+  refreshLiveCoverHistoryRef.current = refreshLiveCoverHistory;
+  refreshLiveCoverAdviceRef.current = refreshLiveCoverAdvice;
+
+  const syncLiveRoomProfileResources = useCallback(async (forceAllDrafts = false) => {
+    const synced = await syncLiveRoomProfileRef.current(forceAllDrafts);
+    await refreshLiveCoverHistoryRef.current();
+    await refreshLiveCoverAdviceRef.current(
+      synced && typeof synced === "object" && "cover" in synced ? synced.cover : undefined,
+    );
+    return synced;
+  }, []);
+
+  const selectHistoryCover = useCallback((coverUrl: string, assetUrl?: string) => {
+    coverDirtyRef.current = true;
+    coverDraftVersionRef.current += 1;
+    setPendingCoverUpload(null);
+    setCover(coverUrl);
+    setCoverRenderSrc(normalizeCoverValue(assetUrl || ""));
+  }, []);
+
+  const selectCoverFile = useCallback(async (file: File | null) => {
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      const message = t(localeSetting, "ui.ctrl.cover_invalid_file");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+      return;
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("read_failed"));
+        reader.readAsDataURL(file);
+      });
+      coverDirtyRef.current = true;
+      coverDraftVersionRef.current += 1;
+      setPendingCoverUpload({
+        dataUrl,
+        fileName: file.name,
+        mimeType: file.type || "image/jpeg",
+      });
+      setCover(dataUrl);
+      setCoverRenderSrc(dataUrl);
+      setCoverAdvice(null);
+    } catch {
+      const message = t(localeSetting, "ui.ctrl.cover_read_failed");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+    }
+  }, [append, localeSetting, pushTopNotice]);
+
+  const submitCover = useCallback(async () => {
+    const requestUid = activeUidRef.current;
+    const remoteCover = resolvePersistedCoverUrl(cover);
+    const uploadPayload = pendingCoverUpload;
+    if (!requestUid) {
+      return;
+    }
+    if (!remoteCover && !uploadPayload) {
+      const message = t(localeSetting, "ui.ctrl.cover_missing");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+      return;
+    }
+
+    setProfileState((prev) => ({
+      ...prev,
+      cover: {
+        ...prev.cover,
+        transport: "saving",
+        message: "",
+      },
+    }));
+
+    try {
+      let nextCover = remoteCover;
+      if (uploadPayload) {
+        const uploadRes = await studioApi.uploadLiveCover(
+          uploadPayload.dataUrl,
+          uploadPayload.fileName,
+          uploadPayload.mimeType,
+        );
+        if (requestUid !== activeUidRef.current) {
+          return;
+        }
+        if (uploadRes.code !== 0 || !uploadRes.data?.location) {
+          throw new Error(uploadRes.msg || t(localeSetting, "ui.ctrl.cover_upload_failed_default"));
+        }
+        nextCover = uploadRes.data.location;
+      }
+
+      const res = await studioApi.updateLiveCover(nextCover);
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      if (res.code !== 0) {
+        throw new Error(res.msg || t(localeSetting, "ui.ctrl.cover_apply_failed_default"));
+      }
+
+      const persistedCover = normalizeCoverValue(res.data?.cover || nextCover);
+      const persistedCoverAsset = normalizeCoverValue(res.data?.cover_asset_url || "");
+      coverDirtyRef.current = false;
+      setPendingCoverUpload(null);
+      setCover(persistedCover);
+      setCoverRenderSrc((current) => persistedCoverAsset || current);
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              last_cover: persistedCover,
+              last_cover_asset: persistedCoverAsset || prev.last_cover_asset,
+              live_profile_state: res.data?.profile_state || prev.live_profile_state,
+            }
+          : prev,
+      );
+      if (res.data?.profile_state) {
+        applyProfileState(res.data.profile_state);
+      }
+      await refreshLiveCoverHistory();
+      await refreshLiveCoverAdvice(persistedCover);
+      const message = t(localeSetting, "ui.ctrl.cover_apply_ok");
+      append(message);
+      pushTopNotice({ text: message, tone: "success" });
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      const message = resolveBackendMessage(String(error), localeSetting);
+      setProfileState((prev) => ({
+        ...prev,
+        cover: {
+          ...prev.cover,
+          transport: "failed",
+          message,
+        },
+      }));
+      const line = tf(localeSetting, "ui.ctrl.cover_apply_failed", { msg: message });
+      append(line);
+      pushTopNotice({ text: line, tone: "error" });
+    }
+  }, [
+    activeUidRef,
+    append,
+    applyProfileState,
+    cover,
+    localeSetting,
+    pendingCoverUpload,
+    pushTopNotice,
+    refreshLiveCoverHistory,
+    refreshLiveCoverAdvice,
+    resolvePersistedCoverUrl,
+    setCurrentUser,
+    setProfileState,
+  ]);
+
   useEffect(() => {
     if (!hasLiveAuth || !hasPendingReviewOption) {
       return;
@@ -701,7 +995,7 @@ export function useStudioController() {
       }
       syncing = true;
       try {
-        await syncLiveRoomProfile(false);
+        await syncLiveRoomProfileResources(false);
         await refreshLiveTags();
       } finally {
         syncing = false;
@@ -718,7 +1012,18 @@ export function useStudioController() {
       syncing = false;
       window.clearInterval(timer);
     };
-  }, [hasLiveAuth, hasPendingReviewOption, refreshLiveTags, syncLiveRoomProfile]);
+  }, [hasLiveAuth, hasPendingReviewOption, refreshLiveTags, syncLiveRoomProfileResources]);
+
+  useEffect(() => {
+    if (hasLiveAuth) {
+      return;
+    }
+    setCoverHistory([]);
+    setCoverAdvice(null);
+    setPendingCoverUpload(null);
+    setCover("");
+    setCoverRenderSrc("");
+  }, [hasLiveAuth]);
 
   useEffect(() => {
     if (!hasLiveAuth) {
@@ -772,11 +1077,13 @@ export function useStudioController() {
   }, []);
 
   useStudioControllerEffects({
+    cover,
     title,
     parent,
     child,
     tags,
     profileState,
+    coverDirtyRef,
     titleDirtyRef,
     areaDirtyRef,
     tagsDirtyRef,
@@ -792,7 +1099,7 @@ export function useStudioController() {
     currentUserUid: hasLiveAuth ? currentUser?.uid : undefined,
     hasLiveAuth,
     clearDanmuAssetsAndVoteState,
-    syncLiveRoomProfile,
+    syncLiveRoomProfile: syncLiveRoomProfileResources,
     loadLiveEmoticons,
     clearLiveVoteState,
     loadLiveVoteData,
@@ -892,6 +1199,13 @@ export function useStudioController() {
       title,
       userManageActiveTab,
       topNotices,
+      cover,
+      coverRenderSrc,
+      coverAdvice,
+      coverAdviceLoading,
+      coverHistory,
+      coverHistoryLoading,
+      pendingCoverUpload,
     },
     actions: {
       changeParent,
@@ -950,6 +1264,9 @@ export function useStudioController() {
       setTitle,
       addTag,
       removeTag,
+      selectCoverFile,
+      selectHistoryCover,
+      submitCover,
       refreshLiveTags,
       refreshLiveVoteData: () => loadLiveVoteData(),
       refreshLiveOnlineRank: () => loadLiveOnlineRank(),
@@ -987,7 +1304,7 @@ export function useStudioController() {
       requestRemoveRoomAdmin,
       switchAccount,
       syncLiveRoomProfile: async () => {
-        await syncLiveRoomProfile(true);
+        await syncLiveRoomProfileResources(true);
         await refreshLiveTags();
       },
       toggleLogs: () => setShowLogs((prev) => !prev),

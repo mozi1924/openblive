@@ -31,7 +31,12 @@ const { mockStudioApi } = vi.hoisted(() => ({
     updateTitle: vi.fn(),
     syncLiveStatus: vi.fn(),
     syncLiveRoomProfile: vi.fn(),
+    getLiveCoverHistory: vi.fn(),
+    getLiveCoverAdvice: vi.fn(),
+    uploadLiveCover: vi.fn(),
+    updateLiveCover: vi.fn(),
     updateLiveTags: vi.fn(),
+    getLiveTags: vi.fn(),
     startLive: vi.fn(),
     startLiveFlow: vi.fn(),
     stopLive: vi.fn(),
@@ -75,31 +80,53 @@ const ok = <T,>(data: T): Resp<T> => ({
   data,
 });
 
-const makeUser = (uid: string, uname: string, lastTitle: string): User => ({
-  uid,
-  uname,
-  face: "",
-  level: 1,
-  follower: 1,
-  following: 1,
-  money: 0,
-  bcoin: 0,
-  last_title: lastTitle,
-  last_area_name: ["手游", "王者荣耀"],
-  last_tags: ["test"],
-  live_profile_state: defaultProfileState(),
-  login_invalid: false,
-});
+const makeUser = (uid: string, uname: string, lastTitle: string): User => {
+  const profileState = defaultProfileState();
+  profileState.cover.submitted = "http://example.com/cover.jpg";
+  profileState.cover.effective = "http://example.com/cover.jpg";
+  profileState.cover.transport = "synced";
+  return {
+    uid,
+    uname,
+    face: "",
+    level: 1,
+    follower: 1,
+    following: 1,
+    money: 0,
+    bcoin: 0,
+    last_title: lastTitle,
+    last_area_name: ["手游", "王者荣耀"],
+    last_tags: ["test"],
+    last_cover: "http://example.com/cover.jpg",
+    live_profile_state: profileState,
+    login_invalid: false,
+  };
+};
 
 const makeProfileSyncResp = (): Resp<LiveRoomProfile> =>
-  ok({
-    title: "synced-title",
-    parent: "手游",
-    child: "王者荣耀",
-    tags: ["test"],
-    from_cache: false,
-    profile_state: defaultProfileState(),
-  });
+  ok((() => {
+    const profileState = defaultProfileState();
+    profileState.cover.submitted = "http://example.com/cover.jpg";
+    profileState.cover.effective = "http://example.com/cover.jpg";
+    profileState.cover.transport = "synced";
+    return {
+      title: "synced-title",
+      parent: "手游",
+      child: "王者荣耀",
+      tags: ["test"],
+      cover: "http://example.com/cover.jpg",
+      from_cache: false,
+      profile_state: profileState,
+    };
+  })());
+
+const makeCoverProfileState = (cover: string) => {
+  const profileState = defaultProfileState();
+  profileState.cover.submitted = cover;
+  profileState.cover.effective = cover;
+  profileState.cover.transport = "synced";
+  return profileState;
+};
 
 const formEvent = (): FormEvent => ({
   preventDefault: vi.fn(),
@@ -182,6 +209,12 @@ beforeEach(() => {
   });
   mockStudioApi.listenDanmuOverlaySettings.mockResolvedValue(() => undefined);
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
+  mockStudioApi.getLiveCoverHistory.mockResolvedValue(ok({ history: [] }));
+  mockStudioApi.getLiveCoverAdvice.mockResolvedValue(ok(null));
+  mockStudioApi.uploadLiveCover.mockResolvedValue(ok({ location: "http://example.com/uploaded.jpg" }));
+  mockStudioApi.updateLiveCover.mockResolvedValue(
+    ok({ cover: "http://example.com/uploaded.jpg", profile_state: defaultProfileState() }),
+  );
   mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
     ok({ updated: 0, failed: [], expired: [] }),
   );
@@ -216,6 +249,13 @@ beforeEach(() => {
   mockStudioApi.clearAppLogs.mockResolvedValue(ok({}));
   mockStudioApi.logout.mockResolvedValue(ok({}));
   mockStudioApi.updateArea.mockResolvedValue(ok({ area_id: 1, profile_state: defaultProfileState() }));
+  mockStudioApi.getLiveTags.mockResolvedValue(
+    ok({
+      tags: [],
+      tag_contents: [],
+      profile_state: defaultProfileState(),
+    }),
+  );
   mockStudioApi.updateLiveTags.mockResolvedValue(
     ok({
       tags: ["test"],
@@ -630,6 +670,9 @@ describe("useStudioController multi-account regressions", () => {
     syncedProfileState.tags.submitted = [...(user.last_tags || [])];
     syncedProfileState.tags.effective = [...(user.last_tags || [])];
     syncedProfileState.tags.transport = "synced";
+    syncedProfileState.cover.submitted = user.last_cover || "";
+    syncedProfileState.cover.effective = user.last_cover || "";
+    syncedProfileState.cover.transport = "synced";
     user.live_profile_state = syncedProfileState;
 
     mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
@@ -640,6 +683,7 @@ describe("useStudioController multi-account regressions", () => {
         parent: user.last_area_name[0],
         child: user.last_area_name[1],
         tags: user.last_tags || [],
+        cover: user.last_cover || "",
         from_cache: false,
         profile_state: syncedProfileState,
       }),
@@ -661,5 +705,121 @@ describe("useStudioController multi-account regressions", () => {
     });
 
     expect(mockStudioApi.syncLiveStatus.mock.calls.length).toBeGreaterThan(syncCallsBefore);
+  });
+
+  it("keeps applied history cover instead of forcing an immediate stale profile sync", async () => {
+    const user = makeUser("1", "A", "A-old");
+    const persistedCover = "http://example.com/history.jpg";
+    const persistedCoverNormalized = "https://example.com/history.jpg";
+    const persistedAsset = "data:image/png;base64,history";
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.getLiveCoverHistory.mockResolvedValue(
+      ok({
+        history: [
+          {
+            cover_url: persistedCover,
+            cover_asset_url: persistedAsset,
+            use_status: 0,
+            cover_id: 2,
+          },
+        ],
+      }),
+    );
+    mockStudioApi.updateLiveCover.mockResolvedValue(
+      ok({
+        cover: persistedCover,
+        cover_asset_url: persistedAsset,
+        profile_state: makeCoverProfileState(persistedCover),
+      }),
+    );
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    await waitFor(() => expect(result.current.state.coverHistory).toHaveLength(1));
+    const syncCallsBeforeSubmit = mockStudioApi.syncLiveRoomProfile.mock.calls.length;
+
+    act(() => {
+      result.current.actions.selectHistoryCover(persistedCover, persistedAsset);
+    });
+
+    expect(result.current.state.cover).toBe(persistedCover);
+    expect(result.current.state.coverRenderSrc).toBe(persistedAsset);
+    expect(result.current.state.dirtyStatus.cover).toBe(true);
+
+    await act(async () => {
+      await result.current.actions.submitCover();
+    });
+
+    expect(result.current.state.cover).toBe(persistedCoverNormalized);
+    expect(result.current.state.coverRenderSrc).toBe(persistedAsset);
+    expect(result.current.state.currentUser?.last_cover).toBe(persistedCoverNormalized);
+    expect(result.current.state.currentUser?.last_cover_asset).toBe(persistedAsset);
+    expect(result.current.state.dirtyStatus.cover).toBe(false);
+    expect(mockStudioApi.syncLiveRoomProfile.mock.calls.length).toBe(syncCallsBeforeSubmit);
+  });
+
+  it("replaces upload preview data url with persisted cover after submit", async () => {
+    const user = makeUser("1", "A", "A-old");
+    const fileReaderResult = "data:image/png;base64,upload-preview";
+    const persistedCover = "http://example.com/uploaded.jpg";
+    const persistedCoverNormalized = "https://example.com/uploaded.jpg";
+    const persistedAsset = "data:image/png;base64,uploaded-asset";
+    const originalFileReader = globalThis.FileReader;
+
+    class MockFileReader {
+      public result: string | ArrayBuffer | null = null;
+      public onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+      public onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+
+      readAsDataURL() {
+        this.result = fileReaderResult;
+        this.onload?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
+      }
+    }
+
+    globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
+
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: "1" }));
+    mockStudioApi.uploadLiveCover.mockResolvedValue(ok({ location: persistedCover }));
+    mockStudioApi.updateLiveCover.mockResolvedValue(
+      ok({
+        cover: persistedCover,
+        cover_asset_url: persistedAsset,
+        profile_state: makeCoverProfileState(persistedCover),
+      }),
+    );
+
+    try {
+      const { result } = renderHook(() => useStudioController());
+      await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+
+      const file = new File(["cover"], "cover.png", { type: "image/png" });
+      await act(async () => {
+        await result.current.actions.selectCoverFile(file);
+      });
+
+      expect(result.current.state.cover).toBe(fileReaderResult);
+      expect(result.current.state.coverRenderSrc).toBe(fileReaderResult);
+      expect(result.current.state.dirtyStatus.cover).toBe(true);
+
+      await act(async () => {
+        await result.current.actions.submitCover();
+      });
+
+      expect(mockStudioApi.uploadLiveCover).toHaveBeenCalledWith(
+        fileReaderResult,
+        "cover.png",
+        "image/png",
+      );
+      expect(result.current.state.cover).toBe(persistedCoverNormalized);
+      expect(result.current.state.coverRenderSrc).toBe(persistedAsset);
+      expect(result.current.state.pendingCoverUpload).toBeNull();
+      expect(result.current.state.dirtyStatus.cover).toBe(false);
+    } finally {
+      globalThis.FileReader = originalFileReader;
+    }
   });
 });

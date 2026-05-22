@@ -6,9 +6,10 @@ use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
     AddBlackUserReq, AddLiveTagReq, AddRoomAdminReq, AddSilentUserReq, CreateLiveVoteReq, DanmuReq,
-    GetBlackUserListReq, GetRoomAdminListReq, GetSilentUserListReq, RemoveBlackUserReq,
-    RemoveLiveTagReq, RemoveRoomAdminReq, RemoveSilentUserReq, TerminateLiveVoteReq, UpdateAreaReq,
-    UpdateTagsReq, UpdateTitleReq,
+    GetBlackUserListReq, GetLiveCoverAdviceReq, GetRoomAdminListReq, GetSilentUserListReq,
+    RemoveBlackUserReq, RemoveLiveTagReq, RemoveRoomAdminReq, RemoveSilentUserReq,
+    TerminateLiveVoteReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateTagsReq, UpdateTitleReq,
+    UploadLiveCoverReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -42,10 +43,12 @@ pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 use flow::{start_live_inner, stop_live_inner};
 pub(crate) use linkage::obs_ws_probe;
 use profile_api::{
-    add_live_tag as add_live_tag_inner, get_live_tags as get_live_tags_inner,
-    get_partitions as get_partitions_inner, update_area as update_area_inner,
-    remove_live_tag as remove_live_tag_inner, update_live_tags as update_live_tags_inner,
-    update_title as update_title_inner,
+    add_live_tag as add_live_tag_inner, get_live_cover_advice as get_live_cover_advice_inner,
+    get_live_cover_history as get_live_cover_history_inner, get_live_tags as get_live_tags_inner,
+    get_partitions as get_partitions_inner, remove_live_tag as remove_live_tag_inner,
+    update_area as update_area_inner, update_live_cover as update_live_cover_inner,
+    update_live_tags as update_live_tags_inner, update_title as update_title_inner,
+    upload_live_cover as upload_live_cover_inner,
 };
 use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
@@ -160,6 +163,29 @@ pub async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) ->
 #[tauri::command]
 pub async fn get_live_tags(state: State<'_, AppState>) -> CmdResult {
     get_live_tags_inner(state).await
+}
+
+#[tauri::command]
+pub async fn get_live_cover_history(state: State<'_, AppState>) -> CmdResult {
+    get_live_cover_history_inner(state).await
+}
+
+#[tauri::command]
+pub async fn get_live_cover_advice(
+    req: GetLiveCoverAdviceReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    get_live_cover_advice_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn upload_live_cover(req: UploadLiveCoverReq, state: State<'_, AppState>) -> CmdResult {
+    upload_live_cover_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn update_live_cover(req: UpdateLiveCoverReq, state: State<'_, AppState>) -> CmdResult {
+    update_live_cover_inner(req, state).await
 }
 
 #[tauri::command]

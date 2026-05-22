@@ -124,6 +124,10 @@ struct LiveUserCacheFile {
     #[serde(default)]
     last_tags: Vec<String>,
     #[serde(default)]
+    last_cover: String,
+    #[serde(default)]
+    last_cover_asset: String,
+    #[serde(default)]
     recent_areas: Vec<RecentArea>,
     #[serde(default)]
     live_profile_state: LiveProfileState,
@@ -419,6 +423,8 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
                 user.last_area_id = cache.last_area_id;
                 user.last_area_name = cache.last_area_name;
                 user.last_tags = cache.last_tags;
+                user.last_cover = cache.last_cover;
+                user.last_cover_asset = cache.last_cover_asset;
                 user.recent_areas = cache.recent_areas;
                 user.live_profile_state = cache.live_profile_state;
             }
@@ -586,6 +592,8 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
                 last_area_id: user.last_area_id.clone(),
                 last_area_name: user.last_area_name.clone(),
                 last_tags: user.last_tags.clone(),
+                last_cover: user.last_cover.clone(),
+                last_cover_asset: user.last_cover_asset.clone(),
                 recent_areas: user.recent_areas.clone(),
                 live_profile_state: user.live_profile_state.clone(),
             },
