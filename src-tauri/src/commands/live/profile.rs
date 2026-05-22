@@ -20,7 +20,19 @@ pub(crate) fn title_review_from_audit_status(status: Option<i64>) -> &'static st
 }
 
 fn same_tags(left: &[String], right: &[String]) -> bool {
-    left == right
+    fn normalize(values: &[String]) -> Vec<String> {
+        let mut normalized: Vec<String> = values
+            .iter()
+            .map(|tag| tag.trim())
+            .filter(|tag| !tag.is_empty())
+            .map(|tag| tag.to_string())
+            .collect();
+        normalized.sort();
+        normalized.dedup();
+        normalized
+    }
+
+    normalize(left) == normalize(right)
 }
 
 pub(crate) fn push_recent_area(user: &mut UserRecord, parent: &str, child: &str) {

@@ -90,6 +90,21 @@ struct ReplaySessionSeed {
     room_id: i64,
 }
 
+fn canonical_session_duration(seed: &ReplaySessionSeed) -> i64 {
+    if seed.duration > 0 {
+        return seed.duration;
+    }
+    seed.end_time.saturating_sub(seed.start_time).max(0)
+}
+
+fn display_live_time(stats_live_time: i64, canonical_duration: i64) -> i64 {
+    if canonical_duration > 0 {
+        canonical_duration
+    } else {
+        stats_live_time.max(0)
+    }
+}
+
 #[derive(Debug)]
 enum DashboardFetchError {
     Auth { reason: String },
@@ -134,8 +149,9 @@ pub async fn get_live_dashboard_snapshot_inner(state: State<'_, AppState>) -> Cm
     let mut sessions = Vec::with_capacity(replay_items.len());
     let mut latest_session = None;
     for (index, replay) in replay_items.into_iter().enumerate() {
+        let canonical_duration = canonical_session_duration(&replay);
         let stop_live_result = fetch_stop_live_data(&state, &cookie, &replay.live_key).await;
-        let stats = match stop_live_result {
+        let mut stats = match stop_live_result {
             Ok(stats) => Some(stats),
             Err(DashboardFetchError::Auth { reason }) => {
                 mark_current_user_login_invalid(&state, &reason).await;
@@ -143,6 +159,9 @@ pub async fn get_live_dashboard_snapshot_inner(state: State<'_, AppState>) -> Cm
             }
             Err(DashboardFetchError::Recoverable(_)) => None,
         };
+        if let Some(entry) = stats.as_mut() {
+            entry.live_time = display_live_time(entry.live_time, canonical_duration);
+        }
 
         let summary = LiveSessionSummary {
             live_key: replay.live_key.clone(),
@@ -150,7 +169,7 @@ pub async fn get_live_dashboard_snapshot_inner(state: State<'_, AppState>) -> Cm
             cover: replay.cover,
             start_time: replay.start_time,
             end_time: replay.end_time,
-            duration: replay.duration,
+            duration: canonical_duration,
             platform: replay.platform,
             room_id: replay.room_id,
             stats,
@@ -381,7 +400,10 @@ fn format_cst(ts: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_cst, map_replay_session, map_stop_live_stats};
+    use super::{
+        canonical_session_duration, display_live_time, format_cst, map_replay_session,
+        map_stop_live_stats, ReplaySessionSeed,
+    };
     use serde_json::json;
 
     #[test]
@@ -427,5 +449,27 @@ mod tests {
     #[test]
     fn formats_cst_timestamp() {
         assert_eq!(format_cst(0), "1970-01-01 08:00:00");
+    }
+
+    #[test]
+    fn prefers_replay_duration_for_display_live_time() {
+        assert_eq!(display_live_time(100800, 420), 420);
+        assert_eq!(display_live_time(180, 0), 180);
+        assert_eq!(display_live_time(-8, 0), 0);
+    }
+
+    #[test]
+    fn canonical_duration_falls_back_to_end_minus_start() {
+        let seed = ReplaySessionSeed {
+            live_key: "live-key".to_string(),
+            title: "title".to_string(),
+            cover: String::new(),
+            start_time: 100,
+            end_time: 220,
+            duration: 0,
+            platform: "pc_link".to_string(),
+            room_id: 1,
+        };
+        assert_eq!(canonical_session_duration(&seed), 120);
     }
 }

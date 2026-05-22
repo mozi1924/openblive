@@ -121,6 +121,7 @@ export function useStudioController() {
   const confirmSelectValueRef = useRef("");
   const topNoticeSeqRef = useRef(0);
   const topNoticeTimersRef = useRef<Map<number, number>>(new Map());
+  const tagAuditBootstrapKeyRef = useRef("");
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   useWindowDrag(sidebarDragRef, headerDragRef);
@@ -383,6 +384,10 @@ export function useStudioController() {
       profileState.area.review === "pending" ||
       profileState.tags.review === "pending",
     [profileState],
+  );
+  const needsTagAuditBootstrap = useMemo(
+    () => tags.length > 0 && tags.some((tag) => !(tag in tagAuditStatusMap)),
+    [tagAuditStatusMap, tags],
   );
 
   const hasLiveAuth = Boolean(currentUser?.uid?.trim() && !currentUser?.login_invalid);
@@ -716,12 +721,27 @@ export function useStudioController() {
   }, [hasLiveAuth, hasPendingReviewOption, refreshLiveTags, syncLiveRoomProfile]);
 
   useEffect(() => {
-    if (!hasLiveAuth || !hasPendingReviewOption) {
+    if (!hasLiveAuth) {
       setTagAuditStatusMap({});
+      return;
+    }
+    if (!hasPendingReviewOption) {
       return;
     }
     void refreshLiveTags();
   }, [hasLiveAuth, hasPendingReviewOption, currentUser?.uid, refreshLiveTags]);
+
+  useEffect(() => {
+    if (!hasLiveAuth || !currentUser?.uid || !needsTagAuditBootstrap) {
+      return;
+    }
+    const key = `${currentUser.uid}:${tagsToKey(tags)}`;
+    if (tagAuditBootstrapKeyRef.current === key) {
+      return;
+    }
+    tagAuditBootstrapKeyRef.current = key;
+    void refreshLiveTags();
+  }, [currentUser?.uid, hasLiveAuth, needsTagAuditBootstrap, refreshLiveTags, tags]);
 
   const copyToClipboard = useCallback(
     async (text: string, type: string) => {
