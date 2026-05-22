@@ -30,7 +30,12 @@ fn overlay_roots(app: &AppHandle) -> Vec<PathBuf> {
         // Tauri v2 may place `bundle.resources` under `Resources/_up_/...`.
         push_unique(resource_dir.join("_up_"));
         push_unique(resource_dir.join("_up_").join("dist"));
-        push_unique(resource_dir.join("_up_").join("overlay-compat").join("dist"));
+        push_unique(
+            resource_dir
+                .join("_up_")
+                .join("overlay-compat")
+                .join("dist"),
+        );
     }
     if let Ok(cwd) = std::env::current_dir() {
         push_unique(cwd.join("dist"));

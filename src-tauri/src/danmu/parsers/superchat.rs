@@ -109,4 +109,3 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
 
     None
 }
-

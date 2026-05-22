@@ -26,6 +26,7 @@ type UseAccountControllerParams = {
   areaDirtyRef: MutableRefObject<boolean>;
   tagsDirtyRef: MutableRefObject<boolean>;
   coverDirtyRef: MutableRefObject<boolean>;
+  roomNewsDirtyRef: MutableRefObject<boolean>;
   coverDraftVersionRef: MutableRefObject<number>;
   loginPollBusyRef: MutableRefObject<boolean>;
   loginStatusCodeRef: MutableRefObject<number | null>;
@@ -58,6 +59,7 @@ type UseAccountControllerParams = {
       forceArea?: boolean;
       forceTags?: boolean;
       forceCover?: boolean;
+      forceRoomNews?: boolean;
     },
   ) => void;
   clearDanmuAssetsAndVoteState: () => void;
@@ -80,6 +82,7 @@ export function useAccountController({
   areaDirtyRef,
   tagsDirtyRef,
   coverDirtyRef,
+  roomNewsDirtyRef,
   coverDraftVersionRef,
   loginPollBusyRef,
   loginStatusCodeRef,
@@ -159,6 +162,7 @@ export function useAccountController({
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
       coverDirtyRef.current = false;
+      roomNewsDirtyRef.current = false;
       setTitle(t(localeSetting, "ui.ctrl.default_title"));
       setParent("");
       setChild("");
@@ -179,12 +183,14 @@ export function useAccountController({
       forceArea: isAccountSwitched,
       forceTags: isAccountSwitched,
       forceCover: isAccountSwitched,
+      forceRoomNews: isAccountSwitched,
     });
     if (isAccountSwitched) {
       titleDirtyRef.current = false;
       areaDirtyRef.current = false;
       tagsDirtyRef.current = false;
       coverDirtyRef.current = false;
+      roomNewsDirtyRef.current = false;
     }
     setRecentAreas(user.recent_areas || []);
     await syncTrayMenu();
@@ -209,6 +215,7 @@ export function useAccountController({
     syncTrayMenu,
     tagsDirtyRef,
     titleDirtyRef,
+    roomNewsDirtyRef,
   ]);
 
   const loadAccounts = useCallback(async () => {
@@ -238,6 +245,7 @@ export function useAccountController({
       applyProfileState(nextProfileState);
       const profilePatch = {
         last_title: res.data.title || nextProfileState.title.submitted,
+        last_room_news: res.data.room_news ?? currentUserRef.current?.last_room_news ?? "",
         last_area_name: [
           res.data.parent || nextProfileState.area.submitted_parent,
           res.data.child || nextProfileState.area.submitted_child,
@@ -246,7 +254,16 @@ export function useAccountController({
         last_cover: res.data.cover || nextProfileState.cover.submitted,
         last_cover_asset: res.data.cover_asset_url || currentUserRef.current?.last_cover_asset || "",
         live_profile_state: nextProfileState,
-      } as Pick<User, "last_title" | "last_area_name" | "last_tags" | "last_cover" | "last_cover_asset" | "live_profile_state">;
+      } as Pick<
+        User,
+        | "last_title"
+        | "last_room_news"
+        | "last_area_name"
+        | "last_tags"
+        | "last_cover"
+        | "last_cover_asset"
+        | "live_profile_state"
+      >;
       const draftUser = {
         ...(currentUserRef.current || {
           uid: activeUidRef.current || "",
@@ -269,7 +286,11 @@ export function useAccountController({
         forceArea: forceAllDrafts,
         forceTags: forceAllDrafts,
         forceCover: forceAllDrafts,
+        forceRoomNews: forceAllDrafts,
       });
+      if (forceAllDrafts) {
+        roomNewsDirtyRef.current = false;
+      }
       setCurrentUser((prev) => {
         if (!prev) {
           return draftUser;
@@ -405,11 +426,13 @@ export function useAccountController({
         titleDirtyRef.current = false;
         areaDirtyRef.current = false;
         tagsDirtyRef.current = false;
+        roomNewsDirtyRef.current = false;
         applyUserDraftValues(res.data, {
           forceTitle: true,
           forceArea: true,
           forceTags: true,
           forceCover: true,
+          forceRoomNews: true,
         });
         setRecentAreas(res.data.recent_areas || []);
         append(
@@ -473,6 +496,7 @@ export function useAccountController({
     syncLiveRoomProfile,
     tagsDirtyRef,
     titleDirtyRef,
+    roomNewsDirtyRef,
   ]);
 
   const switchAccount = useCallback(
@@ -489,11 +513,13 @@ export function useAccountController({
           titleDirtyRef.current = false;
           areaDirtyRef.current = false;
           tagsDirtyRef.current = false;
+          roomNewsDirtyRef.current = false;
           applyUserDraftValues(res.data, {
             forceTitle: true,
             forceArea: true,
             forceTags: true,
             forceCover: true,
+            forceRoomNews: true,
           });
           setRecentAreas(res.data.recent_areas || []);
           append(tf(localeSetting, "ui.ctrl.switched_account", { name: res.data.uname }));
@@ -527,6 +553,7 @@ export function useAccountController({
       syncLiveRoomProfile,
       tagsDirtyRef,
       titleDirtyRef,
+      roomNewsDirtyRef,
     ],
   );
 

@@ -10,7 +10,10 @@ use super::types::{RawActionFrame, WsServerRuntimeState};
 use super::utils::{invoke_cmd, now_unix_secs};
 use crate::state::AppState;
 
-pub(in crate::ws_server) async fn raw_ws_session(socket: WebSocket, state: Arc<WsServerRuntimeState>) {
+pub(in crate::ws_server) async fn raw_ws_session(
+    socket: WebSocket,
+    state: Arc<WsServerRuntimeState>,
+) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
     let (out_tx, mut out_rx) = mpsc::channel::<Message>(RAW_DANMU_MAX_BUFFER);
@@ -127,21 +130,29 @@ pub(in crate::ws_server) async fn raw_ws_session(socket: WebSocket, state: Arc<W
     writer.abort();
 }
 
-async fn run_action(state: &WsServerRuntimeState, action: &str, _params: Value) -> Result<Value, String> {
+async fn run_action(
+    state: &WsServerRuntimeState,
+    action: &str,
+    _params: Value,
+) -> Result<Value, String> {
     match action {
         "live.start" => invoke_cmd(
-            crate::commands::start_live_flow_inner(&state.app, &state.app.state::<AppState>()).await,
+            crate::commands::start_live_flow_inner(&state.app, &state.app.state::<AppState>())
+                .await,
         ),
         "live.stop" => invoke_cmd(
             crate::commands::stop_live_flow_inner(&state.app, &state.app.state::<AppState>()).await,
         ),
         "danmu.start" => invoke_cmd(
-            crate::commands::start_danmu_monitor_for_ws(&state.app, &state.app.state::<AppState>()).await,
+            crate::commands::start_danmu_monitor_for_ws(&state.app, &state.app.state::<AppState>())
+                .await,
         ),
         "danmu.stop" => invoke_cmd(
             crate::commands::stop_danmu_monitor_for_ws(&state.app.state::<AppState>()).await,
         ),
-        "danmu.recent" => invoke_cmd(crate::commands::get_recent_danmu_for_ws(&state.app.state::<AppState>()).await),
+        "danmu.recent" => invoke_cmd(
+            crate::commands::get_recent_danmu_for_ws(&state.app.state::<AppState>()).await,
+        ),
         "session.get" => {
             let app_state = state.app.state::<AppState>();
             let runtime = app_state.runtime.lock().await;
@@ -156,7 +167,9 @@ async fn run_action(state: &WsServerRuntimeState, action: &str, _params: Value) 
     }
 }
 
-pub(in crate::ws_server) async fn fetch_recent_danmu_messages_for_ws(app: &tauri::AppHandle) -> Vec<Value> {
+pub(in crate::ws_server) async fn fetch_recent_danmu_messages_for_ws(
+    app: &tauri::AppHandle,
+) -> Vec<Value> {
     let app_state = app.state::<AppState>();
     match crate::commands::get_recent_danmu_for_ws(&app_state).await {
         Ok(payload) => payload

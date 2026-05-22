@@ -95,7 +95,8 @@ pub async fn refresh_cover_cache(
 
     let dir = cover_dir(config_path);
     std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
-    let file = cover_path(config_path, &normalized).ok_or_else(|| "invalid cover url".to_string())?;
+    let file =
+        cover_path(config_path, &normalized).ok_or_else(|| "invalid cover url".to_string())?;
     std::fs::write(file, &bytes).map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -112,12 +113,16 @@ pub async fn ensure_cover_data_url(
     if let Some(data_url) = load_cached_cover_data_url(config_path, &normalized) {
         return Some(data_url);
     }
-    if refresh_cover_cache(client, config_path, &normalized).await.is_err() {
+    if refresh_cover_cache(client, config_path, &normalized)
+        .await
+        .is_err()
+    {
         return None;
     }
     load_cached_cover_data_url(config_path, &normalized)
 }
 
 pub fn apply_cached_cover_to_user(config_path: &Path, user: &mut UserRecord) {
-    user.last_cover_asset = load_cached_cover_data_url(config_path, &user.last_cover).unwrap_or_default();
+    user.last_cover_asset =
+        load_cached_cover_data_url(config_path, &user.last_cover).unwrap_or_default();
 }

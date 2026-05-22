@@ -175,6 +175,7 @@ pub async fn poll_login_status(
         follower: 0,
         dynamic_count: 0,
         last_title: old.last_title,
+        last_room_news: old.last_room_news,
         last_area_id: old.last_area_id,
         last_area_name: old.last_area_name,
         last_tags: old.last_tags,
@@ -242,7 +243,9 @@ pub async fn load_saved_config(state: State<'_, AppState>) -> CmdResult {
                 crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
             }
         }
-        if !user.last_cover.trim().is_empty() && !has_cached_cover(&state.config_path, &user.last_cover) {
+        if !user.last_cover.trim().is_empty()
+            && !has_cached_cover(&state.config_path, &user.last_cover)
+        {
             if let Err(error) =
                 refresh_cover_cache(&state.client, &state.config_path, &user.last_cover).await
             {
@@ -352,7 +355,8 @@ pub async fn switch_account(app: AppHandle, req: UidReq, state: State<'_, AppSta
             crate::runtime_warn!("avatar cache warmup failed for uid {}: {}", user.uid, error);
         }
     }
-    if !user.last_cover.trim().is_empty() && !has_cached_cover(&state.config_path, &user.last_cover) {
+    if !user.last_cover.trim().is_empty() && !has_cached_cover(&state.config_path, &user.last_cover)
+    {
         if let Err(error) =
             refresh_cover_cache(&state.client, &state.config_path, &user.last_cover).await
         {

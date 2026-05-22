@@ -18,7 +18,9 @@ pub(in crate::ws_server) fn normalize_listen_addr(raw: &str) -> String {
         .to_string()
 }
 
-pub(in crate::ws_server) async fn resolve_bind_addr(listen_addr: &str) -> Result<SocketAddr, String> {
+pub(in crate::ws_server) async fn resolve_bind_addr(
+    listen_addr: &str,
+) -> Result<SocketAddr, String> {
     if let Ok(addr) = listen_addr.parse::<SocketAddr>() {
         return Ok(addr);
     }

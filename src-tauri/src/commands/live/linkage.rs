@@ -400,7 +400,6 @@ where
                     trigger_reason = reason;
                     break;
                 }
-
             }
             Err(error) => {
                 crate::runtime_warn!(
@@ -558,10 +557,7 @@ fn obs_should_trigger_fallback(
     reconnect_attempts: usize,
 ) -> Option<String> {
     if reconnect_attempts >= OBS_RECONNECT_TRIGGER_COUNT {
-        return Some(format!(
-            "reconnecting({} attempts)",
-            reconnect_attempts
-        ));
+        return Some(format!("reconnecting({} attempts)", reconnect_attempts));
     }
 
     if status.output_state == "OBS_WEBSOCKET_OUTPUT_STOPPED"

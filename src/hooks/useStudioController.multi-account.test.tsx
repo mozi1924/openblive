@@ -34,6 +34,8 @@ const { mockStudioApi } = vi.hoisted(() => ({
     getPartitions: vi.fn(),
     updateArea: vi.fn(),
     updateTitle: vi.fn(),
+    updateRoomNews: vi.fn(),
+    createLiveReserve: vi.fn(),
     syncLiveStatus: vi.fn(),
     syncLiveRoomProfile: vi.fn(),
     getLiveCoverHistory: vi.fn(),

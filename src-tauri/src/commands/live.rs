@@ -5,11 +5,11 @@ use crate::constants::CmdResult;
 use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
-    AddBlackUserReq, AddLiveTagReq, AddRoomAdminReq, AddSilentUserReq, CreateLiveVoteReq, DanmuReq,
-    GetBlackUserListReq, GetLiveCoverAdviceReq, GetRoomAdminListReq, GetSilentUserListReq,
-    RemoveBlackUserReq, RemoveLiveTagReq, RemoveRoomAdminReq, RemoveSilentUserReq,
-    TerminateLiveVoteReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateTagsReq, UpdateTitleReq,
-    UploadLiveCoverReq,
+    AddBlackUserReq, AddLiveTagReq, AddRoomAdminReq, AddSilentUserReq, CreateLiveReserveReq,
+    CreateLiveVoteReq, DanmuReq, GetBlackUserListReq, GetLiveCoverAdviceReq, GetRoomAdminListReq,
+    GetSilentUserListReq, RemoveBlackUserReq, RemoveLiveTagReq, RemoveRoomAdminReq,
+    RemoveSilentUserReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateLiveCoverReq,
+    UpdateRoomNewsReq, UpdateTagsReq, UpdateTitleReq, UploadLiveCoverReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -43,12 +43,13 @@ pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 use flow::{start_live_inner, stop_live_inner};
 pub(crate) use linkage::obs_ws_probe;
 use profile_api::{
-    add_live_tag as add_live_tag_inner, get_live_cover_advice as get_live_cover_advice_inner,
+    add_live_tag as add_live_tag_inner, create_live_reserve as create_live_reserve_inner,
+    get_live_cover_advice as get_live_cover_advice_inner,
     get_live_cover_history as get_live_cover_history_inner, get_live_tags as get_live_tags_inner,
     get_partitions as get_partitions_inner, remove_live_tag as remove_live_tag_inner,
     update_area as update_area_inner, update_live_cover as update_live_cover_inner,
-    update_live_tags as update_live_tags_inner, update_title as update_title_inner,
-    upload_live_cover as upload_live_cover_inner,
+    update_live_tags as update_live_tags_inner, update_room_news as update_room_news_inner,
+    update_title as update_title_inner, upload_live_cover as upload_live_cover_inner,
 };
 use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
@@ -153,6 +154,19 @@ pub async fn update_area(req: UpdateAreaReq, state: State<'_, AppState>) -> CmdR
 #[tauri::command]
 pub async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>) -> CmdResult {
     update_title_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn update_room_news(req: UpdateRoomNewsReq, state: State<'_, AppState>) -> CmdResult {
+    update_room_news_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn create_live_reserve(
+    req: CreateLiveReserveReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    create_live_reserve_inner(req, state).await
 }
 
 #[tauri::command]

@@ -122,11 +122,19 @@ function App() {
               tagInput={state.tagInput}
               tags={state.tags}
               title={state.title}
+              roomNews={state.roomNews}
+              liveReserveTitle={state.liveReserveTitle}
+              liveReserveStartAt={state.liveReserveStartAt}
+              liveReserveCreateDynamic={state.liveReserveCreateDynamic}
               onSelectTab={actions.setActiveTab}
               onChangeChild={actions.setChild}
               onChangeParent={actions.changeParent}
               onChangeTagInput={actions.setTagInput}
               onChangeTitle={actions.setTitle}
+              onChangeRoomNews={actions.setRoomNews}
+              onChangeLiveReserveTitle={actions.setLiveReserveTitle}
+              onChangeLiveReserveStartAt={actions.setLiveReserveStartAt}
+              onChangeLiveReserveCreateDynamic={actions.setLiveReserveCreateDynamic}
               onAddTag={actions.addTag}
               onSelectCoverFile={actions.selectCoverFile}
               onSelectHistoryCover={actions.selectHistoryCover}
@@ -146,6 +154,8 @@ function App() {
               onSubmitArea={actions.submitArea}
               onSubmitCover={actions.submitCover}
               onSubmitTitle={actions.submitTitle}
+              onSubmitRoomNews={actions.submitRoomNews}
+              onSubmitLiveReserve={actions.submitLiveReserve}
             />
           )}
 

@@ -1,8 +1,8 @@
 use crate::endpoints;
 use anyhow::Result;
-use reqwest::multipart::Form;
 use reqwest::cookie::{CookieStore, Jar};
 use reqwest::header::{COOKIE, USER_AGENT};
+use reqwest::multipart::Form;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use url::Url;

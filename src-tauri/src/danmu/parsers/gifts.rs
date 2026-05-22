@@ -35,7 +35,10 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
             .get("giftName")
             .and_then(|value| value.as_str())
             .unwrap_or("i18n.live.event.fallback.gift");
-        let num = data.get("num").and_then(|value| value.as_i64()).unwrap_or(1);
+        let num = data
+            .get("num")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(1);
         let gift_unit_price = data
             .get("price")
             .and_then(|value| value.as_i64())
@@ -43,7 +46,10 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
         let gift_total_coin = data
             .get("total_coin")
             .and_then(|value| value.as_i64())
-            .or_else(|| data.get("combo_total_coin").and_then(|value| value.as_i64()))
+            .or_else(|| {
+                data.get("combo_total_coin")
+                    .and_then(|value| value.as_i64())
+            })
             .unwrap_or_else(|| gift_unit_price.saturating_mul(num.max(1)));
         let gift_coin_type = data
             .get("coin_type")
@@ -91,7 +97,10 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
             .get("gift_name")
             .and_then(|value| value.as_str())
             .unwrap_or("i18n.live.event.fallback.guard");
-        let guard_count = data.get("num").and_then(|value| value.as_i64()).unwrap_or(1);
+        let guard_count = data
+            .get("num")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(1);
         let guard_unit_price = data
             .get("price")
             .and_then(|value| value.as_i64())
@@ -120,4 +129,3 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
 
     None
 }
-

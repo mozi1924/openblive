@@ -164,6 +164,8 @@ pub struct UserRecord {
     #[serde(default)]
     pub last_title: String,
     #[serde(default)]
+    pub last_room_news: String,
+    #[serde(default)]
     pub last_area_id: String,
     #[serde(default)]
     pub last_area_name: Vec<String>,
@@ -427,6 +429,19 @@ pub struct UpdateAreaReq {
 #[derive(Deserialize)]
 pub struct UpdateTitleReq {
     pub title: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateRoomNewsReq {
+    pub content: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateLiveReserveReq {
+    pub title: String,
+    pub live_plan_start_time: i64,
+    #[serde(default)]
+    pub create_dynamic: Option<bool>,
 }
 
 #[derive(Deserialize)]

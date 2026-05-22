@@ -4,9 +4,9 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::net::SocketAddr;
 
 use super::auth::is_authorized;
 use super::compat::compat_ws_session;

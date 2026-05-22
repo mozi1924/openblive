@@ -107,7 +107,8 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
         } else {
             "i18n.live.event.interact.received"
         };
-        let has_resolved_detail = msg_type > 0 || sender_uid.is_some() || sender_name_color.is_some();
+        let has_resolved_detail =
+            msg_type > 0 || sender_uid.is_some() || sender_name_color.is_some();
         let content = if has_resolved_detail {
             format!("{sender} {action_text}")
         } else {
@@ -190,4 +191,3 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
 
     None
 }
-

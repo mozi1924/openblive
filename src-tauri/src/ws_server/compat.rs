@@ -5,11 +5,16 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
 
-use super::constants::{CHAT_DANMU_MAX_BUFFER, CHAT_HEARTBEAT_INTERVAL_SECS, COMPAT_DEFAULT_AVATAR_URL};
+use super::constants::{
+    CHAT_DANMU_MAX_BUFFER, CHAT_HEARTBEAT_INTERVAL_SECS, COMPAT_DEFAULT_AVATAR_URL,
+};
 use super::types::{CompatIncomingFrame, CompatSessionState, WsServerRuntimeState};
 use super::utils::now_unix_secs;
 
-pub(in crate::ws_server) async fn compat_ws_session(socket: WebSocket, state: Arc<WsServerRuntimeState>) {
+pub(in crate::ws_server) async fn compat_ws_session(
+    socket: WebSocket,
+    state: Arc<WsServerRuntimeState>,
+) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (out_tx, mut out_rx) = mpsc::channel::<Message>(CHAT_DANMU_MAX_BUFFER);
 
@@ -79,7 +84,8 @@ pub(in crate::ws_server) async fn compat_ws_session(socket: WebSocket, state: Ar
                 };
                 // roomId / roomKey / 身份码相关字段全部兼容接收，但忽略。
                 if should_send_recent {
-                    let recent_messages = super::raw::fetch_recent_danmu_messages_for_ws(&state.app).await;
+                    let recent_messages =
+                        super::raw::fetch_recent_danmu_messages_for_ws(&state.app).await;
                     for payload in recent_messages {
                         if let Some(frame) = map_danmu_to_compat_frame(&payload) {
                             if out_tx

@@ -22,6 +22,7 @@ import type {
   GetLiveCoverHistoryResp,
   AddLiveTagResp,
   LiveCoverAdvice,
+  CreateLiveReserveResp,
   RemoveLiveTagResp,
   QrPayload,
   LiveRoomProfile,
@@ -31,6 +32,7 @@ import type {
   StreamInfo,
   UpdateAreaResp,
   UpdateLiveCoverResp,
+  UpdateRoomNewsResp,
   UpdateTagsResp,
   UpdateTitleResp,
   UploadLiveCoverResp,
@@ -86,6 +88,16 @@ export const studioApi = {
     invokeCommand<UpdateAreaResp>("update_area", { req: { parent, child } }),
   updateTitle: (title: string) =>
     invokeCommand<UpdateTitleResp>("update_title", { req: { title } }),
+  updateRoomNews: (content: string) =>
+    invokeCommand<UpdateRoomNewsResp>("update_room_news", { req: { content } }),
+  createLiveReserve: (title: string, livePlanStartTime: number, createDynamic = false) =>
+    invokeCommand<CreateLiveReserveResp>("create_live_reserve", {
+      req: {
+        title,
+        live_plan_start_time: livePlanStartTime,
+        create_dynamic: createDynamic,
+      },
+    }),
   syncLiveStatus: () => invokeCommand<Session>("sync_live_status"),
   syncLiveRoomProfile: () =>
     invokeCommand<LiveRoomProfile>("sync_live_room_profile"),

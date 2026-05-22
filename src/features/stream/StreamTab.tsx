@@ -49,6 +49,10 @@ type StreamTabProps = {
   tagInput: string;
   tags: string[];
   title: string;
+  roomNews: string;
+  liveReserveTitle: string;
+  liveReserveStartAt: string;
+  liveReserveCreateDynamic: boolean;
   recentAreas: Array<{ parent: string; child: string }>;
   hasUnsavedChanges: boolean;
   hasAttentionStatus: boolean;
@@ -66,6 +70,10 @@ type StreamTabProps = {
   onChangeParent: (value: string) => void;
   onChangeTagInput: React.Dispatch<React.SetStateAction<string>>;
   onChangeTitle: React.Dispatch<React.SetStateAction<string>>;
+  onChangeRoomNews: React.Dispatch<React.SetStateAction<string>>;
+  onChangeLiveReserveTitle: React.Dispatch<React.SetStateAction<string>>;
+  onChangeLiveReserveStartAt: React.Dispatch<React.SetStateAction<string>>;
+  onChangeLiveReserveCreateDynamic: React.Dispatch<React.SetStateAction<boolean>>;
   onAddTag: () => void;
   onSelectCoverFile: (file: File | null) => Promise<void>;
   onSelectHistoryCover: (coverUrl: string, assetUrl?: string) => void;
@@ -78,6 +86,8 @@ type StreamTabProps = {
   onSubmitArea: (event: React.FormEvent) => Promise<void>;
   onSubmitCover: () => Promise<void>;
   onSubmitTitle: (event: React.FormEvent) => Promise<void>;
+  onSubmitRoomNews: (event: React.FormEvent) => Promise<void>;
+  onSubmitLiveReserve: (event: React.FormEvent) => Promise<void>;
 };
 
 function SectionBadge({
@@ -132,6 +142,10 @@ export function StreamTab({
   tagInput,
   tags,
   title,
+  roomNews,
+  liveReserveTitle,
+  liveReserveStartAt,
+  liveReserveCreateDynamic,
   recentAreas,
   hasUnsavedChanges,
   hasAttentionStatus,
@@ -143,6 +157,10 @@ export function StreamTab({
   onChangeParent,
   onChangeTagInput,
   onChangeTitle,
+  onChangeRoomNews,
+  onChangeLiveReserveTitle,
+  onChangeLiveReserveStartAt,
+  onChangeLiveReserveCreateDynamic,
   onAddTag,
   onSelectCoverFile,
   onSelectHistoryCover,
@@ -155,6 +173,8 @@ export function StreamTab({
   onSubmitArea,
   onSubmitCover,
   onSubmitTitle,
+  onSubmitRoomNews,
+  onSubmitLiveReserve,
 }: StreamTabProps) {
   const streamEndpoints = buildStreamEndpoints(rtmp);
   const primaryEndpoint = streamEndpoints[0];
@@ -456,6 +476,78 @@ export function StreamTab({
                   {titleAuditDetail} · {profileState.title.message}
                 </p>
               )}
+            </form>
+
+            <div className="h-px bg-white/5" />
+
+            <form onSubmit={(event) => void onSubmitRoomNews(event)} className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
+                  {t(locale, "ui.stream.room_news.label")}
+                </label>
+                <span className="rounded border border-white/10 bg-white/4 px-2 py-0.5 text-[10px] text-gray-400">
+                  {tf(locale, "ui.stream.room_news.length", { count: roomNews.trim().length })}
+                </span>
+              </div>
+              <textarea
+                value={roomNews}
+                onChange={(event) => onChangeRoomNews(event.target.value)}
+                maxLength={60}
+                rows={3}
+                placeholder={t(locale, "ui.stream.room_news.placeholder")}
+                className="w-full resize-none rounded-lg border border-white/8 bg-white/1.5 px-3.5 py-2 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/3 focus:outline-none hover:border-white/12"
+              />
+              <div className="flex items-center justify-end">
+                <button
+                  type="submit"
+                  className="flex h-9 items-center justify-center rounded-lg border border-bili-blue/20 bg-bili-blue/10 px-4 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue hover:text-white active:scale-95"
+                >
+                  {t(locale, "ui.stream.room_news.update")}
+                </button>
+              </div>
+            </form>
+
+            <div className="h-px bg-white/5" />
+
+            <form onSubmit={(event) => void onSubmitLiveReserve(event)} className="space-y-3">
+              <label className="text-[10px] font-extrabold tracking-wider text-gray-500 uppercase">
+                {t(locale, "ui.stream.reserve.label")}
+              </label>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={liveReserveTitle}
+                  onChange={(event) => onChangeLiveReserveTitle(event.target.value)}
+                  placeholder={t(locale, "ui.stream.reserve.title_placeholder")}
+                  className="w-full rounded-lg border border-white/8 bg-white/1.5 px-3.5 py-2 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/3 focus:outline-none hover:border-white/12"
+                />
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <input
+                    type="datetime-local"
+                    value={liveReserveStartAt}
+                    onChange={(event) => onChangeLiveReserveStartAt(event.target.value)}
+                    className="h-9 w-full rounded-lg border border-white/8 bg-white/1.5 px-3 text-xs text-white transition-all focus:border-bili-blue/40 focus:bg-white/3 focus:outline-none hover:border-white/12"
+                  />
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-3 py-2 text-xs text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={liveReserveCreateDynamic}
+                      onChange={(event) => onChangeLiveReserveCreateDynamic(event.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-white/20 bg-transparent accent-bili-blue"
+                    />
+                    <span>{t(locale, "ui.stream.reserve.dynamic")}</span>
+                  </label>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] text-gray-500">{t(locale, "ui.stream.reserve.hint")}</p>
+                <button
+                  type="submit"
+                  className="flex h-9 items-center justify-center rounded-lg border border-bili-blue/20 bg-bili-blue/10 px-4 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue hover:text-white active:scale-95"
+                >
+                  {t(locale, "ui.stream.reserve.publish")}
+                </button>
+              </div>
             </form>
 
             <div className="h-px bg-white/5" />

@@ -3,8 +3,7 @@ use super::common::{
     live_platform, mark_current_user_login_invalid,
 };
 use super::profile::{
-    cover_review_from_audit_status, normalize_cover_url, split_tags,
-    title_review_from_audit_status,
+    cover_review_from_audit_status, normalize_cover_url, split_tags, title_review_from_audit_status,
 };
 use super::profile_sync::fetch_pre_live_info;
 use super::session::{current_timestamp, resolve_current_auth_context};
@@ -13,13 +12,14 @@ use crate::constants::CmdResult;
 use crate::cover_cache::ensure_cover_data_url;
 use crate::endpoints;
 use crate::models::{
-    sync_live_profile_state_defaults, AddLiveTagReq, GetLiveCoverAdviceReq,
-    RemoveLiveTagReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateTagsReq, UpdateTitleReq,
-    UploadLiveCoverReq,
+    sync_live_profile_state_defaults, AddLiveTagReq, CreateLiveReserveReq, GetLiveCoverAdviceReq,
+    RemoveLiveTagReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateRoomNewsReq, UpdateTagsReq,
+    UpdateTitleReq, UploadLiveCoverReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use base64::Engine;
+use rand::{distributions::Alphanumeric, Rng};
 use reqwest::multipart::{Form, Part};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
@@ -72,7 +72,10 @@ fn tags_review_from_audit_status(tags: &[LiveTagEntry]) -> &'static str {
     "unknown"
 }
 
-async fn fetch_live_tags_remote(state: &AppState, cookie: &str) -> Result<serde_json::Value, String> {
+async fn fetch_live_tags_remote(
+    state: &AppState,
+    cookie: &str,
+) -> Result<serde_json::Value, String> {
     state
         .client
         .get_json_with_cookie(
@@ -112,6 +115,15 @@ fn build_live_cover_update_form(
     form
 }
 
+fn random_visit_id(length: usize) -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(length)
+        .map(char::from)
+        .collect::<String>()
+        .to_lowercase()
+}
+
 fn decode_cover_data_url(
     data_url: &str,
     mime_type_hint: Option<&str>,
@@ -131,7 +143,11 @@ fn decode_cover_data_url(
         .next()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .or_else(|| mime_type_hint.map(str::trim).filter(|value| !value.is_empty()))
+        .or_else(|| {
+            mime_type_hint
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
         .unwrap_or("image/jpeg")
         .to_string();
     let bytes = base64::engine::general_purpose::STANDARD
@@ -244,10 +260,7 @@ pub(crate) async fn get_live_cover_history(state: State<'_, AppState>) -> CmdRes
         .client
         .get_json_with_cookie(
             &endpoints::live_api("/xlive/app-blink/v1/preLive/GetCoverHistory"),
-            &[
-                ("platform", "web".to_string()),
-                ("build", "1".to_string()),
-            ],
+            &[("platform", "web".to_string()), ("build", "1".to_string())],
             &cookie,
         )
         .await
@@ -283,9 +296,10 @@ pub(crate) async fn get_live_cover_history(state: State<'_, AppState>) -> CmdRes
                 .and_then(serde_json::Value::as_str)
                 .map(normalize_cover_url)
                 .unwrap_or_default();
-            let cover_asset_url = ensure_cover_data_url(&state.client, &state.config_path, &cover_url)
-                .await
-                .unwrap_or_default();
+            let cover_asset_url =
+                ensure_cover_data_url(&state.client, &state.config_path, &cover_url)
+                    .await
+                    .unwrap_or_default();
             object.insert("cover_url".into(), json!(cover_url));
             object.insert("cover_asset_url".into(), json!(cover_asset_url));
         }
@@ -362,8 +376,7 @@ pub(crate) async fn upload_live_cover(
         return Err("i18n.account.error.local_credential_empty".into());
     }
 
-    let (bytes, mime_type) =
-        decode_cover_data_url(&req.data_url, req.mime_type.as_deref())?;
+    let (bytes, mime_type) = decode_cover_data_url(&req.data_url, req.mime_type.as_deref())?;
     let file_name = normalize_cover_file_name(req.file_name.as_deref(), &mime_type);
     let part = Part::bytes(bytes)
         .file_name(file_name)
@@ -397,15 +410,15 @@ pub(crate) async fn upload_live_cover(
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
                 &state,
-                &format!("upload_live_cover code={code}, msg={}", error_message(&value, "")),
+                &format!(
+                    "upload_live_cover code={code}, msg={}",
+                    error_message(&value, "")
+                ),
             )
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        return Err(error_message(
-            &value,
-            "i18n.live.error.upload_cover_failed",
-        ));
+        return Err(error_message(&value, "i18n.live.error.upload_cover_failed"));
     }
 
     Ok(wrap_ok(json!({
@@ -451,15 +464,15 @@ pub(crate) async fn update_live_cover(
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
                 &state,
-                &format!("update_live_cover code={code}, msg={}", error_message(&value, "")),
+                &format!(
+                    "update_live_cover code={code}, msg={}",
+                    error_message(&value, "")
+                ),
             )
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        return Err(error_message(
-            &value,
-            "i18n.live.error.update_cover_failed",
-        ));
+        return Err(error_message(&value, "i18n.live.error.update_cover_failed"));
     }
 
     let remote_cover = fetch_pre_live_info(&state, &cookie)
@@ -485,9 +498,10 @@ pub(crate) async fn update_live_cover(
             )
         })
         .unwrap_or_else(|| ("unknown".to_string(), String::new()));
-    let remote_cover_asset = ensure_cover_data_url(&state.client, &state.config_path, &remote_cover)
-        .await
-        .unwrap_or_default();
+    let remote_cover_asset =
+        ensure_cover_data_url(&state.client, &state.config_path, &remote_cover)
+            .await
+            .unwrap_or_default();
 
     let mut runtime = state.runtime.lock().await;
     if let Some(user) = runtime.config.users.get_mut(&uid) {
@@ -665,6 +679,166 @@ pub(crate) async fn update_title(req: UpdateTitleReq, state: State<'_, AppState>
     }
 }
 
+pub(crate) async fn update_room_news(
+    req: UpdateRoomNewsReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let content = req.content.trim().to_string();
+    if content.chars().count() > 60 {
+        return Err("i18n.live.error.update_room_news_too_long".into());
+    }
+
+    let (uid, room_id, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+
+    let room_id_num = room_id
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "i18n.live.error.room_id_missing".to_string())?;
+    let uid_num = uid
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "i18n.common.not_logged_in".to_string())?;
+
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let mut form = BTreeMap::new();
+    form.insert("room_id".into(), room_id_num.to_string());
+    form.insert("uid".into(), uid_num.to_string());
+    form.insert("content".into(), content.clone());
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
+
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/index/updateRoomNews"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "update_room_news code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &value,
+            "i18n.live.error.update_room_news_failed",
+        ));
+    }
+
+    let mut runtime = state.runtime.lock().await;
+    if let Some(user) = runtime.config.users.get_mut(&uid) {
+        user.last_room_news = content.clone();
+        clear_user_auth_flags(user);
+    }
+    save_config(&state.config_path, &runtime.config, &state.master_key);
+
+    Ok(wrap_ok(json!({
+        "content": content,
+    })))
+}
+
+pub(crate) async fn create_live_reserve(
+    req: CreateLiveReserveReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let title = req.title.trim().to_string();
+    if title.is_empty() {
+        return Err("i18n.live.error.create_live_reserve_invalid_title".into());
+    }
+    if req.live_plan_start_time <= current_timestamp() {
+        return Err("i18n.live.error.create_live_reserve_invalid_time".into());
+    }
+
+    let (_uid, _room_id, csrf, cookie) = {
+        let runtime = state.runtime.lock().await;
+        resolve_current_auth_context(&runtime)?
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let create_dynamic = req.create_dynamic.unwrap_or(false);
+    let mut form = BTreeMap::new();
+    form.insert("title".into(), title.clone());
+    form.insert("type".into(), "2".into());
+    form.insert("from".into(), "23".into());
+    form.insert(
+        "create_dynamic".into(),
+        if create_dynamic { "1" } else { "0" }.to_string(),
+    );
+    form.insert(
+        "live_plan_start_time".into(),
+        req.live_plan_start_time.to_string(),
+    );
+    form.insert("business_type".into(), "10".into());
+    form.insert("csrf".into(), csrf.clone());
+    form.insert("csrf_token".into(), csrf);
+    form.insert("visit_id".into(), random_visit_id(16));
+
+    let value = state
+        .client
+        .post_form_with_cookie(
+            &endpoints::live_api("/xlive/app-ucenter/v2/schedule/CreateReserve"),
+            &form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "create_live_reserve code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(
+            &value,
+            "i18n.live.error.create_live_reserve_failed",
+        ));
+    }
+
+    Ok(wrap_ok(json!({
+        "sid": value["data"]["sid"].as_i64().unwrap_or_default(),
+        "title": title,
+        "live_plan_start_time": req.live_plan_start_time,
+        "create_dynamic": create_dynamic,
+    })))
+}
+
 pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppState>) -> CmdResult {
     let desired_tags = split_tags(&req.tags);
     let (uid, csrf, cookie) = {
@@ -703,11 +877,7 @@ pub(crate) async fn update_live_tags(req: UpdateTagsReq, state: State<'_, AppSta
 
     let to_add: Vec<String> = desired_tags
         .iter()
-        .filter(|tag| {
-            !current_tags
-                .iter()
-                .any(|old| old.tag_content == **tag)
-        })
+        .filter(|tag| !current_tags.iter().any(|old| old.tag_content == **tag))
         .cloned()
         .collect();
     let to_del: Vec<LiveTagEntry> = current_tags
@@ -826,15 +996,23 @@ pub(crate) async fn get_live_tags(state: State<'_, AppState>) -> CmdResult {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
                 &state,
-                &format!("get_live_tags code={code}, msg={}", error_message(&value, "")),
+                &format!(
+                    "get_live_tags code={code}, msg={}",
+                    error_message(&value, "")
+                ),
             )
             .await;
             return Err("i18n.common.login_expired_relogin".into());
         }
-        return Err(error_message(&value, "i18n.live.error.update_tags_remove_failed"));
+        return Err(error_message(
+            &value,
+            "i18n.live.error.update_tags_remove_failed",
+        ));
     }
     let tags = parse_live_tag_entries(&value);
-    Ok(wrap_ok(apply_tag_profile_snapshot(&state, &uid, &tags).await))
+    Ok(wrap_ok(
+        apply_tag_profile_snapshot(&state, &uid, &tags).await,
+    ))
 }
 
 pub(crate) async fn add_live_tag(req: AddLiveTagReq, state: State<'_, AppState>) -> CmdResult {
@@ -903,7 +1081,10 @@ pub(crate) async fn add_live_tag(req: AddLiveTagReq, state: State<'_, AppState>)
     })))
 }
 
-pub(crate) async fn remove_live_tag(req: RemoveLiveTagReq, state: State<'_, AppState>) -> CmdResult {
+pub(crate) async fn remove_live_tag(
+    req: RemoveLiveTagReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
     let target_tag = req.tag.trim().to_string();
     if target_tag.is_empty() {
         return Err("i18n.live.error.update_tags_remove_failed".into());

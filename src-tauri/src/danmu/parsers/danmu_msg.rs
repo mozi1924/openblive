@@ -4,7 +4,11 @@ use crate::danmu::helpers::{
 };
 use serde_json::{json, Value};
 
-fn parse_danmu_emoticon(meta: &[Value], extra_json: Option<&Value>, content: &str) -> Option<Value> {
+fn parse_danmu_emoticon(
+    meta: &[Value],
+    extra_json: Option<&Value>,
+    content: &str,
+) -> Option<Value> {
     let dm_type = extra_json
         .and_then(|extra| extra.get("dm_type"))
         .and_then(parse_i64)
@@ -24,7 +28,11 @@ fn parse_danmu_emoticon(meta: &[Value], extra_json: Option<&Value>, content: &st
     let emoticon_unique = emoticon_meta
         .get("emoticon_unique")
         .and_then(Value::as_str)
-        .or_else(|| extra_json.and_then(|extra| extra.get("emoticon_unique")).and_then(Value::as_str))
+        .or_else(|| {
+            extra_json
+                .and_then(|extra| extra.get("emoticon_unique"))
+                .and_then(Value::as_str)
+        })
         .unwrap_or("")
         .trim()
         .to_string();
@@ -213,4 +221,3 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
         None,
     ))
 }
-

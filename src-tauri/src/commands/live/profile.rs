@@ -19,10 +19,7 @@ pub(crate) fn title_review_from_audit_status(status: Option<i64>) -> &'static st
     }
 }
 
-pub(crate) fn cover_review_from_audit_status(
-    status: Option<i64>,
-    has_cover: bool,
-) -> &'static str {
+pub(crate) fn cover_review_from_audit_status(status: Option<i64>, has_cover: bool) -> &'static str {
     if !has_cover {
         return "none";
     }
@@ -182,7 +179,10 @@ pub(crate) fn apply_profile_state_from_remote(
         user.last_cover = normalized_cover_url.clone();
     }
     user.live_profile_state.cover.effective = normalized_cover_url.clone();
-    if same_cover(&user.live_profile_state.cover.submitted, &normalized_cover_url) {
+    if same_cover(
+        &user.live_profile_state.cover.submitted,
+        &normalized_cover_url,
+    ) {
         user.live_profile_state.cover.transport = "synced".to_string();
         user.live_profile_state.cover.review = cover_review.to_string();
         user.live_profile_state.cover.message = cover_message.to_string();

@@ -24,7 +24,8 @@ pub(in crate::ws_server) fn is_authorized(
         return true;
     }
 
-    if query_token.map(str::trim).filter(|token| !token.is_empty()) == Some(state.auth_token.trim()) {
+    if query_token.map(str::trim).filter(|token| !token.is_empty()) == Some(state.auth_token.trim())
+    {
         return true;
     }
 

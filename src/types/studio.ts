@@ -85,6 +85,7 @@ export type User = {
   money?: number;
   bcoin?: number;
   last_title: string;
+  last_room_news?: string;
   last_area_name: string[];
   last_tags?: string[];
   last_cover?: string;
@@ -181,6 +182,7 @@ export type StreamEndpoint = {
 
 export type LiveRoomProfile = {
   title: string;
+  room_news?: string;
   parent: string;
   child: string;
   area_id?: number;
@@ -198,6 +200,17 @@ export type UpdateAreaResp = {
 
 export type UpdateTitleResp = {
   profile_state?: LiveProfileState;
+};
+
+export type UpdateRoomNewsResp = {
+  content: string;
+};
+
+export type CreateLiveReserveResp = {
+  sid: number;
+  title: string;
+  live_plan_start_time: number;
+  create_dynamic: boolean;
 };
 
 export type UpdateTagsResp = {

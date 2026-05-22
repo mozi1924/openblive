@@ -118,6 +118,8 @@ struct LiveUserCacheFile {
     #[serde(default)]
     last_title: String,
     #[serde(default)]
+    last_room_news: String,
+    #[serde(default)]
     last_area_id: String,
     #[serde(default)]
     last_area_name: Vec<String>,
@@ -420,6 +422,7 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
         for (uid, cache) in live_file.users {
             if let Some(user) = cfg.users.get_mut(&uid) {
                 user.last_title = cache.last_title;
+                user.last_room_news = cache.last_room_news;
                 user.last_area_id = cache.last_area_id;
                 user.last_area_name = cache.last_area_name;
                 user.last_tags = cache.last_tags;
@@ -589,6 +592,7 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
             uid.clone(),
             LiveUserCacheFile {
                 last_title: user.last_title.clone(),
+                last_room_news: user.last_room_news.clone(),
                 last_area_id: user.last_area_id.clone(),
                 last_area_name: user.last_area_name.clone(),
                 last_tags: user.last_tags.clone(),

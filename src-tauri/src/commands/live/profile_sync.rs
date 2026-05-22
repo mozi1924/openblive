@@ -73,6 +73,33 @@ pub(crate) async fn fetch_pre_live_info(
     Ok(value["data"].clone())
 }
 
+pub(crate) async fn fetch_room_news(
+    state: &AppState,
+    room_id: &str,
+    uid: &str,
+    cookie_header: &str,
+) -> Result<serde_json::Value, String> {
+    let room_id = room_id.trim();
+    let uid = uid.trim();
+    if room_id.is_empty() || uid.is_empty() {
+        return Err("i18n.live.error.room_id_missing".to_string());
+    }
+
+    let value = state
+        .client
+        .get_json_with_cookie(
+            &endpoints::live_api("/xlive/app-blink/v1/index/getRoomNews"),
+            &[("room_id", room_id.to_string()), ("uid", uid.to_string())],
+            cookie_header,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    if value["code"].as_i64().unwrap_or(-1) != 0 {
+        return Err(error_message(&value, "i18n.live.error.sync_status_failed"));
+    }
+    Ok(value["data"].clone())
+}
+
 pub(crate) async fn sync_live_status_runtime(state: &AppState) -> SessionState {
     let (uid, room_id, cookie) = {
         let mut runtime = state.runtime.lock().await;
@@ -183,6 +210,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
             .unwrap_or_else(String::new);
         return Ok(wrap_ok(json!({
             "title": user.last_title,
+            "room_news": user.last_room_news,
             "parent": parent,
             "child": child,
             "area_id": user.last_area_id.parse::<u64>().ok(),
@@ -218,9 +246,16 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 .and_then(|value| value["cover"]["url"].as_str())
                 .unwrap_or(&user.last_cover)
                 .to_string();
-            let remote_cover_asset = ensure_cover_data_url(&state.client, &state.config_path, &remote_cover)
-                .await
-                .unwrap_or_default();
+            let room_news_remote = fetch_room_news(&state, &room_id, &uid, &user.cookie).await.ok();
+            let room_news = room_news_remote
+                .as_ref()
+                .and_then(|value| value["content"].as_str())
+                .unwrap_or(&user.last_room_news)
+                .to_string();
+            let remote_cover_asset =
+                ensure_cover_data_url(&state.client, &state.config_path, &remote_cover)
+                    .await
+                    .unwrap_or_default();
             let cover_review = cover_review_from_audit_status(
                 pre_live
                     .as_ref()
@@ -251,6 +286,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                     current.room_id = room_id.clone();
                 }
                 current.last_cover_asset = remote_cover_asset.clone();
+                current.last_room_news = room_news.clone();
             }
             runtime.session.current_area_id = area_id;
             runtime.session.current_area_names = if parent.is_empty() || child.is_empty() {
@@ -274,6 +310,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
 
             Ok(wrap_ok(json!({
                 "title": title,
+                "room_news": room_news,
                 "parent": parent,
                 "child": child,
                 "area_id": area_id,
@@ -307,6 +344,7 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
 
             Ok(wrap_ok(json!({
                 "title": user.last_title,
+                "room_news": user.last_room_news,
                 "parent": parent,
                 "child": child,
                 "area_id": user.last_area_id.parse::<u64>().ok(),

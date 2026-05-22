@@ -83,6 +83,10 @@ export function useStudioController() {
   const [accounts, setAccounts] = useState<User[]>([]);
 
   const [title, setTitle] = useState(t("auto", "ui.ctrl.default_title"));
+  const [roomNews, setRoomNews] = useState("");
+  const [liveReserveTitle, setLiveReserveTitle] = useState("");
+  const [liveReserveStartAt, setLiveReserveStartAt] = useState("");
+  const [liveReserveCreateDynamic, setLiveReserveCreateDynamic] = useState(true);
   const [cover, setCover] = useState("");
   const [coverRenderSrc, setCoverRenderSrc] = useState("");
   const [pendingCoverUpload, setPendingCoverUpload] = useState<PendingCoverUpload | null>(null);
@@ -130,6 +134,7 @@ export function useStudioController() {
   const areaDirtyRef = useRef(false);
   const tagsDirtyRef = useRef(false);
   const coverDirtyRef = useRef(false);
+  const roomNewsDirtyRef = useRef(false);
   const coverDraftVersionRef = useRef(0);
   const activeUidRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
@@ -484,6 +489,7 @@ export function useStudioController() {
         forceTitle?: boolean;
         forceArea?: boolean;
         forceTags?: boolean;
+        forceRoomNews?: boolean;
       },
     ) => {
       const allowCover = options?.allowCover ?? true;
@@ -491,6 +497,7 @@ export function useStudioController() {
       const forceTitle = options?.forceTitle ?? false;
       const forceArea = options?.forceArea ?? false;
       const forceTags = options?.forceTags ?? false;
+      const forceRoomNews = options?.forceRoomNews ?? false;
 
       if (allowCover && (forceCover || !coverDirtyRef.current)) {
         setCover(normalizeCoverValue(user.last_cover || ""));
@@ -499,6 +506,9 @@ export function useStudioController() {
       }
       if (forceTitle || !titleDirtyRef.current) {
         setTitle(user.last_title || "");
+      }
+      if (forceRoomNews || !roomNewsDirtyRef.current) {
+        setRoomNews(user.last_room_news || "");
       }
       if (
         (forceArea || !areaDirtyRef.current) &&
@@ -668,6 +678,7 @@ export function useStudioController() {
     areaDirtyRef,
     tagsDirtyRef,
     coverDirtyRef,
+    roomNewsDirtyRef,
     coverDraftVersionRef,
     loginPollBusyRef,
     loginStatusCodeRef,
@@ -992,6 +1003,112 @@ export function useStudioController() {
     setProfileState,
   ]);
 
+  const submitRoomNews = useCallback(async (event: React.FormEvent) => {
+    event.preventDefault();
+    const requestUid = activeUidRef.current;
+    if (!requestUid) {
+      return;
+    }
+    if (roomNews.trim().length > 60) {
+      const message = t(localeSetting, "ui.ctrl.room_news_too_long");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+      return;
+    }
+    try {
+      const res = await studioApi.updateRoomNews(roomNews.trim());
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      if (res.code !== 0) {
+        throw new Error(res.msg || t(localeSetting, "ui.ctrl.room_news_set_failed_default"));
+      }
+      const persistedContent = res.data?.content ?? roomNews.trim();
+      roomNewsDirtyRef.current = false;
+      setRoomNews(persistedContent);
+      setCurrentUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              last_room_news: persistedContent,
+            }
+          : prev,
+      );
+      const message = t(localeSetting, "ui.ctrl.room_news_set_ok");
+      append(message);
+      pushTopNotice({ text: message, tone: "success" });
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      const message = resolveBackendMessage(String(error), localeSetting);
+      const line = tf(localeSetting, "ui.ctrl.room_news_set_failed", { msg: message });
+      append(line);
+      pushTopNotice({ text: line, tone: "error" });
+    }
+  }, [activeUidRef, append, localeSetting, pushTopNotice, roomNews]);
+
+  const submitLiveReserve = useCallback(async (event: React.FormEvent) => {
+    event.preventDefault();
+    const requestUid = activeUidRef.current;
+    if (!requestUid) {
+      return;
+    }
+    const title = liveReserveTitle.trim();
+    if (!title) {
+      const message = t(localeSetting, "ui.ctrl.live_reserve_missing_title");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+      return;
+    }
+    if (!liveReserveStartAt.trim()) {
+      const message = t(localeSetting, "ui.ctrl.live_reserve_missing_time");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+      return;
+    }
+    const startAt = new Date(liveReserveStartAt);
+    const startSeconds = Math.floor(startAt.getTime() / 1000);
+    if (!Number.isFinite(startSeconds) || startSeconds <= Math.floor(Date.now() / 1000)) {
+      const message = t(localeSetting, "ui.ctrl.live_reserve_invalid_time");
+      append(message);
+      pushTopNotice({ text: message, tone: "error" });
+      return;
+    }
+
+    try {
+      const res = await studioApi.createLiveReserve(title, startSeconds, liveReserveCreateDynamic);
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      if (res.code !== 0 || !res.data) {
+        throw new Error(res.msg || t(localeSetting, "ui.ctrl.live_reserve_create_failed_default"));
+      }
+      const message = tf(localeSetting, "ui.ctrl.live_reserve_created", {
+        title,
+        time: new Date(startSeconds * 1000).toLocaleString(),
+      });
+      append(message);
+      pushTopNotice({ text: message, tone: "success" });
+    } catch (error) {
+      if (requestUid !== activeUidRef.current) {
+        return;
+      }
+      const message = resolveBackendMessage(String(error), localeSetting);
+      const line = tf(localeSetting, "ui.ctrl.live_reserve_create_failed", { msg: message });
+      append(line);
+      pushTopNotice({ text: line, tone: "error" });
+    }
+  }, [
+    activeUidRef,
+    append,
+    liveReserveCreateDynamic,
+    liveReserveStartAt,
+    liveReserveTitle,
+    localeSetting,
+    pushTopNotice,
+  ]);
+
   useEffect(() => {
     if (!hasLiveAuth || !hasPendingReviewOption) {
       return;
@@ -1027,6 +1144,11 @@ export function useStudioController() {
     if (hasLiveAuth) {
       return;
     }
+    roomNewsDirtyRef.current = false;
+    setRoomNews("");
+    setLiveReserveTitle("");
+    setLiveReserveStartAt("");
+    setLiveReserveCreateDynamic(true);
     setCoverHistory([]);
     setCoverAdvice(null);
     setPendingCoverUpload(null);
@@ -1102,6 +1224,11 @@ export function useStudioController() {
   const changeChild = useCallback((newChild: string) => {
     areaDirtyRef.current = true;
     setChild(newChild);
+  }, []);
+
+  const changeRoomNews = useCallback((nextValue: React.SetStateAction<string>) => {
+    roomNewsDirtyRef.current = true;
+    setRoomNews(nextValue);
   }, []);
 
   useStudioControllerEffects({
@@ -1227,6 +1354,10 @@ export function useStudioController() {
       title,
       userManageActiveTab,
       topNotices,
+      roomNews,
+      liveReserveTitle,
+      liveReserveStartAt,
+      liveReserveCreateDynamic,
       cover,
       coverRenderSrc,
       coverAdvice,
@@ -1290,6 +1421,10 @@ export function useStudioController() {
       hideDanmuOverlay,
       setTagInput,
       setTitle,
+      setRoomNews: changeRoomNews,
+      setLiveReserveTitle,
+      setLiveReserveStartAt,
+      setLiveReserveCreateDynamic,
       addTag,
       removeTag,
       selectCoverFile,
@@ -1323,6 +1458,8 @@ export function useStudioController() {
       submitDanmu,
       submitTags,
       submitTitle,
+      submitRoomNews,
+      submitLiveReserve,
       requestMuteUserByDanmu,
       requestBlackUserByDanmu,
       requestRoomAdminByDanmu,

@@ -35,7 +35,10 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
         .and_then(|value| value.get("copy_writing_v2"))
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| data.and_then(|value| value.get("copy_writing")).and_then(Value::as_str))
+        .or_else(|| {
+            data.and_then(|value| value.get("copy_writing"))
+                .and_then(Value::as_str)
+        })
         .unwrap_or("i18n.live.event.interact.enter");
     Some((
         Some(json!({
@@ -53,4 +56,3 @@ pub(super) fn parse(payload: &Value, ctx: &ParseContext<'_>) -> Option<ParseResu
         None,
     ))
 }
-
