@@ -1,25 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Update as TauriUpdate } from "@tauri-apps/plugin-updater";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { studioApi } from "../services/studioApi";
 import type {
   ActiveTab,
-  AppConfig,
   DanmuMsg,
-  LinkageStatus,
-  LiveBlackUserItem,
-  LiveBlackUserListData,
-  LiveRoomAdminItem,
-  LiveRoomAdminListData,
   LiveProfileState,
-  LiveSilentUserListData,
-  LiveSilentUserItem,
   Session,
   StreamInfo,
   User,
 } from "../types/studio";
 import { writeClipboardText } from "../utils/clipboard";
-import { resolveBackendMessage, t, tf, type LocaleSetting } from "../utils/i18n";
+import { resolveBackendMessage, t, tf } from "../utils/i18n";
 import { useWindowDrag } from "./useWindowDrag";
 import {
   buildSectionStatus,
@@ -34,6 +24,9 @@ import { useStudioControllerEffects } from "./studio/useStudioControllerEffects"
 import { useAccountController } from "./studio/useAccountController";
 import { useLiveInteractionActions } from "./studio/useLiveInteractionActions";
 import { useDanmuMessageFeed } from "./studio/useDanmuMessageFeed";
+import { useAppUpdateController } from "./studio/useAppUpdateController";
+import { useLiveUserManageController } from "./studio/useLiveUserManageController";
+import { useAppConfigController } from "./studio/useAppConfigController";
 
 type ConfirmModalTone = "primary" | "danger";
 type ConfirmModalSelectOption = {
@@ -54,66 +47,13 @@ type ConfirmModalState = {
 };
 type ConfirmRequestPayload = Omit<ConfirmModalState, "show" | "showCancel">;
 
-const MANUAL_SAVE_APP_CONFIG_KEYS = [
-  "min_to_tray",
-  "hide_dock_on_minimize",
-  "danmu_overlay_enabled",
-  "danmu_overlay_opacity",
-  "danmu_overlay_always_on_top",
-  "live_control_mode",
-  "obs_ws_url",
-  "obs_ws_password",
-  "obs_ws_auto_start_on_live",
-  "obs_ws_auto_stop_on_live_end",
-  "on_live_start_command",
-  "on_live_stop_command",
-  "ws_server_enabled",
-  "ws_server_listen_addr",
-  "ws_server_auth_token",
-  "ws_server_bypass_token_for_loopback",
-  "host_www",
-  "host_api",
-  "host_live_api",
-  "host_passport",
-  "host_live_web",
-  "cookie_domain",
-  "danmu_host",
-  "app_key",
-  "app_sec",
-  "http_user_agent",
-  "livehime_version_override",
-  "livehime_build_override",
-  "live_platform",
-] as const satisfies ReadonlyArray<keyof AppConfig>;
-
-type ManualSaveConfigKey = (typeof MANUAL_SAVE_APP_CONFIG_KEYS)[number];
-type AppConfigSnapshot = Pick<AppConfig, ManualSaveConfigKey>;
 const LIVE_ONLINE_RANK_POLL_INTERVAL_MS = 5_000;
-const APP_UPDATE_POLL_INTERVAL_MS = 60 * 60 * 1000;
-const RELEASES_PAGE_URL = "https://github.com/mozi1924/openblive/releases";
-
-const buildAppConfigSnapshot = (config: AppConfig): AppConfigSnapshot =>
-  MANUAL_SAVE_APP_CONFIG_KEYS.reduce((acc, key) => {
-    (
-      acc as Record<ManualSaveConfigKey, AppConfig[ManualSaveConfigKey]>
-    )[key] = config[key];
-    return acc;
-  }, {} as AppConfigSnapshot);
 
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
   const [showLogs, setShowLogs] = useState(false);
   const [showLiveOnlineRankPanel, setShowLiveOnlineRankPanel] = useState(false);
   const [showUserManagePanel, setShowUserManagePanel] = useState(false);
-  const [userManageActiveTab, setUserManageActiveTab] = useState<
-    "silent" | "blacklist" | "room_admin"
-  >("silent");
-  const [liveSilentUserListLoading, setLiveSilentUserListLoading] = useState(false);
-  const [liveSilentUserList, setLiveSilentUserList] = useState<LiveSilentUserListData | null>(null);
-  const [liveBlackUserListLoading, setLiveBlackUserListLoading] = useState(false);
-  const [liveBlackUserList, setLiveBlackUserList] = useState<LiveBlackUserListData | null>(null);
-  const [liveRoomAdminListLoading, setLiveRoomAdminListLoading] = useState(false);
-  const [liveRoomAdminList, setLiveRoomAdminList] = useState<LiveRoomAdminListData | null>(null);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
@@ -134,7 +74,6 @@ export function useStudioController() {
 
   const [danmuText, setDanmuText] = useState("");
   const [danmuListening, setDanmuListening] = useState(false);
-  const [danmuOverlayVisible, setDanmuOverlayVisible] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
   const [faceQr, setFaceQr] = useState("");
@@ -149,21 +88,8 @@ export function useStudioController() {
     tone: "primary",
   });
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
-  const [savedAppConfigSnapshot, setSavedAppConfigSnapshot] = useState<AppConfigSnapshot | null>(
-    null,
-  );
-  const [savingConfig, setSavingConfig] = useState(false);
-  const [savingLocale, setSavingLocale] = useState(false);
-  const [linkageStatus, setLinkageStatus] = useState<LinkageStatus | null>(null);
   const [recentAreas, setRecentAreas] = useState<RecentArea[]>([]);
   const [profileState, setProfileState] = useState<LiveProfileState>(defaultProfileState);
-  const [appVersion, setAppVersion] = useState("");
-  const [appBundleType, setAppBundleType] = useState<string | null>(null);
-  const [availableAppUpdateVersion, setAvailableAppUpdateVersion] = useState<string | null>(null);
-  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false);
-  const [installingAppUpdate, setInstallingAppUpdate] = useState(false);
-  const localeSetting = (appConfig?.locale || "auto") as LocaleSetting;
 
   const danmuEndRef = useRef<HTMLDivElement>(null);
   const sidebarDragRef = useRef<HTMLDivElement>(null);
@@ -185,9 +111,6 @@ export function useStudioController() {
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
   const liveOnlineRankPollingRef = useRef(false);
   const confirmSelectValueRef = useRef("");
-  const appUpdateRef = useRef<TauriUpdate | null>(null);
-  const appUpdatePromptedVersionRef = useRef<string | null>(null);
-  const appUpdateCheckBusyRef = useRef(false);
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   useWindowDrag(sidebarDragRef, headerDragRef);
@@ -201,6 +124,37 @@ export function useStudioController() {
       setLogs((prev) => [message, ...prev].slice(0, 300));
     });
   }, []);
+
+  const syncTrayMenu = useCallback(async () => {
+    await studioApi.refreshTrayMenu().catch(() => undefined);
+  }, []);
+
+  const appConfigController = useAppConfigController({
+    append,
+    syncTrayMenu,
+  });
+  const {
+    state: {
+      appConfig,
+      localeSetting,
+      linkageStatus,
+      danmuOverlayVisible,
+      savingConfig,
+      savingLocale,
+      hasPendingConfigChanges,
+    },
+    actions: {
+      setDanmuOverlayVisible,
+      loadAppConfig,
+      loadLinkageStatus,
+      updateAppConfig,
+      generateHttpUserAgent,
+      updateLocaleConfig,
+      showDanmuOverlay,
+      hideDanmuOverlay,
+      saveAppConfig,
+    },
+  } = appConfigController;
 
   const resolveConfirm = useCallback((accepted: boolean) => {
     setConfirmModal((prev) => ({ ...prev, show: false }));
@@ -257,18 +211,6 @@ export function useStudioController() {
     }));
   }, []);
 
-  const muteDurationOptions = useMemo<ConfirmModalSelectOption[]>(
-    () => [
-      { value: "10", label: t(localeSetting, "ui.danmu.user_manage.duration.10m") },
-      { value: "30", label: t(localeSetting, "ui.danmu.user_manage.duration.30m") },
-      { value: "60", label: t(localeSetting, "ui.danmu.user_manage.duration.1h") },
-      { value: "360", label: t(localeSetting, "ui.danmu.user_manage.duration.6h") },
-      { value: "0", label: t(localeSetting, "ui.danmu.user_manage.duration.session") },
-      { value: "-1", label: t(localeSetting, "ui.danmu.user_manage.duration.forever") },
-    ],
-    [localeSetting],
-  );
-
   const revealMainWindowForAction = useCallback(async () => {
     await studioApi.revealMainWindow().catch((error) => {
       append(
@@ -278,117 +220,28 @@ export function useStudioController() {
       );
     });
   }, [append, localeSetting]);
-
-  const replacePendingAppUpdate = useCallback((next: TauriUpdate | null) => {
-    const previous = appUpdateRef.current;
-    appUpdateRef.current = next;
-    if (previous && previous !== next) {
-      void previous.close().catch(() => undefined);
-    }
-  }, []);
-
-  const loadAppMetadata = useCallback(async () => {
-    try {
-      const { getVersion, getBundleType } = await import("@tauri-apps/api/app");
-      const [version, bundleType] = await Promise.all([getVersion(), getBundleType()]);
-      setAppVersion(version.trim());
-      setAppBundleType(bundleType);
-    } catch {
-      setAppVersion("");
-      setAppBundleType(null);
-    }
-  }, []);
-
-  const checkAppUpdate = useCallback(
-    async (options?: { promptOnAvailable?: boolean; silent?: boolean }) => {
-      if (appUpdateCheckBusyRef.current) {
-        return;
-      }
-      appUpdateCheckBusyRef.current = true;
-      setCheckingAppUpdate(true);
-      try {
-        const { check } = await import("@tauri-apps/plugin-updater");
-        const update = await check();
-        if (!update) {
-          setAvailableAppUpdateVersion(null);
-          appUpdatePromptedVersionRef.current = null;
-          replacePendingAppUpdate(null);
-          if (!options?.silent) {
-            append(tf(localeSetting, "ui.project.update.none", { version: appVersion || "--" }));
-          }
-          return;
-        }
-
-        setAvailableAppUpdateVersion(update.version);
-        replacePendingAppUpdate(update);
-
-        if (options?.promptOnAvailable === false) {
-          return;
-        }
-        if (appUpdatePromptedVersionRef.current === update.version) {
-          return;
-        }
-
-        appUpdatePromptedVersionRef.current = update.version;
-        const accepted = await requestConfirm({
-          title: t(localeSetting, "ui.project.update.popup.title"),
-          description: tf(localeSetting, "ui.project.update.popup.desc", {
-            current: update.currentVersion,
-            version: update.version,
-          }),
-          confirmText: t(localeSetting, "ui.project.update.popup.confirm"),
-          tone: "primary",
-        });
-        if (accepted) {
-          await revealMainWindowForAction();
-          setActiveTab("project");
-        }
-      } catch (error) {
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.project.update.error.check", {
-              msg: resolveBackendMessage(String(error), localeSetting),
-            }),
-          );
-        }
-      } finally {
-        setCheckingAppUpdate(false);
-        appUpdateCheckBusyRef.current = false;
-      }
+  const appUpdateController = useAppUpdateController({
+    localeSetting,
+    append,
+    requestConfirm,
+    requestAlert,
+    revealMainWindowForAction,
+    setActiveTab,
+  });
+  const {
+    state: {
+      appVersion,
+      appBundleType,
+      availableAppUpdateVersion,
+      checkingAppUpdate,
+      installingAppUpdate,
     },
-    [appVersion, append, localeSetting, replacePendingAppUpdate, requestConfirm, revealMainWindowForAction],
-  );
-
-  const downloadAndInstallAppUpdate = useCallback(async () => {
-    if (installingAppUpdate) {
-      return;
-    }
-
-    let update = appUpdateRef.current;
-    if (!update) {
-      await checkAppUpdate({ promptOnAvailable: false, silent: false });
-      update = appUpdateRef.current;
-    }
-    if (!update) {
-      return;
-    }
-
-    setInstallingAppUpdate(true);
-    try {
-      await update.downloadAndInstall();
-      append(tf(localeSetting, "ui.project.update.install.done", { version: update.version }));
-      setAvailableAppUpdateVersion(null);
-      replacePendingAppUpdate(null);
-    } catch (error) {
-      append(
-        tf(localeSetting, "ui.project.update.error.install", {
-          msg: resolveBackendMessage(String(error), localeSetting),
-        }),
-      );
-    } finally {
-      setInstallingAppUpdate(false);
-    }
-  }, [append, checkAppUpdate, installingAppUpdate, localeSetting, replacePendingAppUpdate]);
+    actions: {
+      checkAppUpdate,
+      downloadAndInstallAppUpdate,
+      runPlatformUpdateAction,
+    },
+  } = appUpdateController;
 
   const danmuVoteController = useDanmuVoteController({
     activeUidRef,
@@ -479,14 +332,6 @@ export function useStudioController() {
     [sectionStatus],
   );
 
-  const hasPendingConfigChanges = useMemo(() => {
-    if (!appConfig || !savedAppConfigSnapshot) {
-      return false;
-    }
-    return MANUAL_SAVE_APP_CONFIG_KEYS.some(
-      (key) => appConfig[key] !== savedAppConfigSnapshot[key],
-    );
-  }, [appConfig, savedAppConfigSnapshot]);
   const hasLiveAuth = Boolean(currentUser?.uid?.trim() && !currentUser?.login_invalid);
 
   useEffect(() => {
@@ -504,21 +349,6 @@ export function useStudioController() {
       setShowUserManagePanel(false);
     }
   }, [activeTab]);
-
-  useEffect(() => {
-    void loadAppMetadata();
-  }, [loadAppMetadata]);
-
-  useEffect(() => {
-    void checkAppUpdate({ promptOnAvailable: true, silent: true });
-    const timer = window.setInterval(() => {
-      void checkAppUpdate({ promptOnAvailable: true, silent: true });
-    }, APP_UPDATE_POLL_INTERVAL_MS);
-    return () => {
-      window.clearInterval(timer);
-      replacePendingAppUpdate(null);
-    };
-  }, [checkAppUpdate, replacePendingAppUpdate]);
 
   useEffect(() => {
     if (activeTab !== "danmu" || !showLiveOnlineRankPanel || !hasLiveAuth) {
@@ -549,26 +379,6 @@ export function useStudioController() {
       liveOnlineRankPollingRef.current = false;
     };
   }, [activeTab, hasLiveAuth, loadLiveOnlineRank, showLiveOnlineRankPanel]);
-
-  const syncTrayMenu = useCallback(async () => {
-    await studioApi.refreshTrayMenu().catch(() => undefined);
-  }, []);
-
-  const loadAppConfig = useCallback(async () => {
-    const res = await studioApi.getAppConfig();
-    if (res.code === 0 && res.data) {
-      setAppConfig(res.data);
-      setSavedAppConfigSnapshot(buildAppConfigSnapshot(res.data));
-      setDanmuOverlayVisible(Boolean(res.data.danmu_overlay_enabled));
-    }
-  }, []);
-
-  const loadLinkageStatus = useCallback(async () => {
-    const res = await studioApi.getLinkageStatus();
-    if (res.code === 0 && res.data) {
-      setLinkageStatus(res.data);
-    }
-  }, []);
 
   const applyProfileState = useCallback((nextState?: LiveProfileState | null) => {
     const normalized = normalizeProfileState(nextState);
@@ -605,156 +415,6 @@ export function useStudioController() {
     },
     [],
   );
-
-  const updateAppConfig = useCallback(
-    <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
-      setAppConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
-    },
-    [],
-  );
-
-  const generateHttpUserAgent = useCallback(async () => {
-    try {
-      const res = await studioApi.generateHttpUserAgent();
-      const userAgent = res.data?.user_agent?.trim() || "";
-      if (res.code === 0 && userAgent) {
-        updateAppConfig("http_user_agent", userAgent);
-        append(t(localeSetting, "ui.settings.advanced.http_user_agent.generated"));
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.settings.advanced.http_user_agent.generate_failed", {
-          msg: resolveBackendMessage(res.msg || "empty user-agent", localeSetting),
-        }),
-      );
-    } catch (error) {
-      append(
-        tf(localeSetting, "ui.settings.advanced.http_user_agent.generate_failed", {
-          msg: resolveBackendMessage(String(error), localeSetting),
-        }),
-      );
-    }
-  }, [append, localeSetting, updateAppConfig]);
-
-  const updateLocaleConfig = useCallback(
-    async (nextLocale: AppConfig["locale"]) => {
-      if (!appConfig) {
-        return;
-      }
-      const prevLocale = appConfig.locale;
-      setAppConfig((prev) => (prev ? { ...prev, locale: nextLocale } : prev));
-      setSavingLocale(true);
-      try {
-        await studioApi.setAppConfig("locale", nextLocale);
-        await loadAppConfig();
-        await syncTrayMenu();
-      } catch (error) {
-        setAppConfig((prev) => (prev ? { ...prev, locale: prevLocale } : prev));
-        append(
-          `${t(prevLocale, "ui.settings.save.failed")}: ${resolveBackendMessage(
-            String(error),
-            prevLocale,
-          )}`,
-        );
-      } finally {
-        setSavingLocale(false);
-      }
-    },
-    [appConfig, append, loadAppConfig, syncTrayMenu],
-  );
-
-  const showDanmuOverlay = useCallback(async () => {
-    await studioApi.showDanmuOverlay().then(() => {
-      setDanmuOverlayVisible(true);
-    }).catch((error) => {
-      append(
-        tf(localeSetting, "ui.settings.overlay.action_failed", {
-          msg: resolveBackendMessage(String(error), localeSetting),
-        }),
-      );
-    });
-  }, [append, localeSetting]);
-
-  const hideDanmuOverlay = useCallback(async () => {
-    await studioApi.hideDanmuOverlay().then(() => {
-      setDanmuOverlayVisible(false);
-    }).catch((error) => {
-      append(
-        tf(localeSetting, "ui.settings.overlay.action_failed", {
-          msg: resolveBackendMessage(String(error), localeSetting),
-        }),
-      );
-    });
-  }, [append, localeSetting]);
-
-  const openReleasePage = useCallback(async () => {
-    try {
-      await openUrl(RELEASES_PAGE_URL);
-    } catch {
-      window.open(RELEASES_PAGE_URL, "_blank", "noopener,noreferrer");
-    }
-  }, []);
-
-  const runPlatformUpdateAction = useCallback(async () => {
-    if (!availableAppUpdateVersion) {
-      await checkAppUpdate({ promptOnAvailable: false, silent: false });
-      return;
-    }
-
-    if (appBundleType === "deb" || appBundleType === "rpm") {
-      await requestAlert({
-        title: t(localeSetting, "ui.project.update.pkg.title"),
-        description: t(localeSetting, "ui.project.update.pkg.desc"),
-        confirmText: t(localeSetting, "ui.project.update.pkg.confirm"),
-        tone: "primary",
-      });
-      return;
-    }
-
-    if (appBundleType === "app") {
-      await openReleasePage();
-      append(t(localeSetting, "ui.project.update.dmg.opened"));
-      return;
-    }
-
-    await downloadAndInstallAppUpdate();
-  }, [
-    appBundleType,
-    append,
-    availableAppUpdateVersion,
-    checkAppUpdate,
-    downloadAndInstallAppUpdate,
-    localeSetting,
-    openReleasePage,
-    requestAlert,
-  ]);
-
-  const saveAppConfig = useCallback(async () => {
-    if (!appConfig) {
-      return;
-    }
-    setSavingConfig(true);
-    try {
-      const values = MANUAL_SAVE_APP_CONFIG_KEYS.reduce<Record<string, unknown>>((acc, key) => {
-        acc[key] = appConfig[key];
-        return acc;
-      }, {});
-      await studioApi.setAppConfigs(values);
-      append(t(localeSetting, "ui.settings.save.done"));
-      await loadAppConfig();
-      await loadLinkageStatus();
-      await syncTrayMenu();
-    } catch (error) {
-      append(
-        `${t(localeSetting, "ui.settings.save.failed")}: ${resolveBackendMessage(
-          String(error),
-          localeSetting,
-        )}`,
-      );
-    } finally {
-      setSavingConfig(false);
-    }
-  }, [appConfig, append, loadAppConfig, loadLinkageStatus, syncTrayMenu]);
 
   const refreshSession = useCallback(async () => {
     const res = await studioApi
@@ -876,397 +536,40 @@ export function useStudioController() {
     append(t(localeSetting, "ui.ctrl.partitions_synced"));
   }, [append, localeSetting]);
 
-  const refreshSilentUserList = useCallback(
-    async (options?: { silent?: boolean; page?: number }) => {
-      const page = Math.max(options?.page ?? liveSilentUserList?.page ?? 1, 1);
-      setLiveSilentUserListLoading(true);
-      try {
-        const res = await studioApi.getSilentUserList(page);
-        if (res.code === 0 && res.data) {
-          setLiveSilentUserList(res.data);
-          return;
-        }
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.ctrl.live_silent_user_list_load_failed", {
-              msg: resolveBackendMessage(res.msg, localeSetting),
-            }),
-          );
-        }
-      } catch (error) {
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.ctrl.live_silent_user_list_load_failed", {
-              msg: resolveBackendMessage(String(error), localeSetting),
-            }),
-          );
-        }
-      } finally {
-        setLiveSilentUserListLoading(false);
-      }
+  const liveUserManageController = useLiveUserManageController({
+    localeSetting,
+    append,
+    currentUserUid: currentUser?.uid,
+    showUserManagePanel,
+    requestConfirm,
+    getConfirmSelectValue: () => confirmSelectValueRef.current,
+  });
+  const {
+    state: {
+      userManageActiveTab,
+      liveSilentUserList,
+      liveSilentUserListLoading,
+      liveBlackUserList,
+      liveBlackUserListLoading,
+      liveRoomAdminList,
+      liveRoomAdminListLoading,
     },
-    [append, liveSilentUserList?.page, localeSetting],
-  );
-
-  const refreshBlackUserList = useCallback(
-    async (options?: { silent?: boolean; page?: number; pageSize?: number }) => {
-      const page = Math.max(options?.page ?? liveBlackUserList?.page ?? 1, 1);
-      const pageSize = Math.max(options?.pageSize ?? liveBlackUserList?.page_size ?? 50, 1);
-      setLiveBlackUserListLoading(true);
-      try {
-        const res = await studioApi.getBlackUserList(page, pageSize);
-        if (res.code === 0 && res.data) {
-          setLiveBlackUserList(res.data);
-          return;
-        }
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.ctrl.live_black_user_list_load_failed", {
-              msg: resolveBackendMessage(res.msg, localeSetting),
-            }),
-          );
-        }
-      } catch (error) {
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.ctrl.live_black_user_list_load_failed", {
-              msg: resolveBackendMessage(String(error), localeSetting),
-            }),
-          );
-        }
-      } finally {
-        setLiveBlackUserListLoading(false);
-      }
-    },
-    [append, liveBlackUserList?.page, liveBlackUserList?.page_size, localeSetting],
-  );
-
-  const refreshRoomAdminList = useCallback(
-    async (options?: { silent?: boolean; page?: number }) => {
-      const page = Math.max(options?.page ?? liveRoomAdminList?.page ?? 1, 1);
-      setLiveRoomAdminListLoading(true);
-      try {
-        const res = await studioApi.getRoomAdminList(page);
-        if (res.code === 0 && res.data) {
-          setLiveRoomAdminList(res.data);
-          return;
-        }
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.ctrl.live_room_admin_list_load_failed", {
-              msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
-            }),
-          );
-        }
-      } catch (error) {
-        if (!options?.silent) {
-          append(
-            tf(localeSetting, "ui.ctrl.live_room_admin_list_load_failed", {
-              msg: resolveBackendMessage(String(error), localeSetting),
-            }),
-          );
-        }
-      } finally {
-        setLiveRoomAdminListLoading(false);
-      }
-    },
-    [append, liveRoomAdminList?.page, localeSetting],
-  );
-
-  const requestMuteUserByDanmu = useCallback(
-    async (message: DanmuMsg) => {
-      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
-      const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
-      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
-        append(t(localeSetting, "ui.ctrl.live_silent_user_invalid_target"));
-        return;
-      }
-
-      const senderName =
-        resolveBackendMessage(message.sender, localeSetting).trim() ||
-        t(localeSetting, "ui.danmu.sender.anonymous");
-      const accepted = await requestConfirm({
-        title: tf(localeSetting, "ui.danmu.user_manage.confirm.silent.title", { name: senderName }),
-        description: tf(localeSetting, "ui.danmu.user_manage.confirm.silent.desc", {
-          name: senderName,
-          uid: senderUid,
-        }),
-        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.silent.confirm"),
-        tone: "danger",
-        selectLabel: t(localeSetting, "ui.danmu.user_manage.confirm.silent.duration"),
-        selectOptions: muteDurationOptions,
-        selectValue: "-1",
-      });
-      if (!accepted) {
-        return;
-      }
-
-      const duration = Number.parseInt(confirmSelectValueRef.current || "-1", 10);
-      const muteHours = Number.isFinite(duration) ? duration : -1;
-      const res = await studioApi.addSilentUser(
-        senderUid,
-        muteHours,
-        resolveBackendMessage(message.content, localeSetting).trim() || undefined,
-      );
-      if (res.code === 0) {
-        const durationLabel =
-          muteDurationOptions.find((option) => option.value === String(muteHours))?.label ||
-          String(muteHours);
-        append(
-          tf(localeSetting, "ui.ctrl.live_silent_user_added", {
-            name: senderName,
-            duration: durationLabel,
-          }),
-        );
-        if (showUserManagePanel) {
-          void refreshSilentUserList({ silent: true });
-        }
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.ctrl.live_silent_user_add_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
-        }),
-      );
-    },
-    [
-      append,
-      currentUser?.uid,
-      localeSetting,
-      muteDurationOptions,
+    actions: {
       refreshSilentUserList,
-      requestConfirm,
-      showUserManagePanel,
-    ],
-  );
-
-  const requestBlackUserByDanmu = useCallback(
-    async (message: DanmuMsg) => {
-      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
-      const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
-      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
-        append(t(localeSetting, "ui.ctrl.live_black_user_invalid_target"));
-        return;
-      }
-
-      const senderName =
-        resolveBackendMessage(message.sender, localeSetting).trim() ||
-        t(localeSetting, "ui.danmu.sender.anonymous");
-      const accepted = await requestConfirm({
-        title: tf(localeSetting, "ui.danmu.user_manage.confirm.black.title", { name: senderName }),
-        description: tf(localeSetting, "ui.danmu.user_manage.confirm.black.desc", {
-          name: senderName,
-          uid: senderUid,
-        }),
-        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.black.confirm"),
-        tone: "danger",
-      });
-      if (!accepted) {
-        return;
-      }
-
-      const res = await studioApi.addBlackUser(senderUid);
-      if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_black_user_added", { name: senderName }));
-        if (showUserManagePanel) {
-          void refreshBlackUserList({ silent: true });
-        }
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.ctrl.live_black_user_add_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
-        }),
-      );
-    },
-    [
-      append,
-      currentUser?.uid,
-      localeSetting,
       refreshBlackUserList,
-      requestConfirm,
-      showUserManagePanel,
-    ],
-  );
-
-  const requestRoomAdminByDanmu = useCallback(
-    async (message: DanmuMsg) => {
-      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
-      const currentUid = currentUser?.uid ? Number(currentUser.uid) : Number.NaN;
-      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
-        append(t(localeSetting, "ui.ctrl.live_room_admin_invalid_target"));
-        return;
-      }
-
-      const senderName =
-        resolveBackendMessage(message.sender, localeSetting).trim() ||
-        t(localeSetting, "ui.danmu.sender.anonymous");
-      const accepted = await requestConfirm({
-        title: tf(localeSetting, "ui.danmu.user_manage.confirm.room_admin.title", {
-          name: senderName,
-        }),
-        description: tf(localeSetting, "ui.danmu.user_manage.confirm.room_admin.desc", {
-          name: senderName,
-          uid: senderUid,
-        }),
-        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.room_admin.confirm"),
-        tone: "danger",
-      });
-      if (!accepted) {
-        return;
-      }
-
-      const res = await studioApi.addRoomAdmin(senderUid);
-      if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_room_admin_added", { name: senderName }));
-        if (showUserManagePanel) {
-          void refreshRoomAdminList({ silent: true });
-        }
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.ctrl.live_room_admin_add_failed", {
-          msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
-        }),
-      );
-    },
-    [
-      append,
-      currentUser?.uid,
-      localeSetting,
       refreshRoomAdminList,
-      requestConfirm,
-      showUserManagePanel,
-    ],
-  );
-
-  const requestRemoveSilentUser = useCallback(
-    async (item: LiveSilentUserItem) => {
-      const name = item.tname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
-      const accepted = await requestConfirm({
-        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unsilent.title", { name }),
-        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unsilent.desc", {
-          name,
-          uid: item.tuid,
-        }),
-        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unsilent.confirm"),
-        tone: "primary",
-      });
-      if (!accepted) {
-        return;
-      }
-
-      const res = await studioApi.removeSilentUser(item.id);
-      if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_silent_user_removed", { name }));
-        await refreshSilentUserList({ silent: true });
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.ctrl.live_silent_user_remove_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
-        }),
-      );
+      requestMuteUserByDanmu,
+      requestBlackUserByDanmu,
+      requestRoomAdminByDanmu,
+      requestRemoveSilentUser,
+      requestRemoveBlackUser,
+      requestRemoveRoomAdmin,
+      changeRoomAdminPage,
+      changeSilentUserPage,
+      changeBlackUserPage,
+      changeUserManageTab,
     },
-    [append, localeSetting, refreshSilentUserList, requestConfirm],
-  );
-
-  const requestRemoveBlackUser = useCallback(
-    async (item: LiveBlackUserItem) => {
-      const name = item.uname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
-      const accepted = await requestConfirm({
-        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unblack.title", { name }),
-        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unblack.desc", {
-          name,
-          uid: item.mid,
-        }),
-        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unblack.confirm"),
-        tone: "primary",
-      });
-      if (!accepted) {
-        return;
-      }
-
-      const res = await studioApi.removeBlackUser(item.mid);
-      if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_black_user_removed", { name }));
-        await refreshBlackUserList({ silent: true });
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.ctrl.live_black_user_remove_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
-        }),
-      );
-    },
-    [append, localeSetting, refreshBlackUserList, requestConfirm],
-  );
-
-  const requestRemoveRoomAdmin = useCallback(
-    async (item: LiveRoomAdminItem) => {
-      const name = item.uname.trim() || t(localeSetting, "ui.danmu.sender.anonymous");
-      const accepted = await requestConfirm({
-        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.title", { name }),
-        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.desc", {
-          name,
-          uid: item.uid,
-        }),
-        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.confirm"),
-        tone: "primary",
-      });
-      if (!accepted) {
-        return;
-      }
-
-      const res = await studioApi.removeRoomAdmin(item.uid);
-      if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_room_admin_removed", { name }));
-        await refreshRoomAdminList({ silent: true });
-        return;
-      }
-      append(
-        tf(localeSetting, "ui.ctrl.live_room_admin_remove_failed", {
-          msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
-        }),
-      );
-    },
-    [append, localeSetting, refreshRoomAdminList, requestConfirm],
-  );
-
-  const changeRoomAdminPage = useCallback(
-    (page: number) => {
-      void refreshRoomAdminList({ page, silent: true });
-    },
-    [refreshRoomAdminList],
-  );
-
-  const changeSilentUserPage = useCallback(
-    (page: number) => {
-      void refreshSilentUserList({ page, silent: true });
-    },
-    [refreshSilentUserList],
-  );
-
-  const changeBlackUserPage = useCallback(
-    (page: number) => {
-      void refreshBlackUserList({ page, silent: true });
-    },
-    [refreshBlackUserList],
-  );
-
-  const changeUserManageTab = useCallback(
-    (tab: "silent" | "blacklist" | "room_admin") => {
-      setUserManageActiveTab(tab);
-      if (tab === "silent") {
-        void refreshSilentUserList({ silent: true });
-      } else if (tab === "blacklist") {
-        void refreshBlackUserList({ silent: true });
-      } else {
-        void refreshRoomAdminList({ silent: true });
-      }
-    },
-    [refreshBlackUserList, refreshRoomAdminList, refreshSilentUserList],
-  );
+  } = liveUserManageController;
 
   const liveInteractionActions = useLiveInteractionActions({
     localeSetting,
