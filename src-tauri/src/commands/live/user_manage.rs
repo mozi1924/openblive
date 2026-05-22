@@ -653,6 +653,11 @@ pub(crate) async fn get_silent_user_list_inner(
         let data = value["data"].clone();
         let total = data["total"].as_u64().unwrap_or(0);
         let total_page = data["total_page"].as_u64().unwrap_or(1);
+        let page_size = data["page_size"]
+            .as_u64()
+            .or_else(|| data["ps"].as_u64())
+            .unwrap_or(20)
+            .max(1);
         let mut items = data["data"].as_array().cloned().unwrap_or_default();
 
         let mut avatar_targets = Vec::new();
@@ -723,6 +728,7 @@ pub(crate) async fn get_silent_user_list_inner(
 
         Ok(wrap_ok(json!({
             "page": page,
+            "page_size": page_size,
             "total": total,
             "total_page": total_page,
             "items": items,

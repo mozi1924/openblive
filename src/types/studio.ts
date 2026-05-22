@@ -343,6 +343,7 @@ export type LiveSilentUserItem = {
 
 export type LiveSilentUserListData = {
   page: number;
+  page_size: number;
   total: number;
   total_page: number;
   items: LiveSilentUserItem[];

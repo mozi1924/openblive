@@ -234,6 +234,7 @@ function App() {
             silentList={state.liveSilentUserList?.items || []}
             silentTotal={state.liveSilentUserList?.total || 0}
             silentPage={state.liveSilentUserList?.page || 1}
+            silentPageSize={state.liveSilentUserList?.page_size || 20}
             silentTotalPage={state.liveSilentUserList?.total_page || 1}
             onRefreshSilentList={actions.refreshSilentUserList}
             onChangeSilentPage={actions.changeSilentUserPage}
@@ -242,6 +243,7 @@ function App() {
             blackList={state.liveBlackUserList?.items || []}
             blackTotal={state.liveBlackUserList?.total || 0}
             blackPage={state.liveBlackUserList?.page || 1}
+            blackPageSize={state.liveBlackUserList?.page_size || 50}
             blackTotalPage={state.liveBlackUserList?.total_page || 1}
             onRefreshBlackList={actions.refreshBlackUserList}
             onChangeBlackPage={actions.changeBlackUserPage}
@@ -250,6 +252,7 @@ function App() {
             roomAdminList={state.liveRoomAdminList?.items || []}
             roomAdminTotal={state.liveRoomAdminList?.total || 0}
             roomAdminPage={state.liveRoomAdminList?.page || 1}
+            roomAdminPageSize={state.liveRoomAdminList?.page_size || 20}
             roomAdminTotalPage={state.liveRoomAdminList?.total_page || 1}
             onRefreshRoomAdminList={actions.refreshRoomAdminList}
             onChangeRoomAdminPage={actions.changeRoomAdminPage}

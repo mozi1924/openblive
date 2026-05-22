@@ -13,6 +13,7 @@ type LiveUserManagePanelProps = {
   silentList: LiveSilentUserItem[];
   silentTotal: number;
   silentPage: number;
+  silentPageSize: number;
   silentTotalPage: number;
   onRefreshSilentList: () => Promise<void>;
   onChangeSilentPage: (page: number) => void;
@@ -21,6 +22,7 @@ type LiveUserManagePanelProps = {
   blackList: LiveBlackUserItem[];
   blackTotal: number;
   blackPage: number;
+  blackPageSize: number;
   blackTotalPage: number;
   onRefreshBlackList: () => Promise<void>;
   onChangeBlackPage: (page: number) => void;
@@ -29,6 +31,7 @@ type LiveUserManagePanelProps = {
   roomAdminList: LiveRoomAdminItem[];
   roomAdminTotal: number;
   roomAdminPage: number;
+  roomAdminPageSize: number;
   roomAdminTotalPage: number;
   onRefreshRoomAdminList: () => Promise<void>;
   onChangeRoomAdminPage: (page: number) => void;
@@ -44,6 +47,7 @@ export function LiveUserManagePanel({
   silentList,
   silentTotal,
   silentPage,
+  silentPageSize,
   silentTotalPage,
   onRefreshSilentList,
   onChangeSilentPage,
@@ -52,6 +56,7 @@ export function LiveUserManagePanel({
   blackList,
   blackTotal,
   blackPage,
+  blackPageSize,
   blackTotalPage,
   onRefreshBlackList,
   onChangeBlackPage,
@@ -60,6 +65,7 @@ export function LiveUserManagePanel({
   roomAdminList,
   roomAdminTotal,
   roomAdminPage,
+  roomAdminPageSize,
   roomAdminTotalPage,
   onRefreshRoomAdminList,
   onChangeRoomAdminPage,
@@ -133,6 +139,11 @@ export function LiveUserManagePanel({
         </button>
       </div>
     );
+  };
+  const resolveDisplayRank = (page: number, pageSize: number, index: number) => {
+    const safePage = Number.isFinite(page) ? Math.max(Math.floor(page), 1) : 1;
+    const safePageSize = Number.isFinite(pageSize) ? Math.max(Math.floor(pageSize), 1) : 1;
+    return (safePage - 1) * safePageSize + index + 1;
   };
 
   return (
@@ -243,7 +254,9 @@ export function LiveUserManagePanel({
                       key={`${item.id}-${item.tuid}-${index}`}
                       className="grid grid-cols-[4.5rem_3.75rem_minmax(0,1.1fr)_minmax(0,0.8fr)_7.5rem] items-center gap-2 rounded-xl border border-white/6 bg-[#070b11]/70 px-3 py-2"
                     >
-                      <span className="text-sm font-semibold text-white">#{index + 1}</span>
+                      <span className="text-sm font-semibold text-white">
+                        #{resolveDisplayRank(silentPage, silentPageSize, index)}
+                      </span>
                       <LiveUserAvatar face={item.face} name={userName} />
                       <div className="min-w-0">
                         <p className="truncate text-sm text-gray-100">{userName}</p>
@@ -299,7 +312,9 @@ export function LiveUserManagePanel({
                       key={`${item.mid}-${index}`}
                       className="grid grid-cols-[4.5rem_3.75rem_minmax(0,1.1fr)_minmax(0,0.8fr)_7.5rem] items-center gap-2 rounded-xl border border-white/6 bg-[#070b11]/70 px-3 py-2"
                     >
-                      <span className="text-sm font-semibold text-white">#{index + 1}</span>
+                      <span className="text-sm font-semibold text-white">
+                        #{resolveDisplayRank(blackPage, blackPageSize, index)}
+                      </span>
                       <LiveUserAvatar face={item.face} name={userName} />
                       <div className="min-w-0">
                         <p className="truncate text-sm text-gray-100">{userName}</p>
@@ -350,7 +365,9 @@ export function LiveUserManagePanel({
                       key={`${item.uid}-${index}`}
                       className="grid grid-cols-[4.5rem_3.75rem_minmax(0,1.1fr)_minmax(0,0.8fr)_7.5rem] items-center gap-2 rounded-xl border border-white/6 bg-[#070b11]/70 px-3 py-2"
                     >
-                      <span className="text-sm font-semibold text-white">#{index + 1}</span>
+                      <span className="text-sm font-semibold text-white">
+                        #{resolveDisplayRank(roomAdminPage, roomAdminPageSize, index)}
+                      </span>
                       <LiveUserAvatar face={item.face} name={userName} />
                       <div className="min-w-0">
                         <p className="truncate text-sm text-gray-100">{userName}</p>
