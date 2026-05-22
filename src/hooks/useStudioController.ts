@@ -27,6 +27,11 @@ import { useDanmuMessageFeed } from "./studio/useDanmuMessageFeed";
 import { useAppUpdateController } from "./studio/useAppUpdateController";
 import { useLiveUserManageController } from "./studio/useLiveUserManageController";
 import { useAppConfigController } from "./studio/useAppConfigController";
+import {
+  TOP_NOTICE_DURATION_MS,
+  type TopNoticeItem,
+  type TopNoticeTone,
+} from "../types/topNotice";
 
 type ConfirmModalTone = "primary" | "danger";
 type ConfirmModalSelectOption = {
@@ -54,6 +59,7 @@ export function useStudioController() {
   const [showLogs, setShowLogs] = useState(false);
   const [showLiveOnlineRankPanel, setShowLiveOnlineRankPanel] = useState(false);
   const [showUserManagePanel, setShowUserManagePanel] = useState(false);
+  const [topNotices, setTopNotices] = useState<TopNoticeItem[]>([]);
 
   const [qrcode, setQrcode] = useState("");
   const [qrcodeKey, setQrcodeKey] = useState("");
@@ -111,6 +117,8 @@ export function useStudioController() {
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
   const liveOnlineRankPollingRef = useRef(false);
   const confirmSelectValueRef = useRef("");
+  const topNoticeSeqRef = useRef(0);
+  const topNoticeTimersRef = useRef<Map<number, number>>(new Map());
 
   const children = useMemo(() => partitions[parent] || [], [parent, partitions]);
   useWindowDrag(sidebarDragRef, headerDragRef);
@@ -124,6 +132,41 @@ export function useStudioController() {
       setLogs((prev) => [message, ...prev].slice(0, 300));
     });
   }, []);
+
+  const dismissTopNotice = useCallback((id: number) => {
+    const timerId = topNoticeTimersRef.current.get(id);
+    if (timerId) {
+      window.clearTimeout(timerId);
+      topNoticeTimersRef.current.delete(id);
+    }
+    setTopNotices((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const pushTopNotice = useCallback(
+    (payload: { text: string; tone: TopNoticeTone }) => {
+      const text = payload.text.trim();
+      if (!text) {
+        return;
+      }
+      const id = ++topNoticeSeqRef.current;
+      setTopNotices((prev) => [...prev.slice(-2), { id, text, tone: payload.tone }]);
+      const timer = window.setTimeout(() => {
+        dismissTopNotice(id);
+      }, TOP_NOTICE_DURATION_MS);
+      topNoticeTimersRef.current.set(id, timer);
+    },
+    [dismissTopNotice],
+  );
+
+  useEffect(
+    () => () => {
+      for (const timerId of topNoticeTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+      topNoticeTimersRef.current.clear();
+    },
+    [],
+  );
 
   const syncTrayMenu = useCallback(async () => {
     await studioApi.refreshTrayMenu().catch(() => undefined);
@@ -543,6 +586,7 @@ export function useStudioController() {
     showUserManagePanel,
     requestConfirm,
     getConfirmSelectValue: () => confirmSelectValueRef.current,
+    notifyActionResult: pushTopNotice,
   });
   const {
     state: {
@@ -561,6 +605,7 @@ export function useStudioController() {
       requestMuteUserByDanmu,
       requestBlackUserByDanmu,
       requestRoomAdminByDanmu,
+      requestRemoveRoomAdminByDanmu,
       requestRemoveSilentUser,
       requestRemoveBlackUser,
       requestRemoveRoomAdmin,
@@ -773,6 +818,7 @@ export function useStudioController() {
       tags,
       title,
       userManageActiveTab,
+      topNotices,
     },
     actions: {
       changeParent,
@@ -784,6 +830,7 @@ export function useStudioController() {
       cancelConfirmAction: () => resolveConfirm(false),
       closeFaceModal: () => setShowFaceModal(false),
       closeLogs: () => setShowLogs(false),
+      dismissTopNotice,
       confirmAction: () => resolveConfirm(true),
       copyToClipboard,
       loadAccounts,
@@ -860,6 +907,7 @@ export function useStudioController() {
       requestMuteUserByDanmu,
       requestBlackUserByDanmu,
       requestRoomAdminByDanmu,
+      requestRemoveRoomAdminByDanmu,
       requestRemoveSilentUser,
       requestRemoveBlackUser,
       requestRemoveRoomAdmin,

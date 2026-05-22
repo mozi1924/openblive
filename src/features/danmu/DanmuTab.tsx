@@ -55,6 +55,7 @@ type DanmuTabProps = {
   onRequestMuteUser: (message: DanmuMsg) => Promise<void>;
   onRequestBlackUser: (message: DanmuMsg) => Promise<void>;
   onRequestRoomAdmin: (message: DanmuMsg) => Promise<void>;
+  onRequestUnroomAdmin: (message: DanmuMsg) => Promise<void>;
 };
 
 export function DanmuTab({
@@ -92,6 +93,7 @@ export function DanmuTab({
   onRequestMuteUser,
   onRequestBlackUser,
   onRequestRoomAdmin,
+  onRequestUnroomAdmin,
 }: DanmuTabProps) {
   const [openPanel, setOpenPanel] = useState<"emoticon" | "vote" | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -359,23 +361,27 @@ export function DanmuTab({
           </button>
           <button
             type="button"
-            disabled={isRoomAdmin}
             onClick={() => {
-              if (isRoomAdmin) {
-                return;
-              }
               const target = contextMenu.message;
               setContextMenu(null);
+              if (isRoomAdmin) {
+                void onRequestUnroomAdmin(target);
+                return;
+              }
               void onRequestRoomAdmin(target);
             }}
             className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-all ${
               isRoomAdmin
-                ? "cursor-not-allowed text-gray-500"
+                ? "text-emerald-100 hover:bg-emerald-500/14"
                 : "text-cyan-100 hover:bg-cyan-500/14"
             }`}
           >
             <Shield className="h-3.5 w-3.5" />
-            <span>{t(locale, "ui.danmu.user_manage.context.room_admin")}</span>
+            <span>
+              {isRoomAdmin
+                ? t(locale, "ui.danmu.user_manage.context.unroom_admin")
+                : t(locale, "ui.danmu.user_manage.context.room_admin")}
+            </span>
           </button>
               </>
             );

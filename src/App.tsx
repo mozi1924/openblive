@@ -5,6 +5,7 @@ import { LogDrawer } from "./components/layout/LogDrawer";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ConfirmActionModal } from "./components/shared/ConfirmActionModal";
 import { FaceAuthModal } from "./components/shared/FaceAuthModal";
+import { TopNoticeStack } from "./components/shared/TopNoticeStack";
 import { AccountTab } from "./features/account/AccountTab";
 import { DanmuTab } from "./features/danmu/DanmuTab";
 import { LiveOnlineRankPanel } from "./features/danmu/LiveOnlineRankPanel";
@@ -28,6 +29,7 @@ function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#080b10] text-[#eaeef6] select-none">
+      <TopNoticeStack notices={state.topNotices} onDismiss={actions.dismissTopNotice} />
       <Sidebar
         activeTab={state.activeTab}
         locale={locale}
@@ -174,6 +176,7 @@ function App() {
               onRequestMuteUser={actions.requestMuteUserByDanmu}
               onRequestBlackUser={actions.requestBlackUserByDanmu}
               onRequestRoomAdmin={actions.requestRoomAdminByDanmu}
+              onRequestUnroomAdmin={actions.requestRemoveRoomAdminByDanmu}
             />
           )}
 

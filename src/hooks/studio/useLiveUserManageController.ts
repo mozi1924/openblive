@@ -27,6 +27,8 @@ type ConfirmRequestPayload = {
   selectValue?: string;
 };
 
+type UserManageNoticeTone = "success" | "error";
+
 type UseLiveUserManageControllerParams = {
   localeSetting: LocaleSetting;
   append: (line: string) => void;
@@ -34,6 +36,7 @@ type UseLiveUserManageControllerParams = {
   showUserManagePanel: boolean;
   requestConfirm: (payload: ConfirmRequestPayload) => Promise<boolean>;
   getConfirmSelectValue: () => string;
+  notifyActionResult?: (payload: { text: string; tone: UserManageNoticeTone }) => void;
 };
 
 export function useLiveUserManageController({
@@ -43,6 +46,7 @@ export function useLiveUserManageController({
   showUserManagePanel,
   requestConfirm,
   getConfirmSelectValue,
+  notifyActionResult,
 }: UseLiveUserManageControllerParams) {
   const [userManageActiveTab, setUserManageActiveTab] = useState<
     "silent" | "blacklist" | "room_admin"
@@ -64,6 +68,17 @@ export function useLiveUserManageController({
       { value: "-1", label: t(localeSetting, "ui.danmu.user_manage.duration.forever") },
     ],
     [localeSetting],
+  );
+
+  const emitActionResult = useCallback(
+    (text: string, tone: UserManageNoticeTone) => {
+      const message = text.trim();
+      if (!message) {
+        return;
+      }
+      notifyActionResult?.({ text: message, tone });
+    },
+    [notifyActionResult],
   );
 
   const refreshSilentUserList = useCallback(
@@ -168,7 +183,9 @@ export function useLiveUserManageController({
       const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
       const currentUid = currentUserUid ? Number(currentUserUid) : Number.NaN;
       if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
-        append(t(localeSetting, "ui.ctrl.live_silent_user_invalid_target"));
+        const message = t(localeSetting, "ui.ctrl.live_silent_user_invalid_target");
+        append(message);
+        emitActionResult(message, "error");
         return;
       }
 
@@ -202,22 +219,22 @@ export function useLiveUserManageController({
         const durationLabel =
           muteDurationOptions.find((option) => option.value === String(muteHours))?.label ||
           String(muteHours);
-        append(
-          tf(localeSetting, "ui.ctrl.live_silent_user_added", {
-            name: senderName,
-            duration: durationLabel,
-          }),
-        );
+        const message = tf(localeSetting, "ui.ctrl.live_silent_user_added", {
+          name: senderName,
+          duration: durationLabel,
+        });
+        append(message);
+        emitActionResult(message, "success");
         if (showUserManagePanel) {
           void refreshSilentUserList({ silent: true });
         }
         return;
       }
-      append(
-        tf(localeSetting, "ui.ctrl.live_silent_user_add_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
-        }),
-      );
+      const failMessage = tf(localeSetting, "ui.ctrl.live_silent_user_add_failed", {
+        msg: resolveBackendMessage(res.msg, localeSetting),
+      });
+      append(failMessage);
+      emitActionResult(failMessage, "error");
     },
     [
       append,
@@ -228,6 +245,7 @@ export function useLiveUserManageController({
       refreshSilentUserList,
       requestConfirm,
       showUserManagePanel,
+      emitActionResult,
     ],
   );
 
@@ -236,7 +254,9 @@ export function useLiveUserManageController({
       const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
       const currentUid = currentUserUid ? Number(currentUserUid) : Number.NaN;
       if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
-        append(t(localeSetting, "ui.ctrl.live_black_user_invalid_target"));
+        const message = t(localeSetting, "ui.ctrl.live_black_user_invalid_target");
+        append(message);
+        emitActionResult(message, "error");
         return;
       }
 
@@ -258,19 +278,29 @@ export function useLiveUserManageController({
 
       const res = await studioApi.addBlackUser(senderUid);
       if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_black_user_added", { name: senderName }));
+        const message = tf(localeSetting, "ui.ctrl.live_black_user_added", { name: senderName });
+        append(message);
+        emitActionResult(message, "success");
         if (showUserManagePanel) {
           void refreshBlackUserList({ silent: true });
         }
         return;
       }
-      append(
-        tf(localeSetting, "ui.ctrl.live_black_user_add_failed", {
-          msg: resolveBackendMessage(res.msg, localeSetting),
-        }),
-      );
+      const failMessage = tf(localeSetting, "ui.ctrl.live_black_user_add_failed", {
+        msg: resolveBackendMessage(res.msg, localeSetting),
+      });
+      append(failMessage);
+      emitActionResult(failMessage, "error");
     },
-    [append, currentUserUid, localeSetting, refreshBlackUserList, requestConfirm, showUserManagePanel],
+    [
+      append,
+      currentUserUid,
+      localeSetting,
+      refreshBlackUserList,
+      requestConfirm,
+      showUserManagePanel,
+      emitActionResult,
+    ],
   );
 
   const requestRoomAdminByDanmu = useCallback(
@@ -278,7 +308,9 @@ export function useLiveUserManageController({
       const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
       const currentUid = currentUserUid ? Number(currentUserUid) : Number.NaN;
       if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
-        append(t(localeSetting, "ui.ctrl.live_room_admin_invalid_target"));
+        const message = t(localeSetting, "ui.ctrl.live_room_admin_invalid_target");
+        append(message);
+        emitActionResult(message, "error");
         return;
       }
 
@@ -302,19 +334,84 @@ export function useLiveUserManageController({
 
       const res = await studioApi.addRoomAdmin(senderUid);
       if (res.code === 0) {
-        append(tf(localeSetting, "ui.ctrl.live_room_admin_added", { name: senderName }));
-        if (showUserManagePanel) {
-          void refreshRoomAdminList({ silent: true });
-        }
+        const message = tf(localeSetting, "ui.ctrl.live_room_admin_added", { name: senderName });
+        append(message);
+        emitActionResult(message, "success");
+        void refreshRoomAdminList({ silent: true });
         return;
       }
-      append(
-        tf(localeSetting, "ui.ctrl.live_room_admin_add_failed", {
-          msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
-        }),
-      );
+      const failMessage = tf(localeSetting, "ui.ctrl.live_room_admin_add_failed", {
+        msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
+      });
+      append(failMessage);
+      emitActionResult(failMessage, "error");
     },
-    [append, currentUserUid, localeSetting, refreshRoomAdminList, requestConfirm, showUserManagePanel],
+    [
+      append,
+      currentUserUid,
+      localeSetting,
+      refreshRoomAdminList,
+      requestConfirm,
+      showUserManagePanel,
+      emitActionResult,
+    ],
+  );
+
+  const requestRemoveRoomAdminByDanmu = useCallback(
+    async (message: DanmuMsg) => {
+      const senderUid = typeof message.sender_uid === "number" ? message.sender_uid : Number.NaN;
+      const currentUid = currentUserUid ? Number(currentUserUid) : Number.NaN;
+      if (!Number.isFinite(senderUid) || senderUid <= 0 || senderUid === currentUid) {
+        const errorMessage = t(localeSetting, "ui.ctrl.live_room_admin_invalid_target");
+        append(errorMessage);
+        emitActionResult(errorMessage, "error");
+        return;
+      }
+
+      const senderName =
+        resolveBackendMessage(message.sender, localeSetting).trim() ||
+        t(localeSetting, "ui.danmu.sender.anonymous");
+      const accepted = await requestConfirm({
+        title: tf(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.title", {
+          name: senderName,
+        }),
+        description: tf(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.desc", {
+          name: senderName,
+          uid: senderUid,
+        }),
+        confirmText: t(localeSetting, "ui.danmu.user_manage.confirm.unroom_admin.confirm"),
+        tone: "primary",
+      });
+      if (!accepted) {
+        return;
+      }
+
+      const res = await studioApi.removeRoomAdmin(senderUid);
+      if (res.code === 0) {
+        const okMessage = tf(localeSetting, "ui.ctrl.live_room_admin_removed", {
+          name: senderName,
+        });
+        append(okMessage);
+        emitActionResult(okMessage, "success");
+        void refreshRoomAdminList({ silent: true });
+        return;
+      }
+
+      const failMessage = tf(localeSetting, "ui.ctrl.live_room_admin_remove_failed", {
+        msg: `${resolveBackendMessage(res.msg, localeSetting)} (code: ${res.code})`,
+      });
+      append(failMessage);
+      emitActionResult(failMessage, "error");
+    },
+    [
+      append,
+      currentUserUid,
+      localeSetting,
+      refreshRoomAdminList,
+      requestConfirm,
+      showUserManagePanel,
+      emitActionResult,
+    ],
   );
 
   const requestRemoveSilentUser = useCallback(
@@ -462,6 +559,7 @@ export function useLiveUserManageController({
       requestMuteUserByDanmu,
       requestBlackUserByDanmu,
       requestRoomAdminByDanmu,
+      requestRemoveRoomAdminByDanmu,
       requestRemoveSilentUser,
       requestRemoveBlackUser,
       requestRemoveRoomAdmin,
