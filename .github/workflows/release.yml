@@ -13,7 +13,78 @@ on:
         type: boolean
 
 jobs:
+  prepare-release-notes:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      release_body: ${{ steps.notes.outputs.release_body }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_ref=""
+          range=""
+          prev_tag=""
+
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            current_ref="${GITHUB_REF_NAME}"
+            prev_tag="$(git describe --tags --abbrev=0 "${current_ref}^" 2>/dev/null || true)"
+            if [[ -n "${prev_tag}" ]]; then
+              range="${prev_tag}..${current_ref}"
+            else
+              range="${current_ref}"
+            fi
+          else
+            current_ref="HEAD"
+            prev_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+            if [[ -n "${prev_tag}" ]]; then
+              range="${prev_tag}..HEAD"
+            else
+              range="HEAD"
+            fi
+          fi
+
+          commit_log="$(git log --pretty=format:'- %s (`%h`) — %an' ${range} || true)"
+          if [[ -z "${commit_log}" ]]; then
+            commit_log="- No commits found in this range."
+          fi
+
+          {
+            echo "release_body<<EOF"
+            echo "Automated release built by GitHub Actions."
+            echo
+            echo "## Changelog"
+            if [[ -n "${prev_tag}" ]]; then
+              echo "From \`${prev_tag}\` to \`${current_ref}\`:"
+            else
+              echo "From initial history to \`${current_ref}\`:"
+            fi
+            echo
+            echo "${commit_log}"
+            echo
+            echo "## Notes"
+            echo
+            echo "macOS users need to remove the quarantine attribute before first launch:"
+            echo
+            echo "\`\`\`bash"
+            echo "sudo xattr -dr com.apple.quarantine \"/Applications/OpenBlive Studio.app\""
+            echo "\`\`\`"
+            echo
+            echo "If the app is installed outside \`/Applications\`, replace the path with the actual app location."
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
   tauri-release:
+    needs: prepare-release-notes
     permissions:
       contents: write
     strategy:
@@ -30,6 +101,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -69,18 +142,7 @@ jobs:
           tauriScript: pnpm tauri
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v__VERSION__-dev.{0}', github.run_number) }}
           releaseName: "OpenBlive Studio v__VERSION__"
-          releaseBody: |
-            Automated release built by GitHub Actions.
-
-            ## Notes
-
-            macOS users need to remove the quarantine attribute before first launch:
-
-            ```bash
-            sudo xattr -dr com.apple.quarantine "/Applications/OpenBlive Studio.app"
-            ```
-
-            If the app is installed outside `/Applications`, replace the path with the actual app location.
+          releaseBody: ${{ needs.prepare-release-notes.outputs.release_body }}
           releaseDraft: false
           prerelease: ${{ (startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-')) || (github.event_name == 'workflow_dispatch' && (inputs.prerelease == true || inputs.prerelease == 'true')) }}
           uploadUpdaterJson: true
