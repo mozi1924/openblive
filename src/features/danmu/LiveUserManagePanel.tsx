@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Ban, RefreshCw, ShieldX, X } from "lucide-react";
 import type { LiveSilentUserItem } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t, tf } from "../../utils/i18n";
+import { LiveUserAvatar } from "./LiveUserAvatar";
 
 type LiveUserManagePanelProps = {
   locale: LocaleSetting;
@@ -15,28 +16,6 @@ type LiveUserManagePanelProps = {
   onRequestRemoveSilentUser: (item: LiveSilentUserItem) => Promise<void>;
   onClose: () => void;
 };
-
-function SilentUserAvatar({ face, name }: { face: string; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const initial = name.trim().charAt(0) || "?";
-
-  return (
-    <div className="relative h-9 w-9 overflow-hidden rounded-full border border-white/10 bg-white/5">
-      {!failed && face ? (
-        <img
-          src={face}
-          alt={name}
-          className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-gray-300">
-          {initial}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function LiveUserManagePanel({
   locale,
@@ -139,7 +118,7 @@ export function LiveUserManagePanel({
                     className="grid grid-cols-[4.5rem_3.75rem_minmax(0,1.1fr)_minmax(0,0.8fr)_7.5rem] items-center gap-2 rounded-xl border border-white/6 bg-[#070b11]/70 px-3 py-2"
                   >
                     <span className="text-sm font-semibold text-white">#{index + 1}</span>
-                    <SilentUserAvatar face={item.face} name={userName} />
+                    <LiveUserAvatar face={item.face} name={userName} />
                     <div className="min-w-0">
                       <p className="truncate text-sm text-gray-100">{userName}</p>
                       <p className="truncate text-[10px] text-gray-500">UID: {item.tuid}</p>
