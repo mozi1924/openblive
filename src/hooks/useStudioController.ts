@@ -318,7 +318,6 @@ export function useStudioController() {
 
   const danmuVoteController = useDanmuVoteController({
     activeUidRef,
-    sessionRoomId: session?.room_id,
     localeSetting,
     append,
     requestConfirm,
@@ -447,12 +446,7 @@ export function useStudioController() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (
-      activeTab !== "danmu" ||
-      !showLiveOnlineRankPanel ||
-      !hasLiveAuth ||
-      !session?.room_id
-    ) {
+    if (activeTab !== "danmu" || !showLiveOnlineRankPanel || !hasLiveAuth) {
       return;
     }
 
@@ -479,7 +473,7 @@ export function useStudioController() {
       window.clearInterval(timer);
       liveOnlineRankPollingRef.current = false;
     };
-  }, [activeTab, hasLiveAuth, loadLiveOnlineRank, session?.room_id, showLiveOnlineRankPanel]);
+  }, [activeTab, hasLiveAuth, loadLiveOnlineRank, showLiveOnlineRankPanel]);
 
   const applyProfileState = useCallback((nextState?: LiveProfileState | null) => {
     const normalized = normalizeProfileState(nextState);
@@ -1258,7 +1252,6 @@ export function useStudioController() {
     loadAppConfig,
     loadLinkageStatus,
     currentUserUid: hasLiveAuth ? currentUser?.uid : undefined,
-    sessionRoomId: session?.room_id,
     hasLiveAuth,
     clearDanmuAssetsAndVoteState,
     syncLiveRoomProfile: syncLiveRoomProfileResources,

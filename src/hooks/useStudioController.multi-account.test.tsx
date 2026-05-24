@@ -435,7 +435,7 @@ describe("useStudioController multi-account regressions", () => {
     expect(result.current.state.session).toBeNull();
   });
 
-  it("does not request online rank before session room id is ready", async () => {
+  it("still requests online rank even when session room id is temporarily empty", async () => {
     const user = makeUser("1", "A", "A-old");
     mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
     mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: user.uid }));
@@ -455,7 +455,7 @@ describe("useStudioController multi-account regressions", () => {
       await flush();
     });
 
-    expect(mockStudioApi.getLiveOnlineRank).not.toHaveBeenCalled();
+    expect(mockStudioApi.getLiveOnlineRank).toHaveBeenCalled();
   });
 
   it("keeps danmu listening state while clearing messages after switching account", async () => {

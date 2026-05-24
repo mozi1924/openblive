@@ -27,7 +27,6 @@ type RequestConfirmPayload = {
 
 type UseDanmuVoteControllerParams = {
   activeUidRef: MutableRefObject<string | null>;
-  sessionRoomId: string | null | undefined;
   localeSetting: LocaleSetting;
   append: (line: string) => void;
   requestConfirm: (payload: RequestConfirmPayload) => Promise<boolean>;
@@ -35,7 +34,6 @@ type UseDanmuVoteControllerParams = {
 
 export function useDanmuVoteController({
   activeUidRef,
-  sessionRoomId,
   localeSetting,
   append,
   requestConfirm,
@@ -189,18 +187,25 @@ export function useDanmuVoteController({
 
   const loadLiveOnlineRank = useCallback(
     async (options?: { silent?: boolean }) => {
-      if (!activeUidRef.current || !sessionRoomId) {
+      if (!activeUidRef.current) {
         setLiveOnlineRankData(null);
         return;
       }
 
       const requestUid = activeUidRef.current;
+      const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number) =>
+        Promise.race<T>([
+          promise,
+          new Promise<T>((_, reject) => {
+            window.setTimeout(() => reject(new Error("online_rank_request_timeout")), timeoutMs);
+          }),
+        ]);
       if (!options?.silent) {
         setLiveOnlineRankLoading(true);
       }
 
       try {
-        const res = await studioApi.getLiveOnlineRank();
+        const res = await withTimeout(studioApi.getLiveOnlineRank(), 8_000);
         if (requestUid !== activeUidRef.current) {
           return;
         }
@@ -221,11 +226,11 @@ export function useDanmuVoteController({
           return;
         }
 
-        setLiveOnlineRankData({
-          online_num: 0,
-          online_rank_items: [],
-        });
         if (!options?.silent) {
+          setLiveOnlineRankData({
+            online_num: 0,
+            online_rank_items: [],
+          });
           append(
             tf(localeSetting, "ui.ctrl.live_online_rank_load_failed", {
               msg: resolveBackendMessage(res.msg, localeSetting),
@@ -236,11 +241,11 @@ export function useDanmuVoteController({
         if (requestUid !== activeUidRef.current) {
           return;
         }
-        setLiveOnlineRankData({
-          online_num: 0,
-          online_rank_items: [],
-        });
         if (!options?.silent) {
+          setLiveOnlineRankData({
+            online_num: 0,
+            online_rank_items: [],
+          });
           append(
             tf(localeSetting, "ui.ctrl.live_online_rank_load_failed", {
               msg: resolveBackendMessage(String(error), localeSetting),
@@ -253,7 +258,7 @@ export function useDanmuVoteController({
         }
       }
     },
-    [activeUidRef, append, localeSetting, sessionRoomId],
+    [activeUidRef, append, localeSetting],
   );
 
   const applyLiveVoteTemplate = useCallback(

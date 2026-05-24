@@ -28,7 +28,6 @@ type UseStudioControllerEffectsParams = {
   loadAppConfig: () => Promise<void>;
   loadLinkageStatus: () => Promise<void>;
   currentUserUid: string | undefined;
-  sessionRoomId: string | undefined;
   hasLiveAuth: boolean;
   clearDanmuAssetsAndVoteState: () => void;
   syncLiveRoomProfile: (forceAllDrafts?: boolean) => Promise<unknown>;
@@ -77,7 +76,6 @@ export function useStudioControllerEffects({
   loadAppConfig,
   loadLinkageStatus,
   currentUserUid,
-  sessionRoomId,
   hasLiveAuth,
   clearDanmuAssetsAndVoteState,
   syncLiveRoomProfile,
@@ -179,11 +177,11 @@ export function useStudioControllerEffects({
   }, [clearLiveVoteState, currentUserUid, loadLiveVoteData]);
 
   useEffect(() => {
-    if (!currentUserUid?.trim() || !sessionRoomId?.trim()) {
+    if (!currentUserUid?.trim()) {
       return;
     }
     void loadLiveOnlineRank({ silent: true });
-  }, [currentUserUid, loadLiveOnlineRank, sessionRoomId]);
+  }, [currentUserUid, loadLiveOnlineRank]);
 
   useEffect(() => {
     if (!qrcodeKey || !qrLoginExpiresAt) {
