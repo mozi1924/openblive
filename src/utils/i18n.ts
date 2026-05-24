@@ -4,7 +4,7 @@ import { uiEnUS, uiZhCN } from "./i18n/ui";
 export type LocaleSetting = "auto" | "zh-CN" | "en-US";
 export type EffectiveLocale = "zh-CN" | "en-US";
 
-const I18N_KEY_RE = /(i18n\.[a-z0-9_.-]+)/i;
+const I18N_KEY_RE = /(i18n\.[a-z0-9_.-]+)/gi;
 
 export function resolveLocale(locale: LocaleSetting): EffectiveLocale {
   if (locale === "zh-CN" || locale === "en-US") {
@@ -40,14 +40,9 @@ export const resolveBackendMessage = (
   localeSetting: LocaleSetting = "auto",
 ): string => {
   const text = String(raw || "");
-  const match = text.match(I18N_KEY_RE);
-  if (!match) {
-    return text;
-  }
-
-  const key = match[1];
-  const translated = backendDict(resolveLocale(localeSetting))[key] || key;
-  const prefix = text.slice(0, match.index ?? 0);
-  const suffix = text.slice(match.index! + key.length);
-  return `${prefix}${translated}${suffix}`;
+  const dict = backendDict(resolveLocale(localeSetting));
+  return text.replace(I18N_KEY_RE, (fullMatch, key: string) => {
+    const normalizedKey = key.toLowerCase();
+    return dict[key] || dict[normalizedKey] || fullMatch;
+  });
 };

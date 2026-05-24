@@ -136,12 +136,23 @@ export const backendZhCN: Record<string, string> = {
 export const backendEnUS: Record<string, string> = {
   "i18n.common.not_logged_in": "Not logged in",
   "i18n.common.login_expired_relogin": "Session expired, please log in again",
+  "i18n.account.error.local_credential_empty": "Local credential is empty, please log in again",
   "i18n.live.face_auth_required": "Face verification required",
   "i18n.live.danmu_send_success": "Sent",
   "i18n.live.danmu_monitor_already_running": "Danmu monitor is already running",
   "i18n.live.danmu_monitor_started": "Danmu monitor started",
   "i18n.live.danmu_monitor_stopped": "Danmu monitor stopped",
+  "i18n.live.profile.title_conflict": "Remote title differs from the latest submitted title",
+  "i18n.live.profile.area_conflict": "Remote area differs from the latest submitted area",
+  "i18n.live.profile.tags_conflict": "Remote tags differ from the latest submitted tags",
   "i18n.live.profile.cover_conflict": "Remote cover differs from the latest submitted cover",
+  "i18n.live.error.room_id_missing": "Live room id is missing",
+  "i18n.live.error.csrf_missing": "CSRF is missing, please refresh account information",
+  "i18n.live.error.obs_stream_context_missing":
+    "Stream URL or stream code is missing, OBS WS linkage cannot be executed",
+  "i18n.live.error.start_linkage_failed_with_rollback":
+    "Start-live linkage failed, rollback was attempted",
+  "i18n.live.error.update_title_failed": "Failed to update title",
   "i18n.live.error.fetch_live_cover_failed": "Failed to load live cover",
   "i18n.live.error.update_cover_failed": "Failed to apply cover",
   "i18n.live.error.fetch_cover_history_failed": "Failed to load cover history",
