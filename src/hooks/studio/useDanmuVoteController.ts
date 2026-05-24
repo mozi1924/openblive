@@ -27,6 +27,7 @@ type RequestConfirmPayload = {
 
 type UseDanmuVoteControllerParams = {
   activeUidRef: MutableRefObject<string | null>;
+  sessionRoomId: string | null | undefined;
   localeSetting: LocaleSetting;
   append: (line: string) => void;
   requestConfirm: (payload: RequestConfirmPayload) => Promise<boolean>;
@@ -34,6 +35,7 @@ type UseDanmuVoteControllerParams = {
 
 export function useDanmuVoteController({
   activeUidRef,
+  sessionRoomId,
   localeSetting,
   append,
   requestConfirm,
@@ -187,6 +189,11 @@ export function useDanmuVoteController({
 
   const loadLiveOnlineRank = useCallback(
     async (options?: { silent?: boolean }) => {
+      if (!activeUidRef.current || !sessionRoomId) {
+        setLiveOnlineRankData(null);
+        return;
+      }
+
       const requestUid = activeUidRef.current;
       if (!options?.silent) {
         setLiveOnlineRankLoading(true);
@@ -246,7 +253,7 @@ export function useDanmuVoteController({
         }
       }
     },
-    [activeUidRef, append, localeSetting],
+    [activeUidRef, append, localeSetting, sessionRoomId],
   );
 
   const applyLiveVoteTemplate = useCallback(

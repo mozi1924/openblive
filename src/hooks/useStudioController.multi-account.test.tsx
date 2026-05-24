@@ -435,6 +435,29 @@ describe("useStudioController multi-account regressions", () => {
     expect(result.current.state.session).toBeNull();
   });
 
+  it("does not request online rank before session room id is ready", async () => {
+    const user = makeUser("1", "A", "A-old");
+    mockStudioApi.loadSavedConfig.mockResolvedValue(ok(user));
+    mockStudioApi.getAccountList.mockResolvedValue(ok({ list: [user], current_uid: user.uid }));
+    mockStudioApi.syncLiveStatus.mockResolvedValue(
+      ok({
+        uid: 1,
+        room_id: "",
+        csrf: "",
+        live_status: 0,
+        from_cache: false,
+      }),
+    );
+
+    const { result } = renderHook(() => useStudioController());
+    await waitFor(() => expect(result.current.state.currentUser?.uid).toBe("1"));
+    await act(async () => {
+      await flush();
+    });
+
+    expect(mockStudioApi.getLiveOnlineRank).not.toHaveBeenCalled();
+  });
+
   it("keeps danmu listening state while clearing messages after switching account", async () => {
     const userA = makeUser("1", "A", "A-old");
     const userB = makeUser("2", "B", "B-old");
