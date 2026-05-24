@@ -28,6 +28,8 @@ jobs:
       - name: Generate release notes
         id: notes
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -53,6 +55,7 @@ jobs:
             fi
           fi
 
+          api_base="${GITHUB_API_URL:-https://api.github.com}"
           commit_log=""
           while IFS= read -r commit_sha; do
             [[ -z "${commit_sha}" ]] && continue
@@ -65,40 +68,13 @@ jobs:
 
             if [[ -n "${GITHUB_TOKEN:-}" ]]; then
               commit_author_mention="$(
-                python3 - "${commit_sha}" <<'PY'
-import json
-import os
-import sys
-import urllib.request
-
-sha = sys.argv[1]
-api_base = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-repo = os.environ.get("GITHUB_REPOSITORY", "")
-token = os.environ.get("GITHUB_TOKEN", "")
-url = f"{api_base}/repos/{repo}/commits/{sha}"
-
-request = urllib.request.Request(
-    url,
-    headers={
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "release-notes-generator",
-    },
-)
-
-try:
-    with urllib.request.urlopen(request, timeout=10) as response:
-        payload = json.load(response)
-except Exception:
-    sys.exit(0)
-
-author = payload.get("author") or {}
-committer = payload.get("committer") or {}
-login = author.get("login") or committer.get("login") or ""
-if login:
-    sys.stdout.write(f"@{login}")
-PY
+                curl -fsSL \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "${api_base}/repos/${GITHUB_REPOSITORY}/commits/${commit_sha}" \
+                  | python3 -c 'import json,sys; p=json.load(sys.stdin); a=(p.get("author") or {}).get("login") or (p.get("committer") or {}).get("login") or ""; sys.stdout.write(f"@{a}" if a else "")' \
+                  || true
               )"
             fi
 
