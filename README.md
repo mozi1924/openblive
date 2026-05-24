@@ -111,6 +111,7 @@
 
 ## 📚 文档导航
 
+- [OBS 联动配置教程](docs/obs-websocket-setup.md)
 - [外部 WebSocket API 文档](docs/ws-api.md)
 - [Overlay / blivechat 兼容层说明](docs/ws-overlay-compat.md)
 
