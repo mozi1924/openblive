@@ -1,4 +1,5 @@
 use crate::client::parse_cookie_value;
+pub(super) use crate::live_status::normalize_live_status;
 use crate::models::UserRecord;
 use serde_json::Value;
 
@@ -69,12 +70,4 @@ pub(super) fn cookie_diagnostics(cookie_header: &str) -> String {
         "has_sess={has_sess}, has_uid={has_uid}, has_csrf={has_csrf}, has_sid={has_sid}, cookie_len={}",
         cookie_header.len()
     )
-}
-
-pub(super) fn normalize_live_status(status: i64) -> i64 {
-    match status {
-        1 => 1,
-        2 => 2,
-        _ => 0,
-    }
 }

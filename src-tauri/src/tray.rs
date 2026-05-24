@@ -1,3 +1,4 @@
+use crate::live_status::{resolve_live_status, LIVE_STATUS_LIVE, LIVE_STATUS_ROUND};
 use crate::state::AppState;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -109,9 +110,9 @@ fn read_tray_menu_snapshot(app: &AppHandle) -> Option<TrayMenuSnapshot> {
     let live_status_label = if !logged_in {
         crate::i18n::tr_config(&runtime.config, "tray.live.off")
     } else {
-        match runtime.session.live_status.unwrap_or(0) {
-            1 => crate::i18n::tr_config(&runtime.config, "tray.live.on"),
-            2 => crate::i18n::tr_config(&runtime.config, "tray.live.round"),
+        match resolve_live_status(runtime.session.live_status, runtime.session.is_live) {
+            LIVE_STATUS_LIVE => crate::i18n::tr_config(&runtime.config, "tray.live.on"),
+            LIVE_STATUS_ROUND => crate::i18n::tr_config(&runtime.config, "tray.live.round"),
             _ => crate::i18n::tr_config(&runtime.config, "tray.live.off"),
         }
     };

@@ -10,6 +10,7 @@ mod danmu;
 mod emoticon;
 mod endpoints;
 mod i18n;
+mod live_status;
 mod models;
 mod response;
 mod runtime_log;

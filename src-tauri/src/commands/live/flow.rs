@@ -13,13 +13,15 @@ use super::profile::push_recent_area;
 use super::profile_sync::sync_live_status_runtime;
 use super::session::{
     apply_live_session_identity, clear_live_session_identity, resolve_current_auth_context,
-    LIVE_STATUS_LIVE, LIVE_STATUS_OFFLINE, LIVE_STATUS_ROUND,
 };
 use super::stream::{collect_stream_endpoints, select_primary_endpoint};
 use crate::bili::app_sign;
 use crate::config::save_config;
 use crate::constants::CmdResult;
 use crate::endpoints;
+use crate::live_status::{
+    is_live_or_round_status, resolve_live_status, LIVE_STATUS_LIVE, LIVE_STATUS_OFFLINE,
+};
 use crate::response::wrap_ok;
 use crate::state::AppState;
 use crate::state_event::{emit_runtime_snapshot, emit_studio_state_event};
@@ -598,14 +600,9 @@ pub async fn stop_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResul
         .unwrap_or(true);
     if !session_consistent {
         let synced_session = sync_live_status_runtime(state).await;
-        let synced_live_status = synced_session
-            .live_status
-            .unwrap_or(if synced_session.is_live {
-                LIVE_STATUS_LIVE
-            } else {
-                LIVE_STATUS_OFFLINE
-            });
-        let synced_is_live = matches!(synced_live_status, LIVE_STATUS_LIVE | LIVE_STATUS_ROUND);
+        let synced_live_status =
+            resolve_live_status(synced_session.live_status, synced_session.is_live);
+        let synced_is_live = is_live_or_round_status(synced_live_status);
         let response = wrap_ok(json!({
             "live_stopped": !synced_is_live,
             "danmu_monitor_stopped": false,

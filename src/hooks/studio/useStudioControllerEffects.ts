@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "reac
 import { studioApi } from "../../services/studioApi";
 import type { DanmuMsg, LiveProfileState, Session } from "../../types/studio";
 import { resolveBackendMessage, t, tf, type LocaleSetting } from "../../utils/i18n";
+import { resolveSessionLiveState } from "../../utils/liveStatus";
 import { clearLiveStreamInfoCache, readLiveStreamInfoCache } from "../../utils/liveStreamCache";
 import { normalizeCoverValue, tagsToKey } from "./controllerHelpers";
 import { useTauriEvent } from "../useTauriEvent";
@@ -226,8 +227,8 @@ export function useStudioControllerEffects({
         const nextSession = event.data?.session;
         if (nextSession) {
           setSession(nextSession);
-          const liveStatus = nextSession.live_status ?? (nextSession.is_live ? 1 : 0);
-          if (liveStatus !== 1) {
+          const liveSessionState = resolveSessionLiveState(nextSession);
+          if (!liveSessionState.isLive) {
             setRtmp(null);
             clearLiveStreamInfoCache();
           } else {

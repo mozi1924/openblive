@@ -246,7 +246,9 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
                 .and_then(|value| value["cover"]["url"].as_str())
                 .unwrap_or(&user.last_cover)
                 .to_string();
-            let room_news_remote = fetch_room_news(&state, &room_id, &uid, &user.cookie).await.ok();
+            let room_news_remote = fetch_room_news(&state, &room_id, &uid, &user.cookie)
+                .await
+                .ok();
             let room_news = room_news_remote
                 .as_ref()
                 .and_then(|value| value["content"].as_str())

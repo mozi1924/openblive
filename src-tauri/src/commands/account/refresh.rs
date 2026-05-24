@@ -8,6 +8,7 @@ use crate::avatar::refresh_avatar_cache;
 use crate::client::parse_cookie_value;
 use crate::config::save_config;
 use crate::endpoints;
+use crate::live_status::is_live_or_round_status;
 use crate::models::UserRecord;
 use crate::state::{restore_session_from_current, AppState};
 use rand::rngs::OsRng;
@@ -100,7 +101,7 @@ async fn reconcile_accounts_live_status_batch(state: &AppState) -> serde_json::V
                 runtime.session.live_status = Some(status);
                 user_changed = true;
             }
-            let is_live = status == 1 || status == 2;
+            let is_live = is_live_or_round_status(status);
             if runtime.session.is_live != is_live {
                 runtime.session.is_live = is_live;
                 user_changed = true;

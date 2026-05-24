@@ -15,6 +15,7 @@ import { ProjectTab } from "./features/project/ProjectTab";
 import { StreamTab } from "./features/stream/StreamTab";
 import { useStudioController } from "./hooks/useStudioController";
 import type { LocaleSetting } from "./utils/i18n";
+import { resolveSessionLiveState } from "./utils/liveStatus";
 
 const DashboardTab = lazy(() =>
   import("./features/dashboard/DashboardTab").then((module) => ({
@@ -26,6 +27,7 @@ function App() {
   const controller = useStudioController();
   const { actions, refs, state } = controller;
   const locale = (state.appConfig?.locale || "auto") as LocaleSetting;
+  const liveSessionState = resolveSessionLiveState(state.session);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#080b10] text-[#eaeef6] select-none">
@@ -35,7 +37,7 @@ function App() {
         locale={locale}
         roomId={state.session?.room_id}
         roomBaseHost={state.appConfig?.host_live_web}
-        sessionLive={state.session?.is_live ?? false}
+        liveSessionPhase={liveSessionState.phase}
         showLogs={state.showLogs}
         sidebarDragRef={refs.sidebarDragRef}
         currentUser={state.currentUser}

@@ -13,6 +13,7 @@ import type {
 import { writeClipboardText } from "../utils/clipboard";
 import { prepareLiveCoverUpload } from "../utils/coverUpload";
 import { resolveBackendMessage, t, tf } from "../utils/i18n";
+import { resolveSessionLiveState } from "../utils/liveStatus";
 import { clearLiveStreamInfoCache, readLiveStreamInfoCache } from "../utils/liveStreamCache";
 import { useWindowDrag } from "./useWindowDrag";
 import {
@@ -627,8 +628,8 @@ export function useStudioController() {
       .catch(() => studioApi.getSession());
     const nextSession = res.data || null;
     setSession(nextSession);
-    const liveStatus = nextSession?.live_status ?? (nextSession?.is_live ? 1 : 0);
-    if (liveStatus !== 1) {
+    const liveSessionState = resolveSessionLiveState(nextSession);
+    if (!liveSessionState.isLive) {
       setRtmp(null);
       clearLiveStreamInfoCache();
     } else {

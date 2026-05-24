@@ -13,13 +13,14 @@ import { AppLogo } from "../branding/AppLogo";
 import type { ActiveTab, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t } from "../../utils/i18n";
+import type { LiveSessionPhase } from "../../utils/liveStatus";
 
 type SidebarProps = {
   activeTab: ActiveTab;
   locale: LocaleSetting;
   roomId?: string;
   roomBaseHost?: string;
-  sessionLive: boolean;
+  liveSessionPhase: LiveSessionPhase;
   showLogs: boolean;
   sidebarDragRef: React.RefObject<HTMLDivElement | null>;
   currentUser?: User | null;
@@ -45,7 +46,7 @@ export function Sidebar({
   locale,
   roomId,
   roomBaseHost,
-  sessionLive,
+  liveSessionPhase,
   showLogs,
   sidebarDragRef,
   currentUser,
@@ -147,10 +148,14 @@ export function Sidebar({
           <div className="relative flex">
             <span
               className={`h-3 w-3 rounded-full ${
-                sessionLive ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse" : "bg-gray-600"
+                liveSessionPhase === "live"
+                  ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse"
+                  : liveSessionPhase === "round"
+                    ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.45)]"
+                    : "bg-gray-600"
               }`}
             />
-            {sessionLive && (
+            {liveSessionPhase === "live" && (
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             )}
           </div>
@@ -158,7 +163,11 @@ export function Sidebar({
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">
-                {sessionLive ? t(locale, "ui.sidebar.live.on") : t(locale, "ui.sidebar.live.off")}
+                {liveSessionPhase === "live"
+                  ? t(locale, "ui.sidebar.live.on")
+                  : liveSessionPhase === "round"
+                    ? t(locale, "ui.sidebar.live.round")
+                    : t(locale, "ui.sidebar.live.off")}
               </span>
               {roomId && (
                 <button

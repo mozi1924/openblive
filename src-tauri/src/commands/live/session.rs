@@ -1,27 +1,9 @@
+use crate::live_status::{is_live_or_round_status, normalize_live_status};
 use crate::models::SessionState;
 use crate::state::RuntimeState;
 
-pub(crate) const LIVE_STATUS_OFFLINE: i64 = 0;
-pub(crate) const LIVE_STATUS_LIVE: i64 = 1;
-pub(crate) const LIVE_STATUS_ROUND: i64 = 2;
-
 pub(crate) fn current_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
-}
-
-fn normalize_live_status(status: i64) -> i64 {
-    match status {
-        LIVE_STATUS_LIVE => LIVE_STATUS_LIVE,
-        LIVE_STATUS_ROUND => LIVE_STATUS_ROUND,
-        _ => LIVE_STATUS_OFFLINE,
-    }
-}
-
-fn room_live_state(status: i64) -> bool {
-    matches!(
-        normalize_live_status(status),
-        LIVE_STATUS_LIVE | LIVE_STATUS_ROUND
-    )
 }
 
 fn normalize_session_token(value: Option<&str>) -> Option<String> {
@@ -61,7 +43,7 @@ pub(crate) fn apply_room_status_to_session(
 ) {
     let live_status = normalize_live_status(room_info["live_status"].as_i64().unwrap_or(0));
     session.live_status = Some(live_status);
-    session.is_live = room_live_state(live_status);
+    session.is_live = is_live_or_round_status(live_status);
     session.live_time = room_info["live_time"].as_str().unwrap_or("").to_string();
     if !session.is_live {
         clear_live_session_identity(session);

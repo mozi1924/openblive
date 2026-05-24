@@ -28,6 +28,7 @@ import type {
 import type { LocaleSetting } from "../../utils/i18n";
 import { resolveBackendMessage, t, tf } from "../../utils/i18n";
 import { normalizeCoverValue, normalizeRemoteAssetUrl } from "../../hooks/studio/controllerHelpers";
+import { resolveSessionLiveState } from "../../utils/liveStatus";
 
 type StreamTabProps = {
   locale: LocaleSetting;
@@ -178,9 +179,9 @@ export function StreamTab({
 }: StreamTabProps) {
   const streamEndpoints = buildStreamEndpoints(rtmp);
   const primaryEndpoint = streamEndpoints[0];
-  const liveStatus = session?.live_status ?? (session?.is_live ? 1 : 0);
-  const isLive = liveStatus === 1;
-  const isRoundPlay = liveStatus === 2;
+  const liveSessionState = resolveSessionLiveState(session);
+  const isLive = liveSessionState.isLive;
+  const isRoundPlay = liveSessionState.isRound;
   const statusLabel = isLive
     ? t(locale, "ui.stream.status.live")
     : isRoundPlay
