@@ -1,8 +1,8 @@
 [package]
 name = "openblive-studio"
-version = "0.1.5"
+version = "0.1.6"
 description = "OpenBlive Studio desktop assistant for Bilibili streamers"
-authors = ["you"]
+authors = ["mozi1924"]
 edition = "2021"
 
 [lib]
