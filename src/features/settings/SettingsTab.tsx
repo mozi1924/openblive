@@ -6,6 +6,7 @@ import { t } from "../../utils/i18n";
 import { LanguageSection } from "./components/LanguageSection";
 import { WindowBehaviorSection } from "./components/WindowBehaviorSection";
 import { DanmuOverlaySection } from "./components/DanmuOverlaySection";
+import { WsServerSection } from "./components/WsServerSection";
 import { LinkageSection } from "./components/LinkageSection";
 import { AdvancedSettingsSection } from "./components/AdvancedSettingsSection";
 
@@ -57,6 +58,12 @@ export function SettingsTab({
         />
 
         <DanmuOverlaySection
+          locale={locale}
+          appConfig={appConfig}
+          onChangeConfig={onChangeConfig}
+        />
+
+        <WsServerSection
           locale={locale}
           appConfig={appConfig}
           onChangeConfig={onChangeConfig}
