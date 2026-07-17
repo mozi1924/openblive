@@ -412,6 +412,14 @@ pub fn sync_dock_visibility(_app: &AppHandle) {}
 pub fn on_reopen_event(app: &AppHandle, has_visible_windows: bool) {
     if !has_visible_windows {
         reveal_main_window(app);
+    } else if let Some(window) = app.get_webview_window("main") {
+        let is_minimized = window.is_minimized().unwrap_or(false);
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_minimized || !is_visible {
+            reveal_main_window(app);
+        } else {
+            let _ = window.set_focus();
+        }
     }
 }
 

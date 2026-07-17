@@ -18,7 +18,8 @@
         "height": 720,
         "resizable": true,
         "backgroundColor": "#07090e",
-        "titleBarStyle": "Overlay"
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
