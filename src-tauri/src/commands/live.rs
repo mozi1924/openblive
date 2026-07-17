@@ -214,7 +214,7 @@ pub async fn remove_live_tag(req: RemoveLiveTagReq, state: State<'_, AppState>) 
 
 #[tauri::command]
 pub async fn start_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
-    let result = start_live_inner(&state).await;
+    let result = start_live_inner(&app, &state).await;
     if let Ok(payload) = &result {
         emit_studio_state_event(
             &app,

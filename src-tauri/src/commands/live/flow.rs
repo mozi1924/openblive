@@ -78,7 +78,7 @@ async fn request_start_live(
         .map_err(|error| error.to_string())
 }
 
-pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
+pub(crate) async fn start_live_inner(app: &AppHandle, state: &AppState) -> CmdResult {
     let (room_id, csrf, cookie, area) = {
         let runtime = state.runtime.lock().await;
         let (_uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
@@ -172,8 +172,10 @@ pub(crate) async fn start_live_inner(state: &AppState) -> CmdResult {
                 let obs_ws_url_bg = obs_ws_url.clone();
                 let obs_ws_password_bg = obs_ws_password.clone();
                 let primary_context_bg = primary_context.clone();
+                let app_bg = app.clone();
                 tokio::spawn(async move {
                     if let Err(error) = obs_ws_start_stream(
+                        app_bg,
                         &obs_ws_url_bg,
                         &obs_ws_password_bg,
                         &primary_context_bg,
@@ -521,7 +523,7 @@ pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResu
         }
     }
 
-    let start_result = start_live_inner(state).await?;
+    let start_result = start_live_inner(app, state).await?;
     let code = start_result["code"].as_i64().unwrap_or(-1);
     if code != 0 {
         emit_studio_state_event(

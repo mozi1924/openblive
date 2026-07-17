@@ -1,9 +1,11 @@
 use super::stream::StreamEndpoint;
+use crate::state::AppState;
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use tauri::{AppHandle, Manager};
 use tokio::process::Command;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::{sleep, Duration};
@@ -368,6 +370,7 @@ where
 }
 
 async fn obs_try_bili_primary_server_fallback<S1, S2>(
+    app: &AppHandle,
     write: &mut S1,
     read: &mut S2,
     context: &CommandTemplateContext,
@@ -382,6 +385,16 @@ where
     let mut trigger_reason = String::new();
 
     for attempt in 0..OBS_STREAM_STATUS_CHECK_RETRY {
+        let is_still_live = {
+            let state = app.state::<AppState>();
+            let runtime = state.runtime.lock().await;
+            runtime.session.is_live
+        };
+        if !is_still_live {
+            crate::runtime_log!("[live][obs] stream is no longer expected to be live, aborting fallback monitor");
+            return Ok(());
+        }
+
         match obs_get_stream_status(write, read).await {
             Ok(status) => {
                 if status.output_active {
@@ -420,6 +433,16 @@ where
                 "[live][obs] stream started normally during fallback monitor window"
             );
         }
+        return Ok(());
+    }
+
+    let is_still_live = {
+        let state = app.state::<AppState>();
+        let runtime = state.runtime.lock().await;
+        runtime.session.is_live
+    };
+    if !is_still_live {
+        crate::runtime_log!("[live][obs] stream is no longer expected to be live, aborting fallback execution");
         return Ok(());
     }
 
@@ -615,6 +638,7 @@ where
 }
 
 pub(crate) async fn obs_ws_start_stream(
+    app: AppHandle,
     url: &str,
     password: &str,
     context: &CommandTemplateContext,
@@ -628,7 +652,12 @@ pub(crate) async fn obs_ws_start_stream(
 
     obs_apply_stream_settings(&mut write, &mut read, &context.server, &context.stream_code).await?;
     obs_start_stream(&mut write, &mut read).await?;
-    if let Err(error) = obs_try_bili_primary_server_fallback(&mut write, &mut read, context).await {
+
+    // Release the linkage lock early so that StopStream or probe commands are not blocked
+    // during the 30-second fallback monitoring period.
+    drop(_obs_linkage_guard);
+
+    if let Err(error) = obs_try_bili_primary_server_fallback(&app, &mut write, &mut read, context).await {
         crate::runtime_warn!("[live][obs] fallback process failed: {error}");
     }
     Ok(())
