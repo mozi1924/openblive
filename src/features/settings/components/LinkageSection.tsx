@@ -193,6 +193,64 @@ export function LinkageSection({
           </div>
         </section>
       )}
+      {/* Custom Push Server Settings */}
+      <section className="space-y-4 p-5 border-t border-white/5">
+        <div>
+          <div className="flex items-center space-x-2">
+            <Server className="h-4 w-4 text-bili-blue" />
+            <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+              CUSTOM PUSH SERVER
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-gray-500 font-medium">
+            {t(locale, "ui.settings.stream.push_settings.desc")}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() =>
+              onChangeConfig("force_custom_push_url", !appConfig.force_custom_push_url)
+            }
+            className={`flex w-full items-start rounded-xl border p-4 text-left transition-all duration-200 ${
+              appConfig.force_custom_push_url
+                ? "border-bili-blue/35 bg-bili-blue/5 text-white"
+                : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+            }`}
+          >
+            <Server
+              className={`mr-3 mt-0.5 h-5 w-5 shrink-0 ${
+                appConfig.force_custom_push_url ? "text-bili-blue" : "text-gray-500"
+              }`}
+            />
+            <div>
+              <span className="block text-xs font-bold text-gray-200">
+                {t(locale, "ui.settings.stream.force_custom_push")}
+              </span>
+              <span className="mt-1 block text-[10px] leading-normal text-gray-500 font-medium">
+                {t(locale, "ui.settings.stream.force_custom_push.desc")}
+              </span>
+            </div>
+          </button>
+
+          {appConfig.force_custom_push_url && (
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                {t(locale, "ui.settings.stream.custom_push_url")}
+              </span>
+              <input
+                className={inputClass}
+                value={appConfig.custom_push_url}
+                onChange={(event) =>
+                  onChangeConfig("custom_push_url", event.target.value)
+                }
+                placeholder="rtmp://live-push.bilivideo.com/live-bvc/"
+              />
+            </div>
+          )}
+        </div>
+      </section>
     </>
   );
 }

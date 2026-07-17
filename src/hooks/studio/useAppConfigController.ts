@@ -16,6 +16,8 @@ const MANUAL_SAVE_APP_CONFIG_KEYS = [
   "obs_ws_auto_stop_on_live_end",
   "on_live_start_command",
   "on_live_stop_command",
+  "force_custom_push_url",
+  "custom_push_url",
   "ws_server_enabled",
   "ws_server_listen_addr",
   "ws_server_auth_token",

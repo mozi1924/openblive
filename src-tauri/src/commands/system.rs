@@ -524,6 +524,12 @@ fn apply_app_config_value(
         "on_live_stop_command" => {
             runtime.config.on_live_stop_command = value.as_str().unwrap_or("").to_string();
         }
+        "force_custom_push_url" => {
+            runtime.config.force_custom_push_url = value.as_bool().unwrap_or(true);
+        }
+        "custom_push_url" => {
+            runtime.config.custom_push_url = value.as_str().unwrap_or("").trim().to_string();
+        }
         "ws_server_enabled" => {
             runtime.config.ws_server_enabled = value.as_bool().unwrap_or(false);
         }
@@ -682,6 +688,8 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "obs_ws_auto_stop_on_live_end": runtime.config.obs_ws_auto_stop_on_live_end,
         "on_live_start_command": runtime.config.on_live_start_command,
         "on_live_stop_command": runtime.config.on_live_stop_command,
+        "force_custom_push_url": runtime.config.force_custom_push_url,
+        "custom_push_url": runtime.config.custom_push_url,
         "ws_server_enabled": runtime.config.ws_server_enabled,
         "ws_server_listen_addr": runtime.config.ws_server_listen_addr,
         "ws_server_auth_token": runtime.config.ws_server_auth_token,

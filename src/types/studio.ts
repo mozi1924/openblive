@@ -25,6 +25,8 @@ export type AppConfig = {
   obs_ws_auto_stop_on_live_end: boolean;
   on_live_start_command: string;
   on_live_stop_command: string;
+  force_custom_push_url: boolean;
+  custom_push_url: string;
   ws_server_enabled: boolean;
   ws_server_listen_addr: string;
   ws_server_auth_token: string;

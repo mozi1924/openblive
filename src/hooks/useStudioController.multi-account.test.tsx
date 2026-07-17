@@ -184,6 +184,8 @@ beforeEach(() => {
       obs_ws_auto_stop_on_live_end: false,
       on_live_start_command: "",
       on_live_stop_command: "",
+      force_custom_push_url: true,
+      custom_push_url: "rtmp://live-push.bilivideo.com/live-bvc/",
       locale: "zh-CN",
       host_www: "",
       host_api: "",

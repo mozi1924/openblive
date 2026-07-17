@@ -300,6 +300,10 @@ pub struct PersistConfig {
     pub on_live_start_command: String,
     #[serde(default)]
     pub on_live_stop_command: String,
+    #[serde(default = "default_force_custom_push_url")]
+    pub force_custom_push_url: bool,
+    #[serde(default = "default_custom_push_url")]
+    pub custom_push_url: String,
     #[serde(default)]
     pub ws_server_enabled: bool,
     #[serde(default = "default_ws_server_listen_addr")]
@@ -362,6 +366,8 @@ impl Default for PersistConfig {
             obs_ws_auto_stop_on_live_end: false,
             on_live_start_command: String::new(),
             on_live_stop_command: String::new(),
+            force_custom_push_url: default_force_custom_push_url(),
+            custom_push_url: default_custom_push_url(),
             ws_server_enabled: false,
             ws_server_listen_addr: default_ws_server_listen_addr(),
             ws_server_auth_token: String::new(),
@@ -389,6 +395,14 @@ impl Default for PersistConfig {
 
 fn default_live_control_mode() -> String {
     "none".to_string()
+}
+
+fn default_force_custom_push_url() -> bool {
+    true
+}
+
+fn default_custom_push_url() -> String {
+    "rtmp://live-push.bilivideo.com/live-bvc/".to_string()
 }
 
 fn default_obs_ws_url() -> String {

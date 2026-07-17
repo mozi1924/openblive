@@ -41,6 +41,10 @@ struct AppSettingsFile {
     on_live_start_command: String,
     #[serde(default)]
     on_live_stop_command: String,
+    #[serde(default = "default_force_custom_push_url")]
+    force_custom_push_url: bool,
+    #[serde(default = "default_custom_push_url")]
+    custom_push_url: String,
     #[serde(default)]
     ws_server_enabled: bool,
     #[serde(default = "default_ws_server_listen_addr")]
@@ -180,6 +184,14 @@ fn default_obs_ws_url() -> String {
 
 fn default_live_control_mode() -> String {
     "none".to_string()
+}
+
+fn default_force_custom_push_url() -> bool {
+    true
+}
+
+fn default_custom_push_url() -> String {
+    "rtmp://live-push.bilivideo.com/live-bvc/".to_string()
 }
 
 fn default_locale() -> String {
@@ -356,6 +368,8 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
         cfg.obs_ws_auto_stop_on_live_end = app_file.obs_ws_auto_stop_on_live_end;
         cfg.on_live_start_command = app_file.on_live_start_command;
         cfg.on_live_stop_command = app_file.on_live_stop_command;
+        cfg.force_custom_push_url = app_file.force_custom_push_url;
+        cfg.custom_push_url = app_file.custom_push_url;
         cfg.ws_server_enabled = app_file.ws_server_enabled;
         cfg.ws_server_listen_addr = app_file.ws_server_listen_addr;
         cfg.ws_server_auth_token = app_file.ws_server_auth_token;
@@ -512,6 +526,8 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
         obs_ws_auto_stop_on_live_end: cfg.obs_ws_auto_stop_on_live_end,
         on_live_start_command: cfg.on_live_start_command.clone(),
         on_live_stop_command: cfg.on_live_stop_command.clone(),
+        force_custom_push_url: cfg.force_custom_push_url,
+        custom_push_url: cfg.custom_push_url.clone(),
         ws_server_enabled: cfg.ws_server_enabled,
         ws_server_listen_addr: cfg.ws_server_listen_addr.clone(),
         ws_server_auth_token: cfg.ws_server_auth_token.clone(),

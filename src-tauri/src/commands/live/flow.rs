@@ -8,6 +8,7 @@ use super::linkage::{
     apply_command_template, build_command_template_context, build_primary_push_fallback_context,
     empty_command_template_context, normalize_live_control_mode, obs_ws_start_stream,
     obs_ws_stop_stream, spawn_shell_command, spawn_shell_command_checked,
+    rewrite_stream_server_host,
 };
 use super::profile::push_recent_area;
 use super::profile_sync::sync_live_status_runtime;
@@ -76,6 +77,18 @@ async fn request_start_live(
         )
         .await
         .map_err(|error| error.to_string())
+}
+
+fn override_stream_addr(original_addr: &str, custom: &str) -> String {
+    let custom = custom.trim();
+    if custom.is_empty() {
+        return original_addr.to_string();
+    }
+    if custom.contains("://") {
+        custom.to_string()
+    } else {
+        rewrite_stream_server_host(original_addr, custom).unwrap_or_else(|| original_addr.to_string())
+    }
 }
 
 pub(crate) async fn start_live_inner(app: &AppHandle, state: &AppState) -> CmdResult {
@@ -229,7 +242,21 @@ pub(crate) async fn start_live_inner(app: &AppHandle, state: &AppState) -> CmdRe
     }
 
     let stream_data = &response["data"];
-    let endpoints = collect_stream_endpoints(stream_data);
+    let (force_custom_push_url, custom_push_url) = {
+        let runtime = state.runtime.lock().await;
+        (
+            runtime.config.force_custom_push_url,
+            runtime.config.custom_push_url.clone(),
+        )
+    };
+
+    let mut endpoints = collect_stream_endpoints(stream_data);
+    if force_custom_push_url && !custom_push_url.trim().is_empty() {
+        for ep in &mut endpoints {
+            ep.addr = override_stream_addr(&ep.addr, &custom_push_url);
+            ep.full_url = format!("{}{}", ep.addr, ep.code);
+        }
+    }
     let primary = select_primary_endpoint(&endpoints);
     let primary_context = primary
         .as_ref()

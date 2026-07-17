@@ -1,14 +1,14 @@
 use super::stream::StreamEndpoint;
-use crate::state::AppState;
+
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::process::Command;
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::time::{sleep, Duration};
+
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
@@ -187,14 +187,7 @@ pub(crate) async fn spawn_shell_command_checked(raw_command: &str) -> Result<(),
 
 static OBS_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 static OBS_LINKAGE_LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
-const OBS_PRIMARY_PUSH_HOST: &str = "live-push.bilivideo.com";
-const OBS_RECONNECT_TRIGGER_COUNT: usize = 3;
-// OBS auto-reconnect uses increasing intervals, so a short probe window may never
-// observe the third reconnect attempt.
-const OBS_STREAM_STATUS_CHECK_RETRY: usize = 30;
-const OBS_STREAM_STATUS_CHECK_DELAY_MS: u64 = 1_000;
-const OBS_FALLBACK_RESTART_RETRY: usize = 3;
-const OBS_FALLBACK_RESTART_DELAY_MS: u64 = 1_000;
+pub(crate) const OBS_PRIMARY_PUSH_HOST: &str = "live-push.bilivideo.com";
 
 fn obs_next_request_id() -> String {
     format!("obs-{}", OBS_REQUEST_ID.fetch_add(1, Ordering::Relaxed))
@@ -204,27 +197,7 @@ fn obs_linkage_lock() -> &'static AsyncMutex<()> {
     OBS_LINKAGE_LOCK.get_or_init(|| AsyncMutex::new(()))
 }
 
-#[derive(Clone, Debug, Default)]
-struct ObsStreamStatus {
-    output_active: bool,
-    output_reconnecting: bool,
-    output_state: String,
-}
-
-fn obs_parse_stream_status(value: &serde_json::Value) -> ObsStreamStatus {
-    let data = &value["d"]["responseData"];
-    ObsStreamStatus {
-        output_active: data["outputActive"].as_bool().unwrap_or(false),
-        output_reconnecting: data["outputReconnecting"].as_bool().unwrap_or(false),
-        output_state: data["outputState"].as_str().unwrap_or_default().to_string(),
-    }
-}
-
-fn obs_is_reconnecting_status(status: &ObsStreamStatus) -> bool {
-    status.output_reconnecting || status.output_state == "OBS_WEBSOCKET_OUTPUT_RECONNECTING"
-}
-
-fn rewrite_stream_server_host(server: &str, next_host: &str) -> Option<String> {
+pub(crate) fn rewrite_stream_server_host(server: &str, next_host: &str) -> Option<String> {
     let trimmed = server.trim();
     if trimmed.is_empty() || next_host.trim().is_empty() {
         return None;
@@ -356,148 +329,7 @@ where
     }
 }
 
-async fn obs_get_stream_status<S1, S2>(
-    write: &mut S1,
-    read: &mut S2,
-) -> Result<ObsStreamStatus, String>
-where
-    S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
-    S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-{
-    let req_id = obs_send_request(write, "GetStreamStatus", json!({})).await?;
-    let response = obs_wait_request_response(read, &req_id, "GetStreamStatus").await?;
-    Ok(obs_parse_stream_status(&response))
-}
 
-async fn obs_try_bili_primary_server_fallback<S1, S2>(
-    app: &AppHandle,
-    write: &mut S1,
-    read: &mut S2,
-    context: &CommandTemplateContext,
-) -> Result<(), String>
-where
-    S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
-    S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-{
-    let mut reconnect_attempts = 0usize;
-    let mut saw_active_stream = false;
-    let mut last_reconnecting = false;
-    let mut trigger_reason = String::new();
-
-    for attempt in 0..OBS_STREAM_STATUS_CHECK_RETRY {
-        let is_still_live = {
-            let state = app.state::<AppState>();
-            let runtime = state.runtime.lock().await;
-            runtime.session.is_live
-        };
-        if !is_still_live {
-            crate::runtime_log!("[live][obs] stream is no longer expected to be live, aborting fallback monitor");
-            return Ok(());
-        }
-
-        match obs_get_stream_status(write, read).await {
-            Ok(status) => {
-                if status.output_active {
-                    saw_active_stream = true;
-                }
-
-                let is_reconnecting = obs_is_reconnecting_status(&status);
-                if is_reconnecting && !last_reconnecting {
-                    reconnect_attempts += 1;
-                }
-                last_reconnecting = is_reconnecting;
-
-                if let Some(reason) =
-                    obs_should_trigger_fallback(&status, saw_active_stream, reconnect_attempts)
-                {
-                    trigger_reason = reason;
-                    break;
-                }
-            }
-            Err(error) => {
-                crate::runtime_warn!(
-                    "[live][obs] GetStreamStatus failed during fallback probe: {error}"
-                );
-                return Ok(());
-            }
-        }
-
-        if attempt + 1 < OBS_STREAM_STATUS_CHECK_RETRY {
-            sleep(Duration::from_millis(OBS_STREAM_STATUS_CHECK_DELAY_MS)).await;
-        }
-    }
-
-    if trigger_reason.is_empty() {
-        if saw_active_stream {
-            crate::runtime_log!(
-                "[live][obs] stream started normally during fallback monitor window"
-            );
-        }
-        return Ok(());
-    }
-
-    let is_still_live = {
-        let state = app.state::<AppState>();
-        let runtime = state.runtime.lock().await;
-        runtime.session.is_live
-    };
-    if !is_still_live {
-        crate::runtime_log!("[live][obs] stream is no longer expected to be live, aborting fallback execution");
-        return Ok(());
-    }
-
-    let Some(primary_server) = rewrite_stream_server_host(&context.server, OBS_PRIMARY_PUSH_HOST)
-    else {
-        crate::runtime_log!(
-            "[live][obs] fallback trigger detected ({trigger_reason}) but host is already {}",
-            OBS_PRIMARY_PUSH_HOST
-        );
-        return Ok(());
-    };
-
-    crate::runtime_log!(
-        "[live][obs] fallback trigger detected ({}), restarting stream on {}",
-        trigger_reason,
-        OBS_PRIMARY_PUSH_HOST
-    );
-
-    if let Err(error) = obs_stop_stream(write, read).await {
-        crate::runtime_warn!("[live][obs] StopStream before fallback failed: {error}");
-    }
-
-    let mut last_error = String::new();
-    for restart_attempt in 0..OBS_FALLBACK_RESTART_RETRY {
-        if restart_attempt > 0 {
-            sleep(Duration::from_millis(OBS_FALLBACK_RESTART_DELAY_MS)).await;
-        }
-
-        let _ = obs_wait_stream_inactive(write, read).await;
-
-        if let Err(error) =
-            obs_apply_stream_settings(write, read, &primary_server, &context.stream_code).await
-        {
-            last_error = format!("SetStreamServiceSettings failed: {error}");
-            continue;
-        }
-        if let Err(error) = obs_start_stream(write, read).await {
-            last_error = format!("StartStream failed: {error}");
-            continue;
-        }
-
-        crate::runtime_log!(
-            "[live][obs] fallback completed: stream restarted via {}",
-            OBS_PRIMARY_PUSH_HOST
-        );
-        return Ok(());
-    }
-
-    crate::runtime_warn!(
-        "[live][obs] fallback restart sequence exhausted after {} attempts: {}",
-        OBS_FALLBACK_RESTART_RETRY,
-        last_error
-    );
-    Ok(())
-}
 
 async fn obs_apply_stream_settings<S1, S2>(
     write: &mut S1,
@@ -545,56 +377,6 @@ where
     Ok(())
 }
 
-async fn obs_wait_stream_inactive<S1, S2>(write: &mut S1, read: &mut S2) -> bool
-where
-    S1: futures_util::Sink<Message, Error = tokio_tungstenite::tungstenite::Error> + Unpin,
-    S2: futures_util::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
-{
-    for wait_attempt in 0..OBS_FALLBACK_RESTART_RETRY {
-        match obs_get_stream_status(write, read).await {
-            Ok(status) => {
-                if !status.output_active
-                    || status.output_state == "OBS_WEBSOCKET_OUTPUT_STOPPED"
-                    || status.output_state == "OBS_WEBSOCKET_OUTPUT_STOPPING"
-                {
-                    return true;
-                }
-            }
-            Err(error) => {
-                crate::runtime_warn!(
-                    "[live][obs] GetStreamStatus failed while waiting stream inactive: {error}"
-                );
-                return false;
-            }
-        }
-        if wait_attempt + 1 < OBS_FALLBACK_RESTART_RETRY {
-            sleep(Duration::from_millis(OBS_FALLBACK_RESTART_DELAY_MS)).await;
-        }
-    }
-    false
-}
-
-fn obs_should_trigger_fallback(
-    status: &ObsStreamStatus,
-    saw_active_stream: bool,
-    reconnect_attempts: usize,
-) -> Option<String> {
-    if reconnect_attempts >= OBS_RECONNECT_TRIGGER_COUNT {
-        return Some(format!("reconnecting({} attempts)", reconnect_attempts));
-    }
-
-    if status.output_state == "OBS_WEBSOCKET_OUTPUT_STOPPED"
-        || status.output_state == "OBS_WEBSOCKET_OUTPUT_STOPPING"
-    {
-        return Some(format!("output_state={}", status.output_state));
-    }
-
-    if saw_active_stream && !status.output_active && !status.output_reconnecting {
-        return Some("output_disconnected".to_string());
-    }
-
-    None
-}
 
 async fn obs_identify<S1, S2>(write: &mut S1, read: &mut S2, password: &str) -> Result<(), String>
 where
@@ -638,7 +420,7 @@ where
 }
 
 pub(crate) async fn obs_ws_start_stream(
-    app: AppHandle,
+    _app: AppHandle,
     url: &str,
     password: &str,
     context: &CommandTemplateContext,
@@ -652,14 +434,6 @@ pub(crate) async fn obs_ws_start_stream(
 
     obs_apply_stream_settings(&mut write, &mut read, &context.server, &context.stream_code).await?;
     obs_start_stream(&mut write, &mut read).await?;
-
-    // Release the linkage lock early so that StopStream or probe commands are not blocked
-    // during the 30-second fallback monitoring period.
-    drop(_obs_linkage_guard);
-
-    if let Err(error) = obs_try_bili_primary_server_fallback(&app, &mut write, &mut read, context).await {
-        crate::runtime_warn!("[live][obs] fallback process failed: {error}");
-    }
     Ok(())
 }
 
@@ -692,8 +466,8 @@ pub(crate) async fn obs_ws_probe(url: &str, password: &str) -> Result<(), String
 mod tests {
     use super::{
         apply_command_template, build_command_template_context,
-        build_primary_push_fallback_context, obs_should_trigger_fallback,
-        rewrite_stream_server_host, CommandTemplateContext, ObsStreamStatus, StreamEndpoint,
+        build_primary_push_fallback_context,
+        rewrite_stream_server_host, CommandTemplateContext, StreamEndpoint,
     };
 
     fn demo_context() -> CommandTemplateContext {
@@ -783,38 +557,5 @@ mod tests {
         assert_eq!(fallback.stream_code, context.stream_code);
     }
 
-    #[test]
-    fn obs_should_trigger_fallback_when_reconnect_attempts_reach_threshold() {
-        let status = ObsStreamStatus {
-            output_active: true,
-            output_reconnecting: true,
-            output_state: "OBS_WEBSOCKET_OUTPUT_RECONNECTING".to_string(),
-        };
-        let reason =
-            obs_should_trigger_fallback(&status, true, 3).expect("fallback should be triggered");
-        assert!(reason.contains("reconnecting"));
-    }
 
-    #[test]
-    fn obs_should_trigger_fallback_when_output_stopped() {
-        let status = ObsStreamStatus {
-            output_active: false,
-            output_reconnecting: false,
-            output_state: "OBS_WEBSOCKET_OUTPUT_STOPPED".to_string(),
-        };
-        let reason =
-            obs_should_trigger_fallback(&status, false, 0).expect("fallback should be triggered");
-        assert_eq!(reason, "output_state=OBS_WEBSOCKET_OUTPUT_STOPPED");
-    }
-
-    #[test]
-    fn obs_should_not_trigger_fallback_for_normal_started_stream() {
-        let status = ObsStreamStatus {
-            output_active: true,
-            output_reconnecting: false,
-            output_state: "OBS_WEBSOCKET_OUTPUT_STARTED".to_string(),
-        };
-        let reason = obs_should_trigger_fallback(&status, true, 0);
-        assert!(reason.is_none());
-    }
 }
