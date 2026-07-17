@@ -1,5 +1,6 @@
 mod avatar;
 mod bili;
+mod captcha;
 mod client;
 mod commands;
 mod config;

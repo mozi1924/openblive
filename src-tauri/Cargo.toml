@@ -1,6 +1,6 @@
 [package]
 name = "openblive-studio"
-version = "0.1.6"
+version = "0.1.7"
 description = "OpenBlive Studio desktop assistant for Bilibili streamers"
 authors = ["mozi1924"]
 edition = "2021"
@@ -33,11 +33,14 @@ bytes = "1"
 serde_urlencoded = "0.7"
 dirs = "6"
 aes-gcm = "0.10"
+aes = "0.8.3"
+cbc = "0.1.2"
 base64 = "0.22"
 rand = "0.8"
 rsa = { version = "0.9", features = ["pem"] }
 sha2 = "0.10"
 hex = "0.4"
+urlencoding = "2.1.3"
 qrcode-generator = "5"
 prost = "0.13"
 tauri-plugin-single-instance = "2.4.2"

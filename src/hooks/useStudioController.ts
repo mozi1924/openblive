@@ -824,6 +824,11 @@ export function useStudioController() {
     },
   } = liveInteractionActions;
 
+  const retryStartLive = useCallback(async () => {
+    setShowFaceModal(false);
+    await startLive("face_retry");
+  }, [startLive]);
+
   const syncLiveRoomProfileRef = useRef(syncLiveRoomProfile);
   const refreshLiveCoverHistoryRef = useRef(refreshLiveCoverHistory);
   const refreshLiveCoverAdviceRef = useRef(refreshLiveCoverAdvice);
@@ -1254,6 +1259,7 @@ export function useStudioController() {
     setLogs,
     setLinkageStatus,
     setLiveOnlineRankData,
+    retryStartLive,
   });
 
   return {
@@ -1367,10 +1373,7 @@ export function useStudioController() {
       requestLogout,
       pollLogin,
       refreshCurrentUser,
-      retryStartLive: async () => {
-        setShowFaceModal(false);
-        await startLive("face_retry");
-      },
+      retryStartLive,
       toggleLiveOnlineRankPanel: () => {
         setShowLiveOnlineRankPanel((prev) => !prev);
         setShowUserManagePanel(false);

@@ -116,15 +116,99 @@ pub(crate) async fn start_live_inner(app: &AppHandle, state: &AppState) -> CmdRe
         return Ok(json!({ "code": 60024, "msg": "i18n.live.face_auth_required", "qr": qr }));
     }
     if code == 60043 {
-        let uid = {
-            let runtime = state.runtime.lock().await;
-            runtime.session.uid
-        };
-        let qr = format!(
-            "{}/blackboard/live/face-auth-middle.html?source_event=400&mid={uid}",
-            endpoints::www("")
-        );
-        return Ok(json!({ "code": 60043, "msg": "i18n.live.face_auth_required", "qr": qr }));
+        let v_voucher = response["data"]["risk_extra"]["v_voucher"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        let mut reg_form = BTreeMap::new();
+        reg_form.insert("v_voucher".into(), v_voucher.clone());
+        reg_form.insert("dm_track".into(), "[]".into());
+        reg_form.insert("csrf".into(), csrf.clone());
+
+        let reg_response = state
+            .client
+            .post_form_with_cookie(
+                "https://api.bilibili.com/x/gaia-vgate/v2/register",
+                &reg_form,
+                &cookie,
+            )
+            .await
+            .map_err(|e| format!("v2 register request failed: {}", e))?;
+
+        let content_enc = reg_response["data"]["content"]
+            .as_str()
+            .ok_or_else(|| "v2 register response missing content".to_string())?;
+
+        let decrypted_data = crate::captcha::decrypt_captcha(&v_voucher, content_enc)?;
+
+        let token = decrypted_data["token"]
+            .as_str()
+            .ok_or_else(|| "decrypted content missing token".to_string())?
+            .to_string();
+
+        let risk_type = decrypted_data["type"]
+            .as_str()
+            .ok_or_else(|| "decrypted content missing type".to_string())?;
+
+        if risk_type != "realname" {
+            return Err(format!("Unsupported risk type: {}", risk_type));
+        }
+
+        let obfuscated_token = crate::captcha::obfuscate_token(&token, None, None);
+
+        let t_inner = urlencoding::encode(&obfuscated_token);
+        let t_encoded = urlencoding::encode(&t_inner);
+        let qr_url = format!("https://www.bilibili.com/h5/risk-control/realname?t={}", t_encoded);
+
+        // Spawn validatePreCheck background polling task
+        let client_clone = state.client.clone();
+        let cookie_clone = cookie.clone();
+        let csrf_clone = csrf.clone();
+        let token_clone = token.clone();
+        let app_handle = app.clone();
+
+        tokio::spawn(async move {
+            let url = "https://api.bilibili.com/x/gaia-vgate/v2/validatePreCheck";
+            let start_time = std::time::Instant::now();
+            let mut verified = false;
+
+            while start_time.elapsed().as_secs() < 120 {
+                let mut params = BTreeMap::new();
+                params.insert("token".to_string(), token_clone.clone());
+                params.insert("dm_track".to_string(), crate::captcha::gen_dm_track());
+                params.insert("csrf".to_string(), csrf_clone.clone());
+
+                match client_clone.post_form_with_cookie(url, &params, &cookie_clone).await {
+                    Ok(resp) => {
+                        if let Some(status) = resp["data"]["status"].as_i64() {
+                            if status == 1 {
+                                verified = true;
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        crate::runtime_warn!("validatePreCheck poll failed: {}", e);
+                    }
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+
+            if verified {
+                crate::runtime_log!("Face verification succeeded!");
+                emit_studio_state_event(
+                    &app_handle,
+                    "live.face_auth_success",
+                    "validate_pre_check",
+                    json!({ "ok": true }),
+                );
+            } else {
+                crate::runtime_log!("Face verification timed out or failed.");
+            }
+        });
+
+        return Ok(json!({ "code": 60043, "msg": "i18n.live.face_auth_required", "qr": qr_url }));
     }
     if code != 0 {
         if is_auth_invalid_code(code) {

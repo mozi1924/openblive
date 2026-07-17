@@ -53,6 +53,7 @@ type UseStudioControllerEffectsParams = {
   setLinkageStatus: Dispatch<SetStateAction<import("../../types/studio").LinkageStatus | null>>;
   setLiveOnlineRankData: Dispatch<SetStateAction<import("../../types/studio").LiveOnlineRankData | null>>;
   pendingLiveFlowHintSkipRef: MutableRefObject<"start" | "stop" | null>;
+  retryStartLive?: () => Promise<void>;
 };
 
 const QR_LOGIN_POLL_INTERVAL_MS = 2000;
@@ -102,6 +103,7 @@ export function useStudioControllerEffects({
   setLogs,
   setLinkageStatus,
   setLiveOnlineRankData,
+  retryStartLive,
 }: UseStudioControllerEffectsParams) {
   useEffect(() => {
     coverDirtyRef.current = normalizeCoverValue(cover) !== normalizeCoverValue(profileState.cover.submitted);
@@ -294,6 +296,10 @@ export function useStudioControllerEffects({
           clearLiveStreamInfoCache();
           append(t(localeSetting, "ui.ctrl.tray_stop"));
         }
+        break;
+      }
+      case "live.face_auth_success": {
+        void retryStartLive?.();
         break;
       }
       case "live.preflight": {
