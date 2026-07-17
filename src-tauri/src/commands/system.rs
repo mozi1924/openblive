@@ -755,16 +755,15 @@ pub async fn set_app_configs(
     Ok(wrap_ok(json!({})))
 }
 
-#[tauri::command]
-pub async fn get_linkage_status(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
-    ensure_obs_ws_keepalive_task(app).await;
+pub(crate) async fn get_linkage_status_inner(app: &AppHandle, state: &AppState) -> serde_json::Value {
+    ensure_obs_ws_keepalive_task(app.clone()).await;
     let runtime = state.runtime.lock().await;
     let mode = normalize_live_control_mode(&runtime.config.live_control_mode);
     let command_start = runtime.config.on_live_start_command.trim().to_string();
     let command_stop = runtime.config.on_live_stop_command.trim().to_string();
     let command_ready = !command_start.is_empty();
 
-    Ok(wrap_ok(json!({
+    json!({
         "mode": mode,
         "obs_ws": {
             "connected": runtime.obs_ws_connected,
@@ -777,7 +776,13 @@ pub async fn get_linkage_status(app: AppHandle, state: State<'_, AppState>) -> C
             "stop_configured": !command_stop.is_empty(),
             "template_preview": command_start
         }
-    })))
+    })
+}
+
+#[tauri::command]
+pub async fn get_linkage_status(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    let result = get_linkage_status_inner(&app, &state).await;
+    Ok(wrap_ok(result))
 }
 
 #[tauri::command]

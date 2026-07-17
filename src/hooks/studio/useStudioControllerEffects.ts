@@ -48,13 +48,14 @@ type UseStudioControllerEffectsParams = {
   setRtmp: Dispatch<SetStateAction<import("../../types/studio").StreamInfo | null>>;
   setDanmuListening: Dispatch<SetStateAction<boolean>>;
   syncTrayMenu: () => Promise<void>;
-  pendingLiveFlowHintSkipRef: MutableRefObject<"start" | "stop" | null>;
   setDanmuOverlayVisible: Dispatch<SetStateAction<boolean>>;
   setLogs: Dispatch<SetStateAction<string[]>>;
+  setLinkageStatus: Dispatch<SetStateAction<import("../../types/studio").LinkageStatus | null>>;
+  setLiveOnlineRankData: Dispatch<SetStateAction<import("../../types/studio").LiveOnlineRankData | null>>;
+  pendingLiveFlowHintSkipRef: MutableRefObject<"start" | "stop" | null>;
 };
 
 const QR_LOGIN_POLL_INTERVAL_MS = 2000;
-const LIVE_CONTROL_STATUS_POLL_INTERVAL_MS = 10_000;
 
 export function useStudioControllerEffects({
   cover,
@@ -99,6 +100,8 @@ export function useStudioControllerEffects({
   pendingLiveFlowHintSkipRef,
   setDanmuOverlayVisible,
   setLogs,
+  setLinkageStatus,
+  setLiveOnlineRankData,
 }: UseStudioControllerEffectsParams) {
   useEffect(() => {
     coverDirtyRef.current = normalizeCoverValue(cover) !== normalizeCoverValue(profileState.cover.submitted);
@@ -146,11 +149,6 @@ export function useStudioControllerEffects({
     }
     void refreshSession();
     void loadLinkageStatus();
-    const timer = window.setInterval(() => {
-      void refreshSession();
-      void loadLinkageStatus();
-    }, LIVE_CONTROL_STATUS_POLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
   }, [hasLiveAuth, loadLinkageStatus, refreshSession, setDanmuListening, setRtmp, setSession]);
 
   useEffect(() => {
@@ -245,6 +243,25 @@ export function useStudioControllerEffects({
         }
         if (typeof event.data?.danmu_running === "boolean") {
           setDanmuListening(event.data.danmu_running);
+        }
+        const linkage = event.data?.linkage_status as any;
+        if (linkage) {
+          setLinkageStatus(linkage);
+        }
+        const onlineRank = event.data?.online_rank as any;
+        if (onlineRank) {
+          const onlineRankItems = Array.isArray(onlineRank.online_rank_items)
+            ? onlineRank.online_rank_items.map((item: any) => ({
+                user_rank: Number(item.user_rank ?? 0),
+                uid: String(item.uid ?? ""),
+                name: String(item.name ?? ""),
+                face: String(item.face ?? ""),
+              }))
+            : [];
+          setLiveOnlineRankData({
+            online_num: Number(onlineRank.online_num ?? 0),
+            online_rank_items: onlineRankItems,
+          });
         }
         void syncTrayMenu();
         break;

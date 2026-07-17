@@ -64,7 +64,6 @@ type ConfirmModalState = {
 };
 type ConfirmRequestPayload = Omit<ConfirmModalState, "show" | "showCancel">;
 
-const LIVE_ONLINE_RANK_POLL_INTERVAL_MS = 5_000;
 const LIVE_PROFILE_SYNC_POLL_INTERVAL_MS = 20_000;
 
 export function useStudioController() {
@@ -143,7 +142,6 @@ export function useStudioController() {
   const childRef = useRef("");
   const syncStatusCacheHintRef = useRef("");
   const pendingLiveFlowHintSkipRef = useRef<"start" | "stop" | null>(null);
-  const liveOnlineRankPollingRef = useRef(false);
   const confirmSelectValueRef = useRef("");
   const topNoticeSeqRef = useRef(0);
   const topNoticeTimersRef = useRef<Map<number, number>>(new Map());
@@ -218,6 +216,7 @@ export function useStudioController() {
     },
     actions: {
       setDanmuOverlayVisible,
+      setLinkageStatus,
       loadAppConfig,
       loadLinkageStatus,
       updateAppConfig,
@@ -342,6 +341,7 @@ export function useStudioController() {
       liveVoteSelectedTemplateId,
     },
     actions: {
+      setLiveOnlineRankData,
       setLiveVoteDuration,
       loadLiveEmoticons,
       loadLiveVoteData,
@@ -450,30 +450,7 @@ export function useStudioController() {
     if (activeTab !== "danmu" || !showLiveOnlineRankPanel || !hasLiveAuth) {
       return;
     }
-
-    let alive = true;
-    const refresh = async () => {
-      if (!alive || liveOnlineRankPollingRef.current) {
-        return;
-      }
-      liveOnlineRankPollingRef.current = true;
-      try {
-        await loadLiveOnlineRank({ silent: true });
-      } finally {
-        liveOnlineRankPollingRef.current = false;
-      }
-    };
-
-    void refresh();
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, LIVE_ONLINE_RANK_POLL_INTERVAL_MS);
-
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-      liveOnlineRankPollingRef.current = false;
-    };
+    void loadLiveOnlineRank({ silent: true });
   }, [activeTab, hasLiveAuth, loadLiveOnlineRank, showLiveOnlineRankPanel]);
 
   const applyProfileState = useCallback((nextState?: LiveProfileState | null) => {
@@ -1275,6 +1252,8 @@ export function useStudioController() {
     pendingLiveFlowHintSkipRef,
     setDanmuOverlayVisible,
     setLogs,
+    setLinkageStatus,
+    setLiveOnlineRankData,
   });
 
   return {

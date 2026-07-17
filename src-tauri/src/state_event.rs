@@ -28,7 +28,7 @@ pub fn emit_studio_state_event(app: &AppHandle, kind: &str, source: &str, data: 
 }
 
 pub async fn emit_runtime_snapshot(app: &AppHandle, state: &AppState, source: &str) {
-    let (session, danmu_running, obs_ws_connected, obs_ws_last_error, obs_ws_last_checked_at) = {
+    let (session, danmu_running, obs_ws_connected, obs_ws_last_error, obs_ws_last_checked_at, last_online_rank) = {
         let runtime = state.runtime.lock().await;
         (
             runtime.session.clone(),
@@ -36,8 +36,12 @@ pub async fn emit_runtime_snapshot(app: &AppHandle, state: &AppState, source: &s
             runtime.obs_ws_connected,
             runtime.obs_ws_last_error.clone(),
             runtime.obs_ws_last_checked_at,
+            runtime.last_online_rank.clone(),
         )
     };
+    
+    let linkage = crate::commands::get_linkage_status_inner(app, state).await;
+    
     emit_studio_state_event(
         app,
         "runtime.snapshot",
@@ -48,6 +52,8 @@ pub async fn emit_runtime_snapshot(app: &AppHandle, state: &AppState, source: &s
             "obs_ws_connected": obs_ws_connected,
             "obs_ws_last_error": obs_ws_last_error,
             "obs_ws_last_checked_at": obs_ws_last_checked_at,
+            "linkage_status": linkage,
+            "online_rank": last_online_rank,
         }),
     );
 }

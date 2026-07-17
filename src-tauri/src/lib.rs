@@ -158,6 +158,29 @@ pub fn run() {
                     crate::runtime_log!("[auth][batch][profile] periodic refresh: {}", result);
                 }
             });
+            let app_handle_bg = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                let mut ticker = tokio::time::interval(Duration::from_secs(10));
+                loop {
+                    ticker.tick().await;
+                    let state = app_handle_bg.state::<AppState>();
+                    let is_logged_in = {
+                        let runtime = state.runtime.lock().await;
+                        runtime.config.current_uid.is_some()
+                    };
+                    if is_logged_in {
+                        let session = commands::sync_live_status_runtime(&state).await;
+                        if session.is_live {
+                            if let Err(err) = commands::get_live_online_rank_runtime(&state).await {
+                                crate::runtime_warn!("[background][online_rank] sync failed: {err}");
+                            }
+                        }
+                        state_event::emit_runtime_snapshot(&app_handle_bg, &state, "background.poll").await;
+                        tray::refresh_tray_menu(&app_handle_bg);
+                    }
+                }
+            });
             if let Err(error) = tray::setup_tray(app) {
                 crate::runtime_warn!("setup tray failed: {error}");
             }

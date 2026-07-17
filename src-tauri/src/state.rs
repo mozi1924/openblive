@@ -21,6 +21,7 @@ pub struct RuntimeState {
     pub ws_server_danmu_tx: Option<broadcast::Sender<serde_json::Value>>,
     pub app_logs: Vec<String>,
     pub config: PersistConfig,
+    pub last_online_rank: Option<serde_json::Value>,
 }
 
 pub struct AppState {

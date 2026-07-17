@@ -204,6 +204,7 @@ export function useAppConfigController({ append, syncTrayMenu }: UseAppConfigCon
     },
     actions: {
       setDanmuOverlayVisible,
+      setLinkageStatus,
       loadAppConfig,
       loadLinkageStatus,
       updateAppConfig,

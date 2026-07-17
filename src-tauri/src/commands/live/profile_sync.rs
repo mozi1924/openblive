@@ -100,7 +100,7 @@ pub(crate) async fn fetch_room_news(
     Ok(value["data"].clone())
 }
 
-pub(crate) async fn sync_live_status_runtime(state: &AppState) -> SessionState {
+pub async fn sync_live_status_runtime(state: &AppState) -> SessionState {
     let (uid, room_id, cookie) = {
         let mut runtime = state.runtime.lock().await;
         let Some(uid) = runtime.config.current_uid.clone() else {

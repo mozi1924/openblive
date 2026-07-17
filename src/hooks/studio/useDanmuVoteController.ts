@@ -448,6 +448,7 @@ export function useDanmuVoteController({
       liveVoteSelectedTemplateId,
     },
     actions: {
+      setLiveOnlineRankData,
       setLiveVoteDuration,
       loadLiveEmoticons,
       loadLiveVoteData,

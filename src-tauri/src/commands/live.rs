@@ -55,6 +55,7 @@ use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
     sync_live_status as sync_live_status_inner,
 };
+pub use profile_sync::sync_live_status_runtime;
 use session::resolve_room_scoped_auth_context;
 use user_manage::{
     add_black_user_inner, add_room_admin_inner, add_silent_user_inner, get_black_user_list_inner,
@@ -466,8 +467,7 @@ pub async fn get_live_vote_history(state: State<'_, AppState>) -> CmdResult {
     }
 }
 
-#[tauri::command]
-pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
+pub async fn get_live_online_rank_runtime(state: &AppState) -> Result<serde_json::Value, String> {
     let (anchor_uid, room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
         resolve_room_scoped_auth_context(&runtime, false)?
@@ -496,6 +496,7 @@ pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
+        drop(runtime);
 
         let normalize_face_url = |value: &str| {
             let trimmed = value.trim();
@@ -613,14 +614,21 @@ pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
             })
             .collect::<Vec<_>>();
 
-        Ok(wrap_ok(json!({
+        let rank_json = json!({
             "online_num": online_num,
             "online_rank_items": online_rank_items,
-        })))
+        });
+
+        {
+            let mut runtime = state.runtime.lock().await;
+            runtime.last_online_rank = Some(rank_json.clone());
+        }
+
+        Ok(rank_json)
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
-                &state,
+                state,
                 &format!(
                     "get_live_online_rank code={code}, msg={}",
                     error_message(&value, "")
@@ -634,6 +642,12 @@ pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
             "i18n.live.error.fetch_live_online_rank_failed",
         ))
     }
+}
+
+#[tauri::command]
+pub async fn get_live_online_rank(state: State<'_, AppState>) -> CmdResult {
+    let result = get_live_online_rank_runtime(&state).await?;
+    Ok(wrap_ok(result))
 }
 
 #[tauri::command]
