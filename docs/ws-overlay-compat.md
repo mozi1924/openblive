@@ -6,7 +6,7 @@ The compatibility layer is designed for existing scripts/tools that already cons
 - Overlay URL: `GET /overlay`
 - Chat WebSocket: `GET /api/chat`
 - Text emoticon mappings: `GET /api/text_emoticon_mappings`
-- Overlay frontend source: `overlay-compat/` (migrated from `xfgryujk/blivechat` frontend)
+- Overlay frontend source: `src/overlay-compat/` (rewritten in React + TypeScript)
 
 ## Important behavior
 
@@ -52,8 +52,8 @@ If account/room context is unavailable, it safely returns an empty list.
 - Renders compatible message frames
 
 ## Build and integration
-- Overlay is built independently from main panel frontend.
-- Build command: `pnpm build:overlay`
+- Overlay is built using Vite and integrated into the main panel build workflow.
+- Build command: `pnpm build:overlay` (runs automatically during `pnpm build` / `pnpm build:desktop`)
 - Output directory: `dist/overlay`
 - Runtime static route: `/overlay` + `/overlay/*`
 

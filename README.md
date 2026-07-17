@@ -107,7 +107,7 @@
 - **构建工具**：[Vite 7](https://vite.dev/)
 - **样式方案**：[Tailwind CSS v4](https://tailwindcss.com/)
 - **图表组件**：[Recharts](https://recharts.org/)
-- **兼容 Overlay 前端**：`overlay-compat`（Vue 2）
+- **兼容 Overlay 前端**：`src/overlay-compat`（React + TypeScript）
 
 ## 📚 文档导航
 
@@ -197,7 +197,7 @@
 项目包含三部分：
 
 - 主前端：根目录 `React + Vite`
-- Overlay 前端：`overlay-compat`
+- Overlay 前端：`src/overlay-compat`
 - 桌面后端：`src-tauri`（Rust + Tauri）
 
 推荐按以下顺序进行本地验证：
