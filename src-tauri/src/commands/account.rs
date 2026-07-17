@@ -260,7 +260,7 @@ pub async fn load_saved_config(state: State<'_, AppState>) -> CmdResult {
 }
 
 #[tauri::command]
-pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
+pub async fn refresh_current_user(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     let _refresh_guard = state.auth_refresh_lock.lock().await;
     let uid = {
         let runtime = state.runtime.lock().await;
@@ -286,6 +286,9 @@ pub async fn refresh_current_user(state: State<'_, AppState>) -> CmdResult {
 
     let runtime = state.runtime.lock().await;
     save_config(&state.config_path, &runtime.config, &state.master_key);
+    drop(runtime);
+
+    crate::state_event::emit_accounts_changed(&app, "command.refresh_current_user");
     response
 }
 
@@ -407,17 +410,20 @@ pub async fn logout(app: AppHandle, req: UidReq, state: State<'_, AppState>) -> 
     Ok(wrap_ok(json!({})))
 }
 
-pub async fn refresh_all_account_profiles_inner(state: &AppState) -> serde_json::Value {
-    refresh::refresh_all_account_profiles_inner(state).await
+pub async fn refresh_all_account_profiles_inner(
+    app: &AppHandle,
+    state: &AppState,
+) -> serde_json::Value {
+    refresh::refresh_all_account_profiles_inner(app, state).await
 }
 
 #[tauri::command]
-pub async fn refresh_all_account_cookies(state: State<'_, AppState>) -> CmdResult {
+pub async fn refresh_all_account_cookies(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     let _refresh_guard = state.auth_refresh_lock.lock().await;
-    Ok(wrap_ok(refresh_accounts_batch(&state, false).await))
+    Ok(wrap_ok(refresh_accounts_batch(&app, &state, false).await))
 }
 
 #[tauri::command]
-pub async fn refresh_all_account_profiles(state: State<'_, AppState>) -> CmdResult {
-    Ok(wrap_ok(refresh_all_account_profiles_inner(&state).await))
+pub async fn refresh_all_account_profiles(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
+    Ok(wrap_ok(refresh_all_account_profiles_inner(&app, &state).await))
 }

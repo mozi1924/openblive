@@ -51,3 +51,13 @@ pub async fn emit_runtime_snapshot(app: &AppHandle, state: &AppState, source: &s
         }),
     );
 }
+
+pub fn emit_accounts_changed(app: &AppHandle, source: &str) {
+    emit_studio_state_event(
+        app,
+        "runtime.accounts_changed",
+        source,
+        json!({}),
+    );
+}
+

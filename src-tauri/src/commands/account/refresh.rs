@@ -600,6 +600,7 @@ pub(super) async fn refresh_cookie_for_uid(
 }
 
 pub(super) async fn refresh_accounts_batch(
+    app: &tauri::AppHandle,
     state: &AppState,
     refresh_profile: bool,
 ) -> serde_json::Value {
@@ -657,6 +658,8 @@ pub(super) async fn refresh_accounts_batch(
     save_config(&state.config_path, &runtime.config, &state.master_key);
     drop(runtime);
 
+    crate::state_event::emit_accounts_changed(app, "account.refresh_batch");
+
     let status_reconcile = if refresh_profile {
         let value = reconcile_accounts_live_status_batch(state).await;
         crate::runtime_log!("[auth][batch][profile] live status reconcile: {}", value);
@@ -672,7 +675,10 @@ pub(super) async fn refresh_accounts_batch(
     })
 }
 
-pub(super) async fn refresh_all_account_profiles_inner(state: &AppState) -> serde_json::Value {
+pub(super) async fn refresh_all_account_profiles_inner(
+    app: &tauri::AppHandle,
+    state: &AppState,
+) -> serde_json::Value {
     let _refresh_guard = state.auth_refresh_lock.lock().await;
-    refresh_accounts_batch(state, true).await
+    refresh_accounts_batch(app, state, true).await
 }

@@ -147,14 +147,14 @@ pub fn run() {
                 .await;
 
                 let first_state = app_handle.state::<AppState>();
-                let first = refresh_all_account_profiles_inner(&first_state).await;
+                let first = refresh_all_account_profiles_inner(&app_handle, &first_state).await;
                 crate::runtime_log!("[auth][batch][profile] startup refresh: {}", first);
 
                 let mut ticker = tokio::time::interval(Duration::from_secs(15 * 60));
                 loop {
                     ticker.tick().await;
                     let state = app_handle.state::<AppState>();
-                    let result = refresh_all_account_profiles_inner(&state).await;
+                    let result = refresh_all_account_profiles_inner(&app_handle, &state).await;
                     crate::runtime_log!("[auth][batch][profile] periodic refresh: {}", result);
                 }
             });

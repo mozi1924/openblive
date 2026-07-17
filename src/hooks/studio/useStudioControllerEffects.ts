@@ -220,6 +220,11 @@ export function useStudioControllerEffects({
 
   useTauriEvent(studioApi.listenStudioState, (event) => {
     switch (event.kind) {
+      case "runtime.accounts_changed": {
+        void loadSavedUser();
+        void loadAccounts();
+        break;
+      }
       case "runtime.snapshot": {
         if (!hasLiveAuth) {
           break;
