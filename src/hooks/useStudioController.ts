@@ -857,7 +857,10 @@ export function useStudioController() {
     if (!file) {
       return;
     }
-    if (!file.type.startsWith("image/")) {
+    const isImageFile =
+      file.type.startsWith("image/") ||
+      /\.(jpe?g|png|webp|gif|bmp|avif)$/i.test(file.name);
+    if (!isImageFile) {
       const message = t(localeSetting, "ui.ctrl.cover_invalid_file");
       append(message);
       pushTopNotice({ text: message, tone: "error" });

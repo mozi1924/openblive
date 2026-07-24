@@ -150,17 +150,36 @@ fn decode_cover_data_url(
         })
         .unwrap_or("image/jpeg")
         .to_string();
+
+    let clean_encoded: String = encoded
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '\r' && *c != '\n')
+        .collect();
+
     let bytes = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
+        .decode(&clean_encoded)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(&clean_encoded))
         .map_err(|_| "i18n.live.error.upload_cover_invalid_data".to_string())?;
+
     Ok((bytes, mime))
 }
 
 fn normalize_cover_file_name(file_name: Option<&str>, mime_type: &str) -> String {
-    let trimmed = file_name.unwrap_or("").trim();
-    if !trimmed.is_empty() {
-        return trimmed.to_string();
+    let raw = file_name.unwrap_or("").trim();
+    let base_name = raw
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("")
+        .trim();
+    let sanitized: String = base_name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '.' || *c == '-' || *c == '_')
+        .collect();
+
+    if !sanitized.is_empty() {
+        return sanitized;
     }
+
     let extension = match mime_type {
         "image/png" => "png",
         "image/webp" => "webp",
@@ -1162,4 +1181,37 @@ pub(crate) async fn remove_live_tag(
         "tag_items": snapshot["tags"],
         "profile_state": snapshot["profile_state"]
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_cover_file_name_sanitizes_windows_paths() {
+        assert_eq!(
+            normalize_cover_file_name(Some("C:\\Users\\Admin\\Pictures\\my_cover.png"), "image/png"),
+            "my_cover.png"
+        );
+        assert_eq!(
+            normalize_cover_file_name(Some("/home/user/my-cover.jpg"), "image/jpeg"),
+            "my-cover.jpg"
+        );
+        assert_eq!(
+            normalize_cover_file_name(Some("invalid\\name/test?.png"), "image/png"),
+            "test.png"
+        );
+        assert_eq!(
+            normalize_cover_file_name(None, "image/png"),
+            "live-cover.png"
+        );
+    }
+
+    #[test]
+    fn test_decode_cover_data_url_handles_newlines_and_spaces() {
+        let raw_data = "data:image/jpeg;base64, aGVsbG8 = \r\n";
+        let (bytes, mime) = decode_cover_data_url(raw_data, None).unwrap();
+        assert_eq!(bytes, b"hello");
+        assert_eq!(mime, "image/jpeg");
+    }
 }

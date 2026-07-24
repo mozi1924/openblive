@@ -1,4 +1,4 @@
-const LIVE_COVER_ASPECT_RATIO = 16 / 9;
+const LIVE_COVER_ASPECT_RATIO = 4 / 3;
 const LIVE_COVER_MAX_WIDTH = 1020;
 const LIVE_COVER_MAX_BYTES = 2 * 1024 * 1024;
 const LIVE_COVER_MIN_WIDTH = 640;
@@ -16,16 +16,17 @@ const toJpegFileName = (fileName: string) => {
   if (!trimmed) {
     return "live-cover.jpg";
   }
-  return `${trimmed.replace(/\.[^.]*$/, "") || "live-cover"}.jpg`;
+  const baseName = trimmed.split(/[/\\]/).pop() || trimmed;
+  const sanitized = baseName.replace(/[\r\n"'\\]/g, "").replace(/\.[^.]*$/, "");
+  return `${sanitized || "live-cover"}.jpg`;
 };
 
 const loadFileImage = (file: File) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
+  new Promise<{ img: HTMLImageElement; objectUrl: string }>((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(img);
+      resolve({ img, objectUrl });
     };
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -122,35 +123,39 @@ export type PreparedCoverUpload = {
 };
 
 export const prepareLiveCoverUpload = async (file: File): Promise<PreparedCoverUpload> => {
-  const image = await loadFileImage(file);
-  const crop = centeredCrop(image.naturalWidth || image.width, image.naturalHeight || image.height, LIVE_COVER_ASPECT_RATIO);
-  const targetWidths = buildTargetWidths(crop.sw);
+  const { img: image, objectUrl } = await loadFileImage(file);
+  try {
+    const crop = centeredCrop(image.naturalWidth || image.width, image.naturalHeight || image.height, LIVE_COVER_ASPECT_RATIO);
+    const targetWidths = buildTargetWidths(crop.sw);
 
-  let smallestBlob: Blob | null = null;
-  for (const targetWidth of targetWidths) {
-    const canvas = createCoverCanvas(image, crop, targetWidth);
-    for (const quality of JPEG_QUALITIES) {
-      const blob = await canvasToJpegBlob(canvas, quality);
-      if (!smallestBlob || blob.size < smallestBlob.size) {
-        smallestBlob = blob;
-      }
-      if (blob.size <= LIVE_COVER_MAX_BYTES) {
-        return {
-          dataUrl: await toDataUrl(blob),
-          fileName: toJpegFileName(file.name),
-          mimeType: "image/jpeg",
-        };
+    let smallestBlob: Blob | null = null;
+    for (const targetWidth of targetWidths) {
+      const canvas = createCoverCanvas(image, crop, targetWidth);
+      for (const quality of JPEG_QUALITIES) {
+        const blob = await canvasToJpegBlob(canvas, quality);
+        if (!smallestBlob || blob.size < smallestBlob.size) {
+          smallestBlob = blob;
+        }
+        if (blob.size <= LIVE_COVER_MAX_BYTES) {
+          return {
+            dataUrl: await toDataUrl(blob),
+            fileName: toJpegFileName(file.name),
+            mimeType: "image/jpeg",
+          };
+        }
       }
     }
-  }
 
-  if (!smallestBlob) {
-    throw new Error("cover_prepare_failed");
-  }
+    if (!smallestBlob) {
+      throw new Error("cover_prepare_failed");
+    }
 
-  return {
-    dataUrl: await toDataUrl(smallestBlob),
-    fileName: toJpegFileName(file.name),
-    mimeType: "image/jpeg",
-  };
+    return {
+      dataUrl: await toDataUrl(smallestBlob),
+      fileName: toJpegFileName(file.name),
+      mimeType: "image/jpeg",
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 };

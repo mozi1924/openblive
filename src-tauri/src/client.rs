@@ -1,7 +1,7 @@
 use crate::endpoints;
 use anyhow::Result;
 use reqwest::cookie::{CookieStore, Jar};
-use reqwest::header::{COOKIE, USER_AGENT};
+use reqwest::header::{COOKIE, ORIGIN, REFERER, USER_AGENT};
 use reqwest::multipart::Form;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -98,10 +98,14 @@ impl BiliClient {
         form: Form,
         cookie_header: &str,
     ) -> Result<serde_json::Value> {
+        let referer = endpoints::live_web_origin();
+        let origin = referer.trim_end_matches('/');
         let mut request = self
             .http
             .post(url)
             .header(USER_AGENT, endpoints::http_user_agent())
+            .header(REFERER, &referer)
+            .header(ORIGIN, origin)
             .multipart(form);
         if !cookie_header.trim().is_empty() {
             request = request.header(COOKIE, cookie_header.trim());

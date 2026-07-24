@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ImageUp, History, X } from "lucide-react";
 import type { LiveCoverAdvice, LiveCoverHistoryItem } from "../../../types/studio";
 import type { LocaleSetting } from "../../../utils/i18n";
@@ -36,6 +36,7 @@ export function CoverPanel({
 }: CoverPanelProps) {
   const [showCoverHistoryModal, setShowCoverHistoryModal] = useState(false);
   const [historyDraftUrl, setHistoryDraftUrl] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const coverPreview = normalizeCoverValue(
     coverRenderSrc || (cover.startsWith("data:") ? cover : ""),
@@ -90,7 +91,7 @@ export function CoverPanel({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.18fr)_minmax(0,0.82fr)] lg:items-stretch">
         <div className="flex h-full flex-col rounded-xl border border-white/8 bg-[#070b12] p-2">
-          <div className="aspect-[16/10] overflow-hidden rounded-lg border border-white/5 bg-black/20">
+          <div className="aspect-[4/3] overflow-hidden rounded-lg border border-white/5 bg-black/20">
             {coverPreview ? (
               <img
                 src={coverPreview}
@@ -104,20 +105,25 @@ export function CoverPanel({
             )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center rounded-lg border border-white/8 bg-white/3 px-3 py-2 text-xs font-bold text-gray-200 transition-all hover:border-bili-blue/30 hover:bg-white/6 hover:text-white">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex cursor-pointer items-center rounded-lg border border-white/8 bg-white/3 px-3 py-2 text-xs font-bold text-gray-200 transition-all hover:border-bili-blue/30 hover:bg-white/6 hover:text-white"
+            >
               <ImageUp className="mr-1.5 h-3.5 w-3.5" />
               {t(locale, "ui.stream.cover.upload")}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0] || null;
-                  void onSelectCoverFile(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </label>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0] || null;
+                void onSelectCoverFile(file);
+                event.currentTarget.value = "";
+              }}
+            />
             <button
               type="button"
               onClick={() => void onSubmitCover()}
@@ -236,7 +242,7 @@ export function CoverPanel({
                             : "border-white/8 bg-black/20 hover:border-white/14 hover:bg-white/4"
                         }`}
                       >
-                        <div className="aspect-[16/10] overflow-hidden rounded-lg border border-white/5 bg-black/20">
+                        <div className="aspect-[4/3] overflow-hidden rounded-lg border border-white/5 bg-black/20">
                           {item.normalizedCoverAssetUrl ? (
                             <img
                               src={item.normalizedCoverAssetUrl}
