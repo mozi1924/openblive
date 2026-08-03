@@ -26,16 +26,7 @@ pub struct LiveEmoticonPackage {
     pub emoticons: Vec<LiveEmoticonResource>,
 }
 
-pub(crate) fn normalize_image_url(url: &str) -> String {
-    let trimmed = url.trim();
-    if trimmed.starts_with("//") {
-        format!("https:{trimmed}")
-    } else if let Some(rest) = trimmed.strip_prefix("http://") {
-        format!("https://{rest}")
-    } else {
-        trimmed.to_string()
-    }
-}
+pub(crate) use crate::url::normalize_https_url as normalize_image_url;
 
 pub(crate) fn normalize_emoticon_text(text: &str) -> String {
     let trimmed = text.trim();

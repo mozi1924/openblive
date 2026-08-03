@@ -24,16 +24,7 @@ fn normalize_page_size(page_size: Option<u32>) -> u32 {
     page_size.unwrap_or(50).clamp(1, 50)
 }
 
-fn normalize_face_url(value: &str) -> String {
-    let trimmed = value.trim();
-    if trimmed.starts_with("//") {
-        format!("https:{trimmed}")
-    } else if let Some(stripped) = trimmed.strip_prefix("http://") {
-        format!("https://{stripped}")
-    } else {
-        trimmed.to_string()
-    }
-}
+use crate::url::normalize_https_url as normalize_face_url;
 
 pub(crate) async fn add_black_user_inner(req: AddBlackUserReq, state: &AppState) -> CmdResult {
     if req.fid == 0 {

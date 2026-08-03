@@ -31,16 +31,7 @@ pub(crate) fn cover_review_from_audit_status(status: Option<i64>, has_cover: boo
     }
 }
 
-pub(crate) fn normalize_cover_url(cover: &str) -> String {
-    let trimmed = cover.trim();
-    if trimmed.starts_with("//") {
-        format!("https:{trimmed}")
-    } else if let Some(stripped) = trimmed.strip_prefix("http://") {
-        format!("https://{stripped}")
-    } else {
-        trimmed.to_string()
-    }
-}
+pub(crate) use crate::url::normalize_https_url as normalize_cover_url;
 
 fn same_tags(left: &[String], right: &[String]) -> bool {
     fn normalize(values: &[String]) -> Vec<String> {

@@ -94,19 +94,7 @@ fn parse_u64_maybe(value: &serde_json::Value) -> Option<u64> {
         .or_else(|| value.as_str().and_then(|raw| raw.parse::<u64>().ok()))
 }
 
-fn normalize_history_asset_url(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed.starts_with("//") {
-        return Some(format!("https:{trimmed}"));
-    }
-    if let Some(stripped) = trimmed.strip_prefix("http://") {
-        return Some(format!("https://{stripped}"));
-    }
-    Some(trimmed.to_string())
-}
+use crate::url::normalize_asset_url as normalize_history_asset_url;
 
 fn history_sender_guard_level(entry: &serde_json::Value) -> i64 {
     if let Some(level) = entry.get("guard_level").and_then(parse_i64_maybe) {

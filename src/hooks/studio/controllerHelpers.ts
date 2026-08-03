@@ -1,5 +1,8 @@
 import type { LiveProfileState, ReviewStatus, TransportStatus, User } from "../../types/studio";
 import { resolveBackendMessage, t, type LocaleSetting } from "../../utils/i18n";
+import { normalizeRemoteAssetUrl } from "../../utils/assetUrl";
+
+export { normalizeRemoteAssetUrl };
 
 export const isValidUser = (value: User | null | undefined): value is User =>
   Boolean(value?.uid);
@@ -17,17 +20,6 @@ export type SectionStatus = { tone: StatusTone; label: string; detail: string };
 
 export const normalizeTags = (values: string[]) =>
   [...new Set(values.map((tag) => tag.trim()).filter(Boolean))];
-
-export const normalizeRemoteAssetUrl = (value?: string | null) => {
-  const normalized = value?.trim() || "";
-  if (normalized.startsWith("//")) {
-    return `https:${normalized}`;
-  }
-  if (normalized.startsWith("http://")) {
-    return `https://${normalized.slice("http://".length)}`;
-  }
-  return normalized;
-};
 
 export const normalizeCoverValue = (value?: string | null) => {
   const normalized = value?.trim() || "";

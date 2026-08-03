@@ -1,6 +1,11 @@
 use crate::crypto::{decrypt_text, encrypt_text};
 use crate::models::{
-    sync_live_profile_state_defaults, LiveProfileState, PersistConfig, RecentArea, UserRecord,
+    default_custom_push_url, default_danmu_overlay_enabled, default_danmu_overlay_opacity,
+    default_filter_entry_effect, default_filter_guard_status, default_force_custom_push_url,
+    default_hide_dock_on_minimize, default_live_control_mode, default_locale, default_min_to_tray,
+    default_obs_ws_url, default_ws_server_bypass_token_for_loopback,
+    default_ws_server_listen_addr, sync_live_profile_state_defaults, LiveProfileState,
+    PersistConfig, RecentArea, UserRecord,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -91,15 +96,6 @@ struct AppSettingsFile {
     live_platform: String,
 }
 
-fn default_filter_entry_effect() -> bool {
-    true
-}
-
-fn default_filter_guard_status() -> bool {
-    true
-}
-
-
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct AccountUserFile {
     uid: String,
@@ -177,50 +173,6 @@ impl Default for LiveCacheFile {
             live_client_synced_at: default_live_client_synced_at(),
         }
     }
-}
-
-fn default_min_to_tray() -> bool {
-    true
-}
-
-fn default_hide_dock_on_minimize() -> bool {
-    false
-}
-
-fn default_danmu_overlay_enabled() -> bool {
-    true
-}
-
-fn default_danmu_overlay_opacity() -> u8 {
-    55
-}
-
-fn default_obs_ws_url() -> String {
-    "ws://127.0.0.1:4455".to_string()
-}
-
-fn default_live_control_mode() -> String {
-    "none".to_string()
-}
-
-fn default_force_custom_push_url() -> bool {
-    true
-}
-
-fn default_custom_push_url() -> String {
-    "rtmp://live-push.bilivideo.com/live-bvc/".to_string()
-}
-
-fn default_locale() -> String {
-    "auto".to_string()
-}
-
-fn default_ws_server_listen_addr() -> String {
-    "127.0.0.1:12450".to_string()
-}
-
-fn default_ws_server_bypass_token_for_loopback() -> bool {
-    true
 }
 
 fn default_live_client_version() -> String {

@@ -5,30 +5,13 @@ import type {
   DanmuMsg,
   LiveEmoticonPackage,
 } from "../types/studio";
+import { normalizeAssetUrl } from "./assetUrl";
 
+export { normalizeAssetUrl };
 
 const createMessageId = () => Math.random().toString(36).slice(2, 9);
-
 const getNow = () => new Date().toLocaleTimeString();
-
 const EMOTICON_TOKEN_REGEX = /\[[^[\]]+\]/g;
-
-const normalizeAssetUrl = (url: string) => {
-  const trimmed = url.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (trimmed.startsWith("data:")) {
-    return trimmed;
-  }
-  if (trimmed.startsWith("//")) {
-    return `https:${trimmed}`;
-  }
-  if (trimmed.startsWith("http://")) {
-    return `https://${trimmed.slice("http://".length)}`;
-  }
-  return trimmed;
-};
 
 export const normalizeDanmuEmoticon = (
   emoticon?: DanmuEmoticon | null,

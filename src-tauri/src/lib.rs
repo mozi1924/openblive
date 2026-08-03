@@ -18,6 +18,7 @@ mod runtime_log;
 mod state;
 mod state_event;
 mod tray;
+pub mod url;
 mod ws_server;
 
 use commands::{

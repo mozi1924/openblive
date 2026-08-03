@@ -7,16 +7,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-fn normalize_face_url(face: &str) -> String {
-    let trimmed = face.trim();
-    if trimmed.starts_with("//") {
-        format!("https:{trimmed}")
-    } else if let Some(stripped) = trimmed.strip_prefix("http://") {
-        format!("https://{stripped}")
-    } else {
-        trimmed.to_string()
-    }
-}
+use crate::url::normalize_https_url as normalize_face_url;
 
 fn face_url_from_user_card_payload(value: &Value) -> Option<String> {
     let code = value["code"].as_i64().unwrap_or(-1);

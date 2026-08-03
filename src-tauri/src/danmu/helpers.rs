@@ -21,19 +21,7 @@ pub fn dec_color_to_hex(value: i64) -> Option<String> {
     Some(format!("#{:06X}", value as u32 & 0x00FF_FFFF))
 }
 
-pub fn normalize_asset_url(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed.starts_with("//") {
-        return Some(format!("https:{trimmed}"));
-    }
-    if let Some(stripped) = trimmed.strip_prefix("http://") {
-        return Some(format!("https://{stripped}"));
-    }
-    Some(trimmed.to_string())
-}
+pub use crate::url::normalize_asset_url;
 
 pub fn parse_i64(value: &Value) -> Option<i64> {
     value

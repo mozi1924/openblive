@@ -600,9 +600,7 @@ export function useStudioController() {
   );
 
   const refreshSession = useCallback(async () => {
-    const res = await studioApi
-      .syncLiveStatus()
-      .catch(() => studioApi.getSession());
+    const res = await studioApi.syncLiveStatus();
     const nextSession = res.data || null;
     setSession(nextSession);
     const liveSessionState = resolveSessionLiveState(nextSession);

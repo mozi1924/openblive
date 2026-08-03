@@ -687,49 +687,17 @@ pub async fn get_session(state: State<'_, AppState>) -> CmdResult {
 pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
     ensure_obs_ws_keepalive_task(app.clone()).await;
     let runtime = state.runtime.lock().await;
-    Ok(wrap_ok(json!({
-        "min_to_tray": runtime.config.min_to_tray,
-        "hide_dock_on_minimize": runtime.config.hide_dock_on_minimize,
-        "danmu_overlay_enabled": runtime.config.danmu_overlay_enabled,
-        "danmu_overlay_opacity": normalize_danmu_overlay_opacity(runtime.config.danmu_overlay_opacity),
-        "danmu_overlay_always_on_top": runtime.config.danmu_overlay_always_on_top,
-        "live_control_mode": runtime.config.live_control_mode,
-        "obs_ws_enabled": runtime.config.obs_ws_enabled,
-        "obs_ws_url": runtime.config.obs_ws_url,
-        "obs_ws_password": runtime.config.obs_ws_password,
-        "obs_ws_auto_start_on_live": runtime.config.obs_ws_auto_start_on_live,
-        "obs_ws_auto_stop_on_live_end": runtime.config.obs_ws_auto_stop_on_live_end,
-        "on_live_start_command": runtime.config.on_live_start_command,
-        "on_live_stop_command": runtime.config.on_live_stop_command,
-        "force_custom_push_url": runtime.config.force_custom_push_url,
-        "custom_push_url": runtime.config.custom_push_url,
-        "ws_server_enabled": runtime.config.ws_server_enabled,
-        "ws_server_listen_addr": runtime.config.ws_server_listen_addr,
-        "ws_server_auth_token": runtime.config.ws_server_auth_token,
-        "ws_server_bypass_token_for_loopback": runtime.config.ws_server_bypass_token_for_loopback,
-        "locale": runtime.config.locale,
-        "host_www": runtime.config.host_www,
-        "host_api": runtime.config.host_api,
-        "host_live_api": runtime.config.host_live_api,
-        "host_passport": runtime.config.host_passport,
-        "host_live_web": runtime.config.host_live_web,
-        "cookie_domain": runtime.config.cookie_domain,
-        "danmu_host": runtime.config.danmu_host,
-        "app_key": runtime.config.app_key,
-        "app_sec": runtime.config.app_sec,
-        "http_user_agent": runtime.config.http_user_agent,
-        "livehime_version_override": runtime.config.livehime_version_override,
-        "livehime_build_override": runtime.config.livehime_build_override,
-        "live_platform": runtime.config.live_platform,
-        "filter_entry_effect": runtime.config.filter_entry_effect,
-        "filter_enter_msg": runtime.config.filter_enter_msg,
-        "filter_guard_status": runtime.config.filter_guard_status,
-        "filter_follow_share_msg": runtime.config.filter_follow_share_msg,
-        "is_win32": cfg!(target_os = "windows"),
-
-        "is_macos": cfg!(target_os = "macos"),
-        "has_tray": crate::tray::has_tray(&app)
-    })))
+    let mut value = serde_json::to_value(&runtime.config).unwrap_or_else(|_| json!({}));
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "danmu_overlay_opacity".to_string(),
+            json!(normalize_danmu_overlay_opacity(runtime.config.danmu_overlay_opacity)),
+        );
+        obj.insert("is_win32".to_string(), json!(cfg!(target_os = "windows")));
+        obj.insert("is_macos".to_string(), json!(cfg!(target_os = "macos")));
+        obj.insert("has_tray".to_string(), json!(crate::tray::has_tray(&app)));
+    }
+    Ok(wrap_ok(value))
 }
 
 #[tauri::command]

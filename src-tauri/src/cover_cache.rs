@@ -5,16 +5,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use std::path::{Path, PathBuf};
 
-fn normalize_cover_url(cover: &str) -> String {
-    let trimmed = cover.trim();
-    if trimmed.starts_with("//") {
-        format!("https:{trimmed}")
-    } else if let Some(stripped) = trimmed.strip_prefix("http://") {
-        format!("https://{stripped}")
-    } else {
-        trimmed.to_string()
-    }
-}
+use crate::url::normalize_https_url as normalize_cover_url;
 
 fn cover_dir(config_path: &Path) -> PathBuf {
     config_path

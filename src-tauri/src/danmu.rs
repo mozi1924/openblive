@@ -265,6 +265,48 @@ fn enrich_emoticon_with_cache(app: &AppHandle, message: &mut Value) {
     }
 }
 
+pub fn should_filter_danmu_message(config: &crate::models::PersistConfig, message: &Value) -> bool {
+    let cmd = message.get("cmd").and_then(Value::as_str).unwrap_or_default();
+    let msg_type = message.get("type").and_then(Value::as_str).unwrap_or_default();
+    let interact_type = message
+        .get("interact_type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let content = message
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+
+    if config.filter_entry_effect && (cmd == "ENTRY_EFFECT" || cmd == "ENTRY_EFFECT_MUST_RECEIVE") {
+        return true;
+    }
+
+    if config.filter_guard_status
+        && (cmd == "GUARD_HONOR_THOUSAND"
+            || (msg_type == "live_state" && content.contains("guard_honor")))
+    {
+        return true;
+    }
+
+    if config.filter_enter_msg
+        && msg_type == "interact"
+        && interact_type == "enter"
+        && cmd != "ENTRY_EFFECT"
+        && cmd != "ENTRY_EFFECT_MUST_RECEIVE"
+    {
+        return true;
+    }
+
+    if config.filter_follow_share_msg
+        && msg_type == "interact"
+        && (interact_type == "follow" || interact_type == "share")
+    {
+        return true;
+    }
+
+    false
+}
+
 pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
     let mut offset = 0usize;
     let mut reenter_delay_secs: Option<u64> = None;
@@ -318,10 +360,20 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                 let raw_cmd = value["cmd"].as_str().unwrap_or("UNKNOWN");
                 let (message, reenter_delay) = parse_danmu_message(&value);
                 if let Some(mut message) = message {
-                    enrich_sender_face_with_cache(app, &mut message);
-                    enrich_emoticon_with_cache(app, &mut message);
-                    crate::ws_server::broadcast_danmu_message(app, &message);
-                    let _ = app.emit("danmu-message", message);
+                    let config = {
+                        let state = app.state::<AppState>();
+                        state
+                            .runtime
+                            .try_lock()
+                            .map(|g| g.config.clone())
+                            .unwrap_or_default()
+                    };
+                    if !should_filter_danmu_message(&config, &message) {
+                        enrich_sender_face_with_cache(app, &mut message);
+                        enrich_emoticon_with_cache(app, &mut message);
+                        crate::ws_server::broadcast_danmu_message(app, &message);
+                        let _ = app.emit("danmu-message", message);
+                    }
                 } else if is_supported_cmd(raw_cmd) {
                     let _ = app.emit("danmu-message", build_parse_failed_system_message(raw_cmd));
                 }
@@ -334,4 +386,33 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
         offset += packet_len;
     }
     reenter_delay_secs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::PersistConfig;
+    use serde_json::json;
+
+    #[test]
+    fn test_should_filter_entry_effect() {
+        let mut cfg = PersistConfig::default();
+        cfg.filter_entry_effect = true;
+        let msg = json!({ "cmd": "ENTRY_EFFECT", "type": "interact" });
+        assert!(should_filter_danmu_message(&cfg, &msg));
+
+        cfg.filter_entry_effect = false;
+        assert!(!should_filter_danmu_message(&cfg, &msg));
+    }
+
+    #[test]
+    fn test_should_filter_guard_status() {
+        let mut cfg = PersistConfig::default();
+        cfg.filter_guard_status = true;
+        let msg = json!({ "cmd": "GUARD_HONOR_THOUSAND", "type": "interact" });
+        assert!(should_filter_danmu_message(&cfg, &msg));
+
+        cfg.filter_guard_status = false;
+        assert!(!should_filter_danmu_message(&cfg, &msg));
+    }
 }

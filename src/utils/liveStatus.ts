@@ -1,5 +1,7 @@
 import type { Session } from "../types/studio";
 
+// Live status constants defined by Bilibili live streaming protocol.
+// MUST be kept synchronized with Rust backend src-tauri/src/live_status.rs.
 export const LIVE_STATUS_OFFLINE = 0;
 export const LIVE_STATUS_LIVE = 1;
 export const LIVE_STATUS_ROUND = 2;

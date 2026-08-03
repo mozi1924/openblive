@@ -1,3 +1,5 @@
+// Live status constants defined by Bilibili live streaming protocol.
+// MUST be kept synchronized with frontend src/utils/liveStatus.ts.
 pub const LIVE_STATUS_OFFLINE: i64 = 0;
 pub const LIVE_STATUS_LIVE: i64 = 1;
 pub const LIVE_STATUS_ROUND: i64 = 2;

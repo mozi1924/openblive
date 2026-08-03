@@ -276,7 +276,9 @@ pub fn sync_live_profile_state_defaults(user: &mut UserRecord) {
 pub struct PersistConfig {
     pub users: HashMap<String, UserRecord>,
     pub current_uid: Option<String>,
+    #[serde(default = "default_min_to_tray")]
     pub min_to_tray: bool,
+    #[serde(default = "default_hide_dock_on_minimize")]
     pub hide_dock_on_minimize: bool,
     #[serde(default = "default_danmu_overlay_enabled")]
     pub danmu_overlay_enabled: bool,
@@ -405,47 +407,55 @@ impl Default for PersistConfig {
     }
 }
 
-fn default_filter_entry_effect() -> bool {
+pub fn default_min_to_tray() -> bool {
     true
 }
 
-fn default_filter_guard_status() -> bool {
+pub fn default_hide_dock_on_minimize() -> bool {
+    false
+}
+
+pub fn default_filter_entry_effect() -> bool {
     true
 }
 
-fn default_live_control_mode() -> String {
+pub fn default_filter_guard_status() -> bool {
+    true
+}
+
+pub fn default_live_control_mode() -> String {
     "none".to_string()
 }
 
-fn default_force_custom_push_url() -> bool {
+pub fn default_force_custom_push_url() -> bool {
     true
 }
 
-fn default_custom_push_url() -> String {
+pub fn default_custom_push_url() -> String {
     "rtmp://live-push.bilivideo.com/live-bvc/".to_string()
 }
 
-fn default_obs_ws_url() -> String {
+pub fn default_obs_ws_url() -> String {
     "ws://127.0.0.1:4455".to_string()
 }
 
-fn default_locale() -> String {
+pub fn default_locale() -> String {
     "auto".to_string()
 }
 
-fn default_ws_server_listen_addr() -> String {
+pub fn default_ws_server_listen_addr() -> String {
     "127.0.0.1:12450".to_string()
 }
 
-fn default_ws_server_bypass_token_for_loopback() -> bool {
+pub fn default_ws_server_bypass_token_for_loopback() -> bool {
     true
 }
 
-fn default_danmu_overlay_enabled() -> bool {
+pub fn default_danmu_overlay_enabled() -> bool {
     true
 }
 
-fn default_danmu_overlay_opacity() -> u8 {
+pub fn default_danmu_overlay_opacity() -> u8 {
     55
 }
 
