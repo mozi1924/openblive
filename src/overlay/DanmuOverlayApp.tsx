@@ -3,7 +3,7 @@ import { Pin, Send, SmilePlus, X } from "lucide-react";
 import { studioApi } from "../services/studioApi";
 import type { AppConfig, LiveEmoticonPackage, StudioStateEvent, User } from "../types/studio";
 import { createLiveEmoticonIndex, createSelfDanmuMessage, resolveEmoticonStyle, shouldFilterDanmuMessage } from "../utils/danmu";
-import { t, type LocaleSetting } from "../utils/i18n";
+import { resolveBackendMessage, t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
 import { useDanmuMessageFeed } from "../hooks/studio/useDanmuMessageFeed";
 import { DanmuOverlayMessageRow } from "../features/danmu/DanmuOverlayMessageRow";

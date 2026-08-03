@@ -69,9 +69,26 @@ export type AppConfig = {
   filter_enter_msg: boolean;
   filter_guard_status: boolean;
   filter_follow_share_msg: boolean;
+  tts_enabled: boolean;
+  tts_voice: string;
+  tts_rate: string;
+  tts_pitch: string;
+  tts_volume: number;
+  tts_device: string;
+  tts_read_danmu: boolean;
+  tts_read_gift: boolean;
+  tts_read_superchat: boolean;
+  tts_read_interact: boolean;
   is_win32: boolean;
   is_macos: boolean;
   has_tray: boolean;
+};
+
+export type TtsVoice = {
+  short_name: string;
+  friendly_name: string;
+  locale: string;
+  gender: string;
 };
 
 export type DanmuOverlaySettingsEvent = {

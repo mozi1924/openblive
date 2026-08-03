@@ -194,6 +194,9 @@ export const studioApi = {
     invokeCommand<{ line: string; logs: string[] }>("push_app_log", { req: { message } }),
   getAppLogs: () => invokeCommand<string[]>("get_app_logs"),
   clearAppLogs: () => invokeCommand("clear_app_logs"),
+  getTtsVoices: () => invokeCommand<{ voices: import("../types/studio").TtsVoice[] }>("get_tts_voices"),
+  getAudioOutputDevices: () => invokeCommand<{ devices: string[] }>("get_audio_output_devices"),
+  testTtsSpeech: (text?: string) => invokeCommand("test_tts_speech", { req: { text: text || null } }),
   listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
     listen<DanmuMsg>(EVENT_NAMES.DANMU_MESSAGE, (event) => handler(event.payload)),
   listenDanmuAvatarResolved: (handler: (payload: DanmuAvatarResolvedEvent) => void) =>

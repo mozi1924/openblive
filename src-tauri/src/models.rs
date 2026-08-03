@@ -352,8 +352,28 @@ pub struct PersistConfig {
     pub filter_enter_msg: bool,
     #[serde(default = "default_filter_guard_status")]
     pub filter_guard_status: bool,
-    #[serde(default)]
+    #[serde(default = "default_filter_follow_share_msg")]
     pub filter_follow_share_msg: bool,
+    #[serde(default = "default_tts_enabled")]
+    pub tts_enabled: bool,
+    #[serde(default = "default_tts_voice")]
+    pub tts_voice: String,
+    #[serde(default = "default_tts_rate")]
+    pub tts_rate: String,
+    #[serde(default = "default_tts_pitch")]
+    pub tts_pitch: String,
+    #[serde(default = "default_tts_volume")]
+    pub tts_volume: u8,
+    #[serde(default = "default_tts_device")]
+    pub tts_device: String,
+    #[serde(default = "default_tts_read_danmu")]
+    pub tts_read_danmu: bool,
+    #[serde(default = "default_tts_read_gift")]
+    pub tts_read_gift: bool,
+    #[serde(default = "default_tts_read_superchat")]
+    pub tts_read_superchat: bool,
+    #[serde(default = "default_tts_read_interact")]
+    pub tts_read_interact: bool,
     #[serde(default = "default_live_client_version")]
     pub live_client_version: String,
     #[serde(default = "default_live_client_build")]
@@ -376,6 +396,16 @@ impl Default for PersistConfig {
             filter_enter_msg: false,
             filter_guard_status: default_filter_guard_status(),
             filter_follow_share_msg: false,
+            tts_enabled: default_tts_enabled(),
+            tts_voice: default_tts_voice(),
+            tts_rate: default_tts_rate(),
+            tts_pitch: default_tts_pitch(),
+            tts_volume: default_tts_volume(),
+            tts_device: default_tts_device(),
+            tts_read_danmu: default_tts_read_danmu(),
+            tts_read_gift: default_tts_read_gift(),
+            tts_read_superchat: default_tts_read_superchat(),
+            tts_read_interact: default_tts_read_interact(),
             live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),
@@ -410,6 +440,51 @@ impl Default for PersistConfig {
         }
     }
 }
+
+pub fn default_filter_follow_share_msg() -> bool {
+    false
+}
+
+pub fn default_tts_enabled() -> bool {
+    false
+}
+
+pub fn default_tts_voice() -> String {
+    "zh-CN-XiaoxiaoNeural".to_string()
+}
+
+pub fn default_tts_rate() -> String {
+    "+0%".to_string()
+}
+
+pub fn default_tts_pitch() -> String {
+    "+0Hz".to_string()
+}
+
+pub fn default_tts_volume() -> u8 {
+    100
+}
+
+pub fn default_tts_device() -> String {
+    "default".to_string()
+}
+
+pub fn default_tts_read_danmu() -> bool {
+    true
+}
+
+pub fn default_tts_read_gift() -> bool {
+    true
+}
+
+pub fn default_tts_read_superchat() -> bool {
+    true
+}
+
+pub fn default_tts_read_interact() -> bool {
+    false
+}
+
 
 pub fn default_min_to_tray() -> bool {
     true

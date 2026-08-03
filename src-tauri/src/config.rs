@@ -3,7 +3,9 @@ use crate::models::{
     default_custom_push_url, default_danmu_overlay_enabled, default_danmu_overlay_opacity,
     default_filter_entry_effect, default_filter_guard_status, default_force_custom_push_url,
     default_hide_dock_on_minimize, default_live_control_mode, default_locale, default_min_to_tray,
-    default_obs_ws_url, default_ws_server_bypass_token_for_loopback,
+    default_obs_ws_url, default_tts_device, default_tts_enabled, default_tts_pitch, default_tts_rate,
+    default_tts_read_danmu, default_tts_read_gift, default_tts_read_interact, default_tts_read_superchat,
+    default_tts_voice, default_tts_volume, default_ws_server_bypass_token_for_loopback,
     default_ws_server_listen_addr, sync_live_profile_state_defaults, LiveProfileState,
     PersistConfig, RecentArea, UserRecord,
 };
@@ -88,6 +90,26 @@ struct AppSettingsFile {
     filter_guard_status: bool,
     #[serde(default)]
     filter_follow_share_msg: bool,
+    #[serde(default = "default_tts_enabled")]
+    tts_enabled: bool,
+    #[serde(default = "default_tts_voice")]
+    tts_voice: String,
+    #[serde(default = "default_tts_rate")]
+    tts_rate: String,
+    #[serde(default = "default_tts_pitch")]
+    tts_pitch: String,
+    #[serde(default = "default_tts_volume")]
+    tts_volume: u8,
+    #[serde(default = "default_tts_device")]
+    tts_device: String,
+    #[serde(default = "default_tts_read_danmu")]
+    tts_read_danmu: bool,
+    #[serde(default = "default_tts_read_gift")]
+    tts_read_gift: bool,
+    #[serde(default = "default_tts_read_superchat")]
+    tts_read_superchat: bool,
+    #[serde(default = "default_tts_read_interact")]
+    tts_read_interact: bool,
     #[serde(default)]
     livehime_version_override: String,
     #[serde(default)]
@@ -363,6 +385,16 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
         cfg.filter_enter_msg = app_file.filter_enter_msg;
         cfg.filter_guard_status = app_file.filter_guard_status;
         cfg.filter_follow_share_msg = app_file.filter_follow_share_msg;
+        cfg.tts_enabled = app_file.tts_enabled;
+        cfg.tts_voice = app_file.tts_voice;
+        cfg.tts_rate = app_file.tts_rate;
+        cfg.tts_pitch = app_file.tts_pitch;
+        cfg.tts_volume = app_file.tts_volume;
+        cfg.tts_device = app_file.tts_device;
+        cfg.tts_read_danmu = app_file.tts_read_danmu;
+        cfg.tts_read_gift = app_file.tts_read_gift;
+        cfg.tts_read_superchat = app_file.tts_read_superchat;
+        cfg.tts_read_interact = app_file.tts_read_interact;
 
 
         if cfg.live_control_mode.trim().is_empty() || cfg.live_control_mode == "none" {
@@ -527,6 +559,16 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
         filter_enter_msg: cfg.filter_enter_msg,
         filter_guard_status: cfg.filter_guard_status,
         filter_follow_share_msg: cfg.filter_follow_share_msg,
+        tts_enabled: cfg.tts_enabled,
+        tts_voice: cfg.tts_voice.clone(),
+        tts_rate: cfg.tts_rate.clone(),
+        tts_pitch: cfg.tts_pitch.clone(),
+        tts_volume: cfg.tts_volume,
+        tts_device: cfg.tts_device.clone(),
+        tts_read_danmu: cfg.tts_read_danmu,
+        tts_read_gift: cfg.tts_read_gift,
+        tts_read_superchat: cfg.tts_read_superchat,
+        tts_read_interact: cfg.tts_read_interact,
     };
 
 

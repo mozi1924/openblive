@@ -8,6 +8,7 @@ import { WindowBehaviorSection } from "./components/WindowBehaviorSection";
 import { DanmuOverlaySection } from "./components/DanmuOverlaySection";
 import { WsServerSection } from "./components/WsServerSection";
 import { LinkageSection } from "./components/LinkageSection";
+import { TtsSettingsSection } from "./components/TtsSettingsSection";
 import { AdvancedSettingsSection } from "./components/AdvancedSettingsSection";
 
 type SettingsTabProps = {
@@ -58,6 +59,12 @@ export function SettingsTab({
         />
 
         <DanmuOverlaySection
+          locale={locale}
+          appConfig={appConfig}
+          onChangeConfig={onChangeConfig}
+        />
+
+        <TtsSettingsSection
           locale={locale}
           appConfig={appConfig}
           onChangeConfig={onChangeConfig}

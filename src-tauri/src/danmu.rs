@@ -312,6 +312,53 @@ pub fn should_filter_danmu_message(config: &crate::models::PersistConfig, messag
     false
 }
 
+fn maybe_enqueue_tts_speech(config: &crate::models::PersistConfig, message: &Value) {
+    if !config.tts_enabled {
+        return;
+    }
+    let msg_type = message.get("type").and_then(Value::as_str).unwrap_or_default();
+    let sender = message.get("sender").and_then(Value::as_str).unwrap_or("用户");
+    let content = message.get("content").and_then(Value::as_str).unwrap_or_default();
+
+    let text_to_speak = match msg_type {
+        "danmu" => {
+            if !config.tts_read_danmu || content.trim().is_empty() {
+                return;
+            }
+            format!("{sender}说：{content}")
+        }
+        "gift" => {
+            if !config.tts_read_gift {
+                return;
+            }
+            let gift_name = message.get("gift_name").and_then(Value::as_str).unwrap_or("礼物");
+            let num = message.get("num").and_then(Value::as_u64).unwrap_or(1);
+            format!("感谢{sender}赠送的{num}个{gift_name}")
+        }
+        "superchat" => {
+            if !config.tts_read_superchat {
+                return;
+            }
+            format!("感谢{sender}的醒目留言：{content}")
+        }
+        "interact" => {
+            if !config.tts_read_interact {
+                return;
+            }
+            let interact_type = message.get("interact_type").and_then(Value::as_str).unwrap_or_default();
+            match interact_type {
+                "enter" => format!("欢迎{sender}进入直播间"),
+                "follow" => format!("感谢{sender}关注了直播间"),
+                "share" => format!("感谢{sender}分享了直播间"),
+                _ => return,
+            }
+        }
+        _ => return,
+    };
+
+    crate::tts::enqueue_speech(config, text_to_speak);
+}
+
 pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
     let mut offset = 0usize;
     let mut reenter_delay_secs: Option<u64> = None;
@@ -383,7 +430,8 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                         enrich_sender_face_with_cache(app, &mut message);
                         enrich_emoticon_with_cache(app, &mut message);
                         crate::ws_server::broadcast_danmu_message(app, &message);
-                        let _ = app.emit("danmu-message", message);
+                        let _ = app.emit("danmu-message", &message);
+                        maybe_enqueue_tts_speech(&config, &message);
                     }
                 } else if is_supported_cmd(raw_cmd) {
                     let _ = app.emit("danmu-message", build_parse_failed_system_message(raw_cmd));

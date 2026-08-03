@@ -20,6 +20,7 @@ mod state_event;
 mod tray;
 pub mod url;
 mod ws_server;
+mod tts;
 
 use commands::{
     add_black_user, add_live_tag, add_room_admin, add_silent_user, clear_app_logs,
@@ -36,6 +37,7 @@ use commands::{
     show_danmu_overlay, start_danmu_monitor, start_live_flow, stop_danmu_monitor, stop_live_flow,
     switch_account, sync_live_room_profile, sync_live_status, terminate_live_vote, update_area, update_live_cover, update_live_tags, update_room_news, update_title,
     upload_live_cover, get_cover_data_url, upload_live_cover_file,
+    get_tts_voices, get_audio_output_devices, test_tts_speech,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -281,7 +283,10 @@ pub fn run() {
             render_qrcode,
             push_app_log,
             get_app_logs,
-            clear_app_logs
+            clear_app_logs,
+            get_tts_voices,
+            get_audio_output_devices,
+            test_tts_speech
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

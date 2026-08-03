@@ -35,6 +35,16 @@ const MANUAL_SAVE_APP_CONFIG_KEYS = [
   "livehime_version_override",
   "livehime_build_override",
   "live_platform",
+  "tts_enabled",
+  "tts_voice",
+  "tts_rate",
+  "tts_pitch",
+  "tts_volume",
+  "tts_device",
+  "tts_read_danmu",
+  "tts_read_gift",
+  "tts_read_superchat",
+  "tts_read_interact",
 ] as const satisfies ReadonlyArray<keyof AppConfig>;
 
 type ManualSaveConfigKey = (typeof MANUAL_SAVE_APP_CONFIG_KEYS)[number];
