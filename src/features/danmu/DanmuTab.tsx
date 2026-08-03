@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { DanmuCard, isSelfMessage, resolveEmoticonStyle } from "./DanmuMessageCard";
 import type {
+  AppConfig,
   DanmuMsg,
   LiveEmoticonPackage,
   LiveVoteInfo,
@@ -18,11 +19,14 @@ import type {
 } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { t } from "../../utils/i18n";
+import { shouldFilterDanmuMessage } from "../../utils/danmu";
 import { LiveVotePanel } from "./LiveVotePanel";
 
 type DanmuTabProps = {
   locale: LocaleSetting;
+  appConfig?: AppConfig | null;
   currentUser: User | null;
+
   danmuEndRef: React.RefObject<HTMLDivElement | null>;
   danmuText: string;
   danmus: DanmuMsg[];
@@ -60,6 +64,7 @@ type DanmuTabProps = {
 
 export function DanmuTab({
   locale,
+  appConfig,
   currentUser,
   danmuEndRef,
   danmuText,
@@ -121,14 +126,20 @@ export function DanmuTab({
     (left.sender_guard_level ?? 0) === (right.sender_guard_level ?? 0) &&
     (left.sender_name_color || "") === (right.sender_name_color || "");
 
+  const visibleDanmus = useMemo(
+    () => danmus.filter((msg) => !shouldFilterDanmuMessage(msg, appConfig ?? null)),
+    [danmus, appConfig],
+  );
+
   const groupedDanmus = useMemo<DanmuGroupItem[]>(() => {
     const result: DanmuGroupItem[] = [];
     let currentGroup: DanmuGroupItem | null = null;
 
     // Build the groups chronologically (oldest to newest)
-    for (let i = danmus.length - 1; i >= 0; i--) {
-      const msg = danmus[i];
+    for (let i = visibleDanmus.length - 1; i >= 0; i--) {
+      const msg = visibleDanmus[i];
       const rawType = String(msg.type ?? "");
+
 
       const isEvent = (
         rawType === "system" ||

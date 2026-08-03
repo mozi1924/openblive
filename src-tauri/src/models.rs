@@ -340,6 +340,14 @@ pub struct PersistConfig {
     pub livehime_build_override: String,
     #[serde(default)]
     pub live_platform: String,
+    #[serde(default = "default_filter_entry_effect")]
+    pub filter_entry_effect: bool,
+    #[serde(default)]
+    pub filter_enter_msg: bool,
+    #[serde(default = "default_filter_guard_status")]
+    pub filter_guard_status: bool,
+    #[serde(default)]
+    pub filter_follow_share_msg: bool,
     #[serde(default = "default_live_client_version")]
     pub live_client_version: String,
     #[serde(default = "default_live_client_build")]
@@ -358,6 +366,10 @@ impl Default for PersistConfig {
             danmu_overlay_enabled: default_danmu_overlay_enabled(),
             danmu_overlay_opacity: default_danmu_overlay_opacity(),
             danmu_overlay_always_on_top: false,
+            filter_entry_effect: default_filter_entry_effect(),
+            filter_enter_msg: false,
+            filter_guard_status: default_filter_guard_status(),
+            filter_follow_share_msg: false,
             live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),
@@ -391,6 +403,14 @@ impl Default for PersistConfig {
             live_client_synced_at: default_live_client_synced_at(),
         }
     }
+}
+
+fn default_filter_entry_effect() -> bool {
+    true
+}
+
+fn default_filter_guard_status() -> bool {
+    true
 }
 
 fn default_live_control_mode() -> String {

@@ -75,6 +75,14 @@ struct AppSettingsFile {
     app_sec: String,
     #[serde(default)]
     http_user_agent: String,
+    #[serde(default = "default_filter_entry_effect")]
+    filter_entry_effect: bool,
+    #[serde(default)]
+    filter_enter_msg: bool,
+    #[serde(default = "default_filter_guard_status")]
+    filter_guard_status: bool,
+    #[serde(default)]
+    filter_follow_share_msg: bool,
     #[serde(default)]
     livehime_version_override: String,
     #[serde(default)]
@@ -82,6 +90,15 @@ struct AppSettingsFile {
     #[serde(default)]
     live_platform: String,
 }
+
+fn default_filter_entry_effect() -> bool {
+    true
+}
+
+fn default_filter_guard_status() -> bool {
+    true
+}
+
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct AccountUserFile {
@@ -388,6 +405,11 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
         cfg.livehime_version_override = app_file.livehime_version_override;
         cfg.livehime_build_override = app_file.livehime_build_override;
         cfg.live_platform = app_file.live_platform;
+        cfg.filter_entry_effect = app_file.filter_entry_effect;
+        cfg.filter_enter_msg = app_file.filter_enter_msg;
+        cfg.filter_guard_status = app_file.filter_guard_status;
+        cfg.filter_follow_share_msg = app_file.filter_follow_share_msg;
+
 
         if cfg.live_control_mode.trim().is_empty() || cfg.live_control_mode == "none" {
             if cfg.obs_ws_enabled {
@@ -546,7 +568,12 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
         livehime_version_override: cfg.livehime_version_override.clone(),
         livehime_build_override: cfg.livehime_build_override.clone(),
         live_platform: cfg.live_platform.clone(),
+        filter_entry_effect: cfg.filter_entry_effect,
+        filter_enter_msg: cfg.filter_enter_msg,
+        filter_guard_status: cfg.filter_guard_status,
+        filter_follow_share_msg: cfg.filter_follow_share_msg,
     };
+
 
     let mut account_file = AccountFile {
         current_uid: cfg.current_uid.clone(),

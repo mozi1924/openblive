@@ -1,9 +1,11 @@
 import type {
+  AppConfig,
   DanmuContentSegment,
   DanmuEmoticon,
   DanmuMsg,
   LiveEmoticonPackage,
 } from "../types/studio";
+
 
 const createMessageId = () => Math.random().toString(36).slice(2, 9);
 
@@ -268,3 +270,49 @@ export const upsertIncomingDanmuMessage = (
 
   return prev.map((message, index) => (index === optimisticIndex ? incoming : message));
 };
+
+export const shouldFilterDanmuMessage = (
+  message: DanmuMsg,
+  config: AppConfig | null,
+): boolean => {
+  const filterEntryEffect = config?.filter_entry_effect ?? true;
+  const filterEnterMsg = config?.filter_enter_msg ?? false;
+  const filterGuardStatus = config?.filter_guard_status ?? true;
+  const filterFollowShareMsg = config?.filter_follow_share_msg ?? false;
+
+  if (
+    filterEntryEffect &&
+    (message.cmd === "ENTRY_EFFECT" || message.cmd === "ENTRY_EFFECT_MUST_RECEIVE")
+  ) {
+    return true;
+  }
+
+  if (
+    filterGuardStatus &&
+    (message.cmd === "GUARD_HONOR_THOUSAND" ||
+      (message.type === "live_state" && message.content.includes("guard_honor")))
+  ) {
+    return true;
+  }
+
+  if (
+    filterEnterMsg &&
+    message.type === "interact" &&
+    message.interact_type === "enter" &&
+    message.cmd !== "ENTRY_EFFECT" &&
+    message.cmd !== "ENTRY_EFFECT_MUST_RECEIVE"
+  ) {
+    return true;
+  }
+
+  if (
+    filterFollowShareMsg &&
+    message.type === "interact" &&
+    (message.interact_type === "follow" || message.interact_type === "share")
+  ) {
+    return true;
+  }
+
+  return false;
+};
+

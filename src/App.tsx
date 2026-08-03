@@ -164,7 +164,9 @@ function App() {
           {state.activeTab === "danmu" && (
             <DanmuTab
               locale={locale}
+              appConfig={state.appConfig}
               currentUser={state.currentUser}
+
               danmuEndRef={refs.danmuEndRef}
               danmuText={state.danmuText}
               danmus={state.danmus}

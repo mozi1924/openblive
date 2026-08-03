@@ -587,8 +587,21 @@ fn apply_app_config_value(
         "live_platform" => {
             runtime.config.live_platform = value.as_str().unwrap_or("").trim().to_string();
         }
+        "filter_entry_effect" => {
+            runtime.config.filter_entry_effect = value.as_bool().unwrap_or(true);
+        }
+        "filter_enter_msg" => {
+            runtime.config.filter_enter_msg = value.as_bool().unwrap_or(false);
+        }
+        "filter_guard_status" => {
+            runtime.config.filter_guard_status = value.as_bool().unwrap_or(true);
+        }
+        "filter_follow_share_msg" => {
+            runtime.config.filter_follow_share_msg = value.as_bool().unwrap_or(false);
+        }
         _ => return Err("i18n.system.error.unknown_config_key".into()),
     }
+
     Ok(())
 }
 
@@ -708,7 +721,12 @@ pub async fn get_app_config(app: AppHandle, state: State<'_, AppState>) -> CmdRe
         "livehime_version_override": runtime.config.livehime_version_override,
         "livehime_build_override": runtime.config.livehime_build_override,
         "live_platform": runtime.config.live_platform,
+        "filter_entry_effect": runtime.config.filter_entry_effect,
+        "filter_enter_msg": runtime.config.filter_enter_msg,
+        "filter_guard_status": runtime.config.filter_guard_status,
+        "filter_follow_share_msg": runtime.config.filter_follow_share_msg,
         "is_win32": cfg!(target_os = "windows"),
+
         "is_macos": cfg!(target_os = "macos"),
         "has_tray": crate::tray::has_tray(&app)
     })))

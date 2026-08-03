@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pin, Send, SmilePlus, X } from "lucide-react";
 import { studioApi } from "../services/studioApi";
 import type { AppConfig, LiveEmoticonPackage, StudioStateEvent, User } from "../types/studio";
-import { createLiveEmoticonIndex, createSelfDanmuMessage } from "../utils/danmu";
+import { createLiveEmoticonIndex, createSelfDanmuMessage, shouldFilterDanmuMessage } from "../utils/danmu";
 import { t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
 import { useDanmuMessageFeed } from "../hooks/studio/useDanmuMessageFeed";
@@ -45,7 +45,15 @@ export function DanmuOverlayApp() {
     currentUserUid: currentUser?.uid,
     maxMessages: 160,
   });
-  const orderedDanmus = useMemo(() => [...danmus].slice(0, 160).reverse(), [danmus]);
+  const orderedDanmus = useMemo(
+    () =>
+      [...danmus]
+        .filter((msg) => !shouldFilterDanmuMessage(msg, appConfig))
+        .slice(0, 160)
+        .reverse(),
+    [danmus, appConfig],
+  );
+
   const panelOpacity = Math.max(40, Math.min(appConfig?.danmu_overlay_opacity ?? 55, 100));
   const panelOpacityRatio = panelOpacity / 100;
   const composerSurface = `rgba(8, 12, 19, ${Math.max(panelOpacityRatio * 0.72, 0.16)})`;

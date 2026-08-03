@@ -45,6 +45,10 @@ export type AppConfig = {
   livehime_version_override: string;
   livehime_build_override: string;
   live_platform: string;
+  filter_entry_effect: boolean;
+  filter_enter_msg: boolean;
+  filter_guard_status: boolean;
+  filter_follow_share_msg: boolean;
   is_win32: boolean;
   is_macos: boolean;
   has_tray: boolean;
