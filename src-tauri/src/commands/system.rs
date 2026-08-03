@@ -599,7 +599,7 @@ fn apply_app_config_value(
         "tts_voice" => {
             runtime.config.tts_voice = value
                 .as_str()
-                .unwrap_or("zh-CN-XiaoxiaoNeural")
+                .unwrap_or(crate::constants::DEFAULT_TTS_VOICE)
                 .trim()
                 .to_string();
         }

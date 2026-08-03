@@ -66,22 +66,31 @@ pub fn init_tts_worker() {
 
 async fn process_speech_task(task: TtsSpeechTask) -> Result<()> {
     let client = get_or_create_client()?;
+
+    // Fall back to shared defaults when a field is empty. The voice default is
+    // the app-level constant; rate/pitch defaults are taken from the crate's
+    // own `SpeakOptions` defaults so they stay in sync with the library.
+    let defaults = SpeakOptions::default();
     let voice_name = if task.voice.trim().is_empty() {
-        "zh-CN-XiaoxiaoNeural".to_string()
+        crate::constants::DEFAULT_TTS_VOICE.to_string()
     } else {
         task.voice.trim().to_string()
     };
     let rate = if task.rate.trim().is_empty() {
-        "+0%".to_string()
+        defaults.rate.clone()
     } else {
         task.rate.trim().to_string()
     };
     let pitch = if task.pitch.trim().is_empty() {
-        "+0Hz".to_string()
+        defaults.pitch.clone()
     } else {
         task.pitch.trim().to_string()
     };
 
+    // Note: `volume` is intentionally left at the crate default ("+0%") here.
+    // The user-configurable `tts_volume` (0-100) is an absolute playback gain
+    // applied on the rodio Sink in `play_audio_bytes`, not an Edge TTS
+    // relative adjustment, so it is kept out of `SpeakOptions`.
     let options = SpeakOptions {
         voice: voice_name,
         rate,
@@ -237,15 +246,7 @@ pub async fn list_voices_dynamic() -> Vec<TtsVoice> {
     if fetched_voices.is_empty() {
         fetched_voices = list_supported_voices();
     } else {
-        fetched_voices.sort_by(|a, b| {
-            let a_is_zh = a.locale.starts_with("zh");
-            let b_is_zh = b.locale.starts_with("zh");
-            if a_is_zh != b_is_zh {
-                b_is_zh.cmp(&a_is_zh)
-            } else {
-                a.short_name.cmp(&b.short_name)
-            }
-        });
+        sort_voices_default(&mut fetched_voices);
     }
 
     let mut guard = cache.lock().await;
@@ -253,163 +254,146 @@ pub async fn list_voices_dynamic() -> Vec<TtsVoice> {
     fetched_voices
 }
 
+/// Orders voices the way the settings UI should show them: Chinese voices
+/// first, then everything else, each group sorted by short name.
+fn sort_voices_default(voices: &mut [TtsVoice]) {
+    voices.sort_by(|a, b| {
+        let a_is_zh = a.locale.starts_with("zh");
+        let b_is_zh = b.locale.starts_with("zh");
+        if a_is_zh != b_is_zh {
+            b_is_zh.cmp(&a_is_zh)
+        } else {
+            a.short_name.cmp(&b.short_name)
+        }
+    });
+}
+
+/// Fallback voice list used only when the live voice list cannot be fetched
+/// (e.g. offline). It intentionally mirrors the current Microsoft Edge TTS
+/// catalogue and is verified against `GET .../voices/list` — voices that have
+/// been retired by Microsoft are not listed here. The dynamic fetch in
+/// `list_voices_dynamic` is the source of truth.
 pub fn list_supported_voices() -> Vec<TtsVoice> {
-    vec![
+    let mut voices = vec![
         TtsVoice {
             short_name: "zh-CN-XiaoxiaoNeural".to_string(),
-            friendly_name: "晓晓 (女声 - 温暖亲切)".to_string(),
+            friendly_name: "Microsoft Xiaoxiao Online (Natural) - Chinese (Mainland)".to_string(),
             locale: "zh-CN".to_string(),
             gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-YunxiNeural".to_string(),
-            friendly_name: "云希 (男声 - 阳光沉稳)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Male".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-YunjianNeural".to_string(),
-            friendly_name: "云健 (男声 - 激情澎湃)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Male".to_string(),
         },
         TtsVoice {
             short_name: "zh-CN-XiaoyiNeural".to_string(),
-            friendly_name: "晓伊 (女声 - 柔和自然)".to_string(),
+            friendly_name: "Microsoft Xiaoyi Online (Natural) - Chinese (Mainland)".to_string(),
             locale: "zh-CN".to_string(),
             gender: "Female".to_string(),
+        },
+        TtsVoice {
+            short_name: "zh-CN-YunjianNeural".to_string(),
+            friendly_name: "Microsoft Yunjian Online (Natural) - Chinese (Mainland)".to_string(),
+            locale: "zh-CN".to_string(),
+            gender: "Male".to_string(),
+        },
+        TtsVoice {
+            short_name: "zh-CN-YunxiNeural".to_string(),
+            friendly_name: "Microsoft Yunxi Online (Natural) - Chinese (Mainland)".to_string(),
+            locale: "zh-CN".to_string(),
+            gender: "Male".to_string(),
+        },
+        TtsVoice {
+            short_name: "zh-CN-YunxiaNeural".to_string(),
+            friendly_name: "Microsoft Yunxia Online (Natural) - Chinese (Mainland)".to_string(),
+            locale: "zh-CN".to_string(),
+            gender: "Male".to_string(),
         },
         TtsVoice {
             short_name: "zh-CN-YunyangNeural".to_string(),
-            friendly_name: "云扬 (男声 - 专业新闻)".to_string(),
+            friendly_name: "Microsoft Yunyang Online (Natural) - Chinese (Mainland)".to_string(),
             locale: "zh-CN".to_string(),
             gender: "Male".to_string(),
         },
         TtsVoice {
-            short_name: "zh-CN-XiaochenNeural".to_string(),
-            friendly_name: "晓辰 (女声 - 真实对话)".to_string(),
-            locale: "zh-CN".to_string(),
+            short_name: "zh-CN-liaoning-XiaobeiNeural".to_string(),
+            friendly_name: "Microsoft Xiaobei Online (Natural) - Chinese (Northeastern Mandarin)"
+                .to_string(),
+            locale: "zh-CN-liaoning".to_string(),
             gender: "Female".to_string(),
         },
         TtsVoice {
-            short_name: "zh-CN-XiaohanNeural".to_string(),
-            friendly_name: "晓涵 (女声 - 情感丰富)".to_string(),
-            locale: "zh-CN".to_string(),
+            short_name: "zh-CN-shaanxi-XiaoniNeural".to_string(),
+            friendly_name: "Microsoft Xiaoni Online (Natural) - Chinese (Zhongyuan Mandarin Shaanxi)"
+                .to_string(),
+            locale: "zh-CN-shaanxi".to_string(),
             gender: "Female".to_string(),
         },
         TtsVoice {
-            short_name: "zh-CN-XiaomengNeural".to_string(),
-            friendly_name: "晓梦 (女声 - 甜美可人)".to_string(),
-            locale: "zh-CN".to_string(),
+            short_name: "zh-HK-HiuGaaiNeural".to_string(),
+            friendly_name: "Microsoft HiuGaai Online (Natural) - Chinese (Cantonese Traditional)"
+                .to_string(),
+            locale: "zh-HK".to_string(),
             gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-XiaomoNeural".to_string(),
-            friendly_name: "晓墨 (女声 - 叙事故事)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-XiaoqiuNeural".to_string(),
-            friendly_name: "晓秋 (女声 - 稳重大方)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-XiaoruiNeural".to_string(),
-            friendly_name: "晓睿 (女声 - 沉静老练)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-XiaoxuanNeural".to_string(),
-            friendly_name: "晓萱 (女声 - 欢快开朗)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-XiaoxianNeural".to_string(),
-            friendly_name: "晓颜 (女声 - 活力青春)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-XiaozhenNeural".to_string(),
-            friendly_name: "晓甄 (女声 - 庄重知性)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-YunfengNeural".to_string(),
-            friendly_name: "云枫 (男声 - 严谨专业)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Male".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-YunhaoNeural".to_string(),
-            friendly_name: "云皓 (男声 - 沉稳大气)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Male".to_string(),
-        },
-        TtsVoice {
-            short_name: "zh-CN-YunzeNeural".to_string(),
-            friendly_name: "云泽 (男声 - 深沉磁性)".to_string(),
-            locale: "zh-CN".to_string(),
-            gender: "Male".to_string(),
         },
         TtsVoice {
             short_name: "zh-HK-HiuMaanNeural".to_string(),
-            friendly_name: "曉曼 (女聲 - 粵語)".to_string(),
+            friendly_name: "Microsoft HiuMaan Online (Natural) - Chinese (Hong Kong SAR)".to_string(),
             locale: "zh-HK".to_string(),
             gender: "Female".to_string(),
         },
         TtsVoice {
             short_name: "zh-HK-WanLungNeural".to_string(),
-            friendly_name: "雲龍 (男聲 - 粵語)".to_string(),
+            friendly_name: "Microsoft WanLung Online (Natural) - Chinese (Hong Kong SAR)".to_string(),
             locale: "zh-HK".to_string(),
             gender: "Male".to_string(),
         },
         TtsVoice {
             short_name: "zh-TW-HsiaoChenNeural".to_string(),
-            friendly_name: "曉臻 (女聲 - 國語)".to_string(),
+            friendly_name: "Microsoft HsiaoChen Online (Natural) - Chinese (Taiwan)".to_string(),
+            locale: "zh-TW".to_string(),
+            gender: "Female".to_string(),
+        },
+        TtsVoice {
+            short_name: "zh-TW-HsiaoYuNeural".to_string(),
+            friendly_name: "Microsoft HsiaoYu Online (Natural) - Chinese (Taiwanese Mandarin)"
+                .to_string(),
             locale: "zh-TW".to_string(),
             gender: "Female".to_string(),
         },
         TtsVoice {
             short_name: "zh-TW-YunJheNeural".to_string(),
-            friendly_name: "雲哲 (男聲 - 國語)".to_string(),
+            friendly_name: "Microsoft YunJhe Online (Natural) - Chinese (Taiwan)".to_string(),
             locale: "zh-TW".to_string(),
             gender: "Male".to_string(),
         },
         TtsVoice {
-            short_name: "en-US-AvaNeural".to_string(),
-            friendly_name: "Ava (Female - English US)".to_string(),
-            locale: "en-US".to_string(),
-            gender: "Female".to_string(),
-        },
-        TtsVoice {
             short_name: "en-US-AndrewNeural".to_string(),
-            friendly_name: "Andrew (Male - English US)".to_string(),
+            friendly_name: "Microsoft Andrew Online (Natural) - English (United States)".to_string(),
             locale: "en-US".to_string(),
             gender: "Male".to_string(),
         },
         TtsVoice {
-            short_name: "en-US-EmmaNeural".to_string(),
-            friendly_name: "Emma (Female - English US)".to_string(),
+            short_name: "en-US-AvaNeural".to_string(),
+            friendly_name: "Microsoft Ava Online (Natural) - English (United States)".to_string(),
             locale: "en-US".to_string(),
             gender: "Female".to_string(),
         },
         TtsVoice {
-            short_name: "ja-JP-NanamiNeural".to_string(),
-            friendly_name: "Nanami (女性 - 日本語)".to_string(),
-            locale: "ja-JP".to_string(),
+            short_name: "en-US-EmmaNeural".to_string(),
+            friendly_name: "Microsoft Emma Online (Natural) - English (United States)".to_string(),
+            locale: "en-US".to_string(),
             gender: "Female".to_string(),
         },
         TtsVoice {
             short_name: "ja-JP-KeitaNeural".to_string(),
-            friendly_name: "Keita (男性 - 日本語)".to_string(),
+            friendly_name: "Microsoft Keita Online (Natural) - Japanese (Japan)".to_string(),
             locale: "ja-JP".to_string(),
             gender: "Male".to_string(),
         },
-    ]
+        TtsVoice {
+            short_name: "ja-JP-NanamiNeural".to_string(),
+            friendly_name: "Microsoft Nanami Online (Natural) - Japanese (Japan)".to_string(),
+            locale: "ja-JP".to_string(),
+            gender: "Female".to_string(),
+        },
+    ];
+    sort_voices_default(&mut voices);
+    voices
 }

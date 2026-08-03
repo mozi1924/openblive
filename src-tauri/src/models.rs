@@ -450,7 +450,7 @@ pub fn default_tts_enabled() -> bool {
 }
 
 pub fn default_tts_voice() -> String {
-    "zh-CN-XiaoxiaoNeural".to_string()
+    crate::constants::DEFAULT_TTS_VOICE.to_string()
 }
 
 pub fn default_tts_rate() -> String {

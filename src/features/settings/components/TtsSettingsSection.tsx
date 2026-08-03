@@ -17,6 +17,13 @@ import type { AppConfig, TtsVoice } from "../../../types/studio";
 import type { LocaleSetting } from "../../../utils/i18n";
 import { t } from "../../../utils/i18n";
 import { studioApi } from "../../../services/studioApi";
+import {
+  DEFAULT_TTS_VOICE,
+  DEFAULT_TTS_RATE,
+  DEFAULT_TTS_PITCH,
+  DEFAULT_TTS_VOLUME,
+  DEFAULT_TTS_DEVICE,
+} from "../../../constants/tts";
 
 type TtsSettingsSectionProps = {
   locale: LocaleSetting;
@@ -170,15 +177,25 @@ export function TtsSettingsSection({
               </label>
               <div className="relative">
                 <select
-                  value={appConfig.tts_voice || "zh-CN-XiaoxiaoNeural"}
+                  value={appConfig.tts_voice || DEFAULT_TTS_VOICE}
                   onChange={(e) => onChangeConfig("tts_voice", e.target.value)}
                   className={selectClass}
                 >
-                  {voices.map((voice) => (
-                    <option key={voice.short_name} value={voice.short_name} className="bg-[#090b0f]">
-                      {voice.friendly_name}
+                  {voices.length > 0 ? (
+                    voices.map((voice) => (
+                      <option
+                        key={voice.short_name}
+                        value={voice.short_name}
+                        className="bg-[#090b0f]"
+                      >
+                        {voice.friendly_name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={DEFAULT_TTS_VOICE} className="bg-[#090b0f]">
+                      {DEFAULT_TTS_VOICE}
                     </option>
-                  ))}
+                  )}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
               </div>
@@ -192,7 +209,7 @@ export function TtsSettingsSection({
               </label>
               <div className="relative">
                 <select
-                  value={appConfig.tts_device || "default"}
+                  value={appConfig.tts_device || DEFAULT_TTS_DEVICE}
                   onChange={(e) => onChangeConfig("tts_device", e.target.value)}
                   className={selectClass}
                 >
@@ -216,7 +233,7 @@ export function TtsSettingsSection({
               </label>
               <div className="relative">
                 <select
-                  value={appConfig.tts_rate || "+0%"}
+                  value={appConfig.tts_rate || DEFAULT_TTS_RATE}
                   onChange={(e) => onChangeConfig("tts_rate", e.target.value)}
                   className={selectClass}
                 >
@@ -238,7 +255,7 @@ export function TtsSettingsSection({
               </label>
               <div className="relative">
                 <select
-                  value={appConfig.tts_pitch || "+0Hz"}
+                  value={appConfig.tts_pitch || DEFAULT_TTS_PITCH}
                   onChange={(e) => onChangeConfig("tts_pitch", e.target.value)}
                   className={selectClass}
                 >
@@ -265,7 +282,7 @@ export function TtsSettingsSection({
                 </p>
               </div>
               <span className="rounded-full border border-bili-blue/15 bg-bili-blue/10 px-2.5 py-1 text-[10px] font-black text-bili-blue">
-                {appConfig.tts_volume ?? 100}%
+                {appConfig.tts_volume ?? DEFAULT_TTS_VOLUME}%
               </span>
             </div>
             <input
@@ -273,7 +290,7 @@ export function TtsSettingsSection({
               min={0}
               max={100}
               step={5}
-              value={appConfig.tts_volume ?? 100}
+              value={appConfig.tts_volume ?? DEFAULT_TTS_VOLUME}
               onChange={(e) => onChangeConfig("tts_volume", Number(e.target.value))}
               className="mt-4 h-2 w-full cursor-pointer appearance-none rounded-full bg-white/8 accent-bili-blue"
             />
