@@ -195,28 +195,62 @@ export function DanmuOverlayApp() {
       return;
     }
 
+    const optimisticMsg = createSelfDanmuMessage(
+      message,
+      currentUser?.uname || t(locale, "ui.ctrl.me"),
+      liveEmoticonMap,
+      currentUser?.uid
+        ? {
+            sender_uid: Number(currentUser.uid),
+            sender_role: "anchor",
+            sender_face: currentUser.face,
+          }
+        : undefined,
+      "sending",
+    );
+
+    setDanmus((prev) => [optimisticMsg, ...prev].slice(0, 160));
+    setDanmuText("");
+    setOpenPanel(false);
+
     setSubmitting(true);
     try {
       const res = await studioApi.sendDanmu(message);
       if (res.code === 0) {
-        setDanmus((prev) => [
-          createSelfDanmuMessage(
-            message,
-            currentUser?.uname || t(locale, "ui.ctrl.me"),
-            liveEmoticonMap,
-            currentUser?.uid
+        setDanmus((prev) =>
+          prev.map((item) => (item.id === optimisticMsg.id ? { ...item, status: "success" } : item)),
+        );
+      } else {
+        const errorMsg = resolveBackendMessage(res.msg, locale);
+        setDanmus((prev) =>
+          prev.map((item) =>
+            item.id === optimisticMsg.id
               ? {
-                  sender_uid: Number(currentUser.uid),
-                  sender_role: "anchor",
-                  sender_face: currentUser.face,
+                  ...item,
+                  optimistic: false,
+                  send_failed: true,
+                  status: "failed",
+                  error_msg: errorMsg,
                 }
-              : undefined,
+              : item,
           ),
-          ...prev,
-        ].slice(0, 160));
-        setDanmuText("");
-        setOpenPanel(false);
+        );
       }
+    } catch (error) {
+      const errorMsg = resolveBackendMessage(String(error), locale);
+      setDanmus((prev) =>
+        prev.map((item) =>
+          item.id === optimisticMsg.id
+            ? {
+                ...item,
+                optimistic: false,
+                send_failed: true,
+                status: "failed",
+                error_msg: errorMsg,
+              }
+            : item,
+        ),
+      );
     } finally {
       setSubmitting(false);
     }

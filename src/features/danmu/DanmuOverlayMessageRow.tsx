@@ -147,16 +147,27 @@ export function DanmuOverlayMessageRow({
   const content = resolveOverlayContent(message, locale);
   const senderTone = resolveSenderTone(message, currentUser, locale, localizedSender);
   const hasSender = localizedSender.length > 0 && !isEventStyleMessage(message);
+  const isSending = message.status === "sending" || (message.optimistic && !message.send_failed && message.status !== "failed");
+  const isFailed = Boolean(message.send_failed || message.status === "failed");
 
   return (
-    <div className="rounded-xl px-2.5 py-1.5 text-[12px] leading-5 text-gray-100 transition-colors hover:bg-white/[0.04]">
+    <div
+      className={`rounded-xl px-2.5 py-1.5 text-[12px] leading-5 transition-colors hover:bg-white/[0.04] ${
+        isFailed ? "text-red-300 bg-red-500/10" : isSending ? "text-gray-300 opacity-75" : "text-gray-100"
+      }`}
+    >
       {hasSender ? (
         <span className={`font-black tracking-[0.01em] ${senderTone.className}`} style={senderTone.style}>
           {localizedSender}:
         </span>
       ) : null}
       {hasSender ? " " : null}
-      <span className="text-gray-100">{content}</span>
+      <span className={isFailed ? "text-red-200" : "text-gray-100"}>{content}</span>
+      {isFailed ? (
+        <span className="ml-1 text-[10px] text-red-400 font-semibold">
+          ({message.error_msg || t(locale, "ui.ctrl.send_failed_default")})
+        </span>
+      ) : null}
     </div>
   );
 }

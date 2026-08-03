@@ -384,6 +384,9 @@ export type DanmuMsg = {
   gift_unit_price?: number;
   gift_total_coin?: number;
   optimistic?: boolean;
+  status?: "sending" | "success" | "failed";
+  send_failed?: boolean;
+  error_msg?: string;
   emoticon?: DanmuEmoticon;
   segments?: DanmuContentSegment[];
 };

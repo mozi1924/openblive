@@ -125,7 +125,10 @@ describe("danmu emoticon helpers", () => {
     const optimistic = createSelfDanmuMessage("1", "主播", undefined, {
       sender_uid: 42,
       sender_role: "anchor",
-    });
+    }, "sending");
+    expect(optimistic.status).toBe("sending");
+    expect(optimistic.optimistic).toBe(true);
+
     const incoming: DanmuMsg = {
       id: "server-1",
       type: "danmu",
@@ -139,5 +142,27 @@ describe("danmu emoticon helpers", () => {
     const result = upsertIncomingDanmuMessage([optimistic], incoming);
 
     expect(result).toEqual([incoming]);
+  });
+
+  it("does not replace failed self danmu when websocket echo arrives", () => {
+    const failedMsg: DanmuMsg = {
+      ...createSelfDanmuMessage("test", "主播", undefined, { sender_uid: 42 }),
+      optimistic: false,
+      send_failed: true,
+      status: "failed",
+      error_msg: "发送频率过快",
+    };
+
+    const incoming: DanmuMsg = {
+      id: "server-2",
+      type: "danmu",
+      time: "12:00:02",
+      sender: "主播",
+      sender_uid: 42,
+      content: "test",
+    };
+
+    const result = upsertIncomingDanmuMessage([failedMsg], incoming);
+    expect(result).toEqual([incoming, failedMsg]);
   });
 });

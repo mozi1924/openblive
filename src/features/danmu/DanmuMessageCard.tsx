@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { Gift, Radio, Shield } from "lucide-react";
+import { AlertCircle, Gift, Loader2, Radio, Shield } from "lucide-react";
 import type { DanmuMsg, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
 import { resolveBackendMessage, t, tf } from "../../utils/i18n";
@@ -509,11 +509,15 @@ export function DanmuCard({
           <div className="flex flex-col items-end space-y-1 w-full">
             {msgList.map((message, idx) => {
               const bubbleShapeClass = idx === 0 ? "rounded-xl rounded-tr-none" : "rounded-xl rounded-tr-sm";
+              const isSending = message.status === "sending" || (message.optimistic && !message.send_failed && message.status !== "failed");
+              const isFailed = Boolean(message.send_failed || message.status === "failed");
               
               let borderInlineStyle: CSSProperties | undefined = undefined;
               let borderClass = "";
 
-              if (isAnchor) {
+              if (isFailed) {
+                borderClass = "border-red-500";
+              } else if (isAnchor) {
                 borderClass = "border-amber-400";
               } else if (isAdmin) {
                 borderClass = "border-cyan-400";
@@ -525,15 +529,34 @@ export function DanmuCard({
                 borderClass = pickBorderColorBySender(localizedSender);
               }
 
+              const bgClass = isFailed
+                ? "bg-red-500/15 text-red-100"
+                : isSending
+                  ? "bg-bili-blue/[0.06] opacity-80 text-white"
+                  : "bg-bili-blue/[0.08] hover:bg-bili-blue/[0.12] text-white";
+
               return (
-                <DanmuBubbleContent
-                  key={message.id}
-                  message={message}
-                  locale={locale}
-                  style={borderInlineStyle}
-                  onContextMenu={(event) => onBubbleContextMenu?.(event, message)}
-                  className={`${bubbleShapeClass} bg-bili-blue/[0.08] hover:bg-bili-blue/[0.12] text-white border-r-4 ${borderClass || ""} border-t border-l border-b border-white/5 px-4 py-2.5 text-[13px] leading-[1.45] select-text break-all transition-all duration-150`}
-                />
+                <div key={message.id} className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5">
+                    {isFailed ? (
+                      <span className="flex items-center gap-1 text-[10px] text-red-400 font-semibold" title={message.error_msg || ""}>
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        <span>{message.error_msg || t(locale, "ui.ctrl.send_failed_default")}</span>
+                      </span>
+                    ) : isSending ? (
+                      <span className="flex items-center gap-1 text-[10px] text-gray-400 font-medium">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin shrink-0" />
+                      </span>
+                    ) : null}
+                    <DanmuBubbleContent
+                      message={message}
+                      locale={locale}
+                      style={borderInlineStyle}
+                      onContextMenu={(event) => onBubbleContextMenu?.(event, message)}
+                      className={`${bubbleShapeClass} ${bgClass} border-r-4 ${borderClass || ""} border-t border-l border-b border-white/5 px-4 py-2.5 text-[13px] leading-[1.45] select-text break-all transition-all duration-150`}
+                    />
+                  </div>
+                </div>
               );
             })}
           </div>

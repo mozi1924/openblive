@@ -216,6 +216,7 @@ export const createSelfDanmuMessage = (
     | "sender_guard_level"
     | "sender_face"
   >,
+  status: "sending" | "success" | "failed" = "sending",
 ): DanmuMsg => {
   const normalizedSenderMeta = senderMeta
     ? {
@@ -232,6 +233,7 @@ export const createSelfDanmuMessage = (
     sender,
     content,
     optimistic: true,
+    status,
     ...normalizedSenderMeta,
     segments: emoticonMap ? resolveDanmuMessageSegments({ content }, emoticonMap) : undefined,
   };

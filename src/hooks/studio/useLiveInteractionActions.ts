@@ -695,29 +695,64 @@ export function useLiveInteractionActions({
       return;
     }
 
-    const res = await studioApi.sendDanmu(text);
-    if (res.code === 0) {
-      append(tf(localeSetting, "ui.ctrl.danmu_send", { text }));
-      setDanmus((prev) => [
-        createSelfDanmuMessage(
-          text,
-          currentUser?.uname || t(localeSetting, "ui.ctrl.me"),
-          liveEmoticonMap,
-          currentUser?.uid
-            ? {
-                sender_uid: Number(currentUser.uid),
-                sender_role: "anchor",
-                sender_face: currentUser.face,
-              }
-            : undefined,
-        ),
-        ...prev,
-      ]);
-    } else {
-      append(tf(localeSetting, "ui.ctrl.send_failed", { msg: resolveBackendMessage(res.msg, localeSetting) }));
-    }
+    const optimisticMsg = createSelfDanmuMessage(
+      text,
+      currentUser?.uname || t(localeSetting, "ui.ctrl.me"),
+      liveEmoticonMap,
+      currentUser?.uid
+        ? {
+            sender_uid: Number(currentUser.uid),
+            sender_role: "anchor",
+            sender_face: currentUser.face,
+          }
+        : undefined,
+      "sending",
+    );
 
     setDanmuText("");
+    setDanmus((prev) => [optimisticMsg, ...prev]);
+    append(tf(localeSetting, "ui.ctrl.danmu_send", { text }));
+
+    try {
+      const res = await studioApi.sendDanmu(text);
+      if (res.code === 0) {
+        setDanmus((prev) =>
+          prev.map((msg) => (msg.id === optimisticMsg.id ? { ...msg, status: "success" } : msg)),
+        );
+      } else {
+        const errorMsg = resolveBackendMessage(res.msg, localeSetting);
+        append(tf(localeSetting, "ui.ctrl.send_failed", { msg: errorMsg }));
+        setDanmus((prev) =>
+          prev.map((msg) =>
+            msg.id === optimisticMsg.id
+              ? {
+                  ...msg,
+                  optimistic: false,
+                  send_failed: true,
+                  status: "failed",
+                  error_msg: errorMsg,
+                }
+              : msg,
+          ),
+        );
+      }
+    } catch (error) {
+      const errorMsg = resolveBackendMessage(String(error), localeSetting);
+      append(tf(localeSetting, "ui.ctrl.send_failed", { msg: errorMsg }));
+      setDanmus((prev) =>
+        prev.map((msg) =>
+          msg.id === optimisticMsg.id
+            ? {
+                ...msg,
+                optimistic: false,
+                send_failed: true,
+                status: "failed",
+                error_msg: errorMsg,
+              }
+            : msg,
+        ),
+      );
+    }
   }, [append, currentUser, danmuText, liveEmoticonMap, localeSetting, setDanmuText, setDanmus]);
 
   const submitDanmu = useCallback(
