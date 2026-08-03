@@ -146,11 +146,78 @@ pub fn parse_cookie_value(cookie_header: &str, key: &str) -> Option<String> {
     cookie_header
         .split(';')
         .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
         .rev()
         .find_map(|kv| {
-            kv.strip_prefix(&(key.to_owned() + "="))
-                .map(|v| v.to_string())
+            let mut parts = kv.splitn(2, '=');
+            let k = parts.next()?.trim();
+            if k == key {
+                Some(parts.next().unwrap_or("").trim().to_string())
+            } else {
+                None
+            }
         })
 }
+
+pub fn upsert_cookie_value(cookie_header: &str, key: &str, value: &str) -> String {
+    let mut items: Vec<(String, String)> = cookie_header
+        .split(';')
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .filter_map(|kv| {
+            let mut parts = kv.splitn(2, '=');
+            let k = parts.next()?.trim().to_string();
+            let v = parts.next().unwrap_or("").trim().to_string();
+            Some((k, v))
+        })
+        .collect();
+
+    let mut found = false;
+    for (k, v) in &mut items {
+        if k == key {
+            *v = value.to_string();
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        items.push((key.to_string(), value.to_string()));
+    }
+
+    items
+        .into_iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_cookie_value, upsert_cookie_value};
+
+    #[test]
+    fn test_parse_cookie_value() {
+        let cookie = "SESSDATA=abc%3D123; bili_jct=xyz; DedeUserID=100; enc=base64==data==";
+        assert_eq!(parse_cookie_value(cookie, "SESSDATA"), Some("abc%3D123".to_string()));
+        assert_eq!(parse_cookie_value(cookie, "bili_jct"), Some("xyz".to_string()));
+        assert_eq!(parse_cookie_value(cookie, "DedeUserID"), Some("100".to_string()));
+        assert_eq!(parse_cookie_value(cookie, "enc"), Some("base64==data==".to_string()));
+        assert_eq!(parse_cookie_value(cookie, "missing"), None);
+    }
+
+    #[test]
+    fn test_upsert_cookie_value() {
+        let cookie = "SESSDATA=abc; bili_jct=xyz";
+        let updated = upsert_cookie_value(cookie, "bili_jct", "new_csrf");
+        assert_eq!(updated, "SESSDATA=abc; bili_jct=new_csrf");
+
+        let added = upsert_cookie_value(&updated, "buvid3", "b3_val");
+        assert_eq!(added, "SESSDATA=abc; bili_jct=new_csrf; buvid3=b3_val");
+
+        let base64_val = upsert_cookie_value(cookie, "token", "abc=123==456");
+        assert_eq!(parse_cookie_value(&base64_val, "token"), Some("abc=123==456".to_string()));
+    }
+}
+
 
 

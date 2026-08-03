@@ -2,6 +2,7 @@ mod common;
 mod refresh;
 
 use common::{cookie_diagnostics, fill_profile_from_full, RefreshCookieResult};
+pub(crate) use common::enrich_current_device_identity;
 use refresh::refresh_cookie_for_uid;
 
 use crate::avatar::{delete_avatar_cache, has_cached_face, refresh_avatar_cache, to_response_user};
@@ -99,7 +100,10 @@ pub async fn poll_login_status(
         }
     }
 
-    let cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
+    let mut cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
+    if crate::bili::ensure_device_identity(&state.client, &mut cookie_header).await {
+        crate::runtime_log!("[auth][qrcode] device identity enriched");
+    }
     let full = fetch_full_user_data(&state.client)
         .await
         .map_err(|error| error.to_string())?;
@@ -227,6 +231,18 @@ pub async fn poll_login_status(
 
 #[tauri::command]
 pub async fn load_saved_config(state: State<'_, AppState>) -> CmdResult {
+    let current = {
+        let runtime = state.runtime.lock().await;
+        runtime
+            .config
+            .current_uid
+            .as_ref()
+            .and_then(|uid| runtime.config.users.get(uid))
+            .map(|user| (user.uid.clone(), user.cookie.clone()))
+    };
+    if let Some((uid, mut cookie)) = current {
+        common::enrich_device_identity_for_uid(&state, &uid, &mut cookie).await;
+    }
     let user = {
         let runtime = state.runtime.lock().await;
         runtime

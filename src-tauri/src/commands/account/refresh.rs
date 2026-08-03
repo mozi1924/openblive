@@ -403,6 +403,9 @@ pub(super) async fn refresh_cookie_for_uid(
     );
 
     let client = BiliClient::with_cookie(&user.cookie);
+    if super::common::enrich_device_identity_for_uid(state, uid, &mut user.cookie).await {
+        crate::runtime_log!("[auth][check] uid={} device identity enriched during check", uid);
+    }
 
     let csrf = parse_cookie_value(&user.cookie, "bili_jct").unwrap_or_default();
     let mut info_params: Vec<(&str, String)> = Vec::new();

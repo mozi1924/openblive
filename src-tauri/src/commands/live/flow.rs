@@ -92,7 +92,7 @@ fn override_stream_addr(original_addr: &str, custom: &str) -> String {
 }
 
 pub(crate) async fn start_live_inner(app: &AppHandle, state: &AppState) -> CmdResult {
-    let (room_id, csrf, cookie, area) = {
+    let (room_id, csrf, mut cookie, area) = {
         let runtime = state.runtime.lock().await;
         let (_uid, room_id, csrf, cookie) = resolve_current_auth_context(&runtime)?;
         let area = runtime.session.current_area_id.unwrap_or(235);
@@ -107,6 +107,9 @@ pub(crate) async fn start_live_inner(app: &AppHandle, state: &AppState) -> CmdRe
     if cookie.trim().is_empty() {
         return Err("i18n.account.error.local_credential_empty".into());
     }
+
+    super::super::account::enrich_current_device_identity(state, &mut cookie).await;
+
     let room_id_for_rollback = room_id.clone();
     let csrf_for_rollback = csrf.clone();
     let response_first = request_start_live(state, &cookie, &room_id, &csrf, area, false).await?;

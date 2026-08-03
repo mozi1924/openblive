@@ -66,8 +66,38 @@ pub(super) fn cookie_diagnostics(cookie_header: &str) -> String {
     let has_uid = parse_cookie_value(cookie_header, "DedeUserID").is_some();
     let has_csrf = parse_cookie_value(cookie_header, "bili_jct").is_some();
     let has_sid = parse_cookie_value(cookie_header, "sid").is_some();
+    let has_buvid = parse_cookie_value(cookie_header, "buvid3").is_some();
+    let has_ticket = parse_cookie_value(cookie_header, "bili_ticket").is_some();
     format!(
-        "has_sess={has_sess}, has_uid={has_uid}, has_csrf={has_csrf}, has_sid={has_sid}, cookie_len={}",
+        "has_sess={has_sess}, has_uid={has_uid}, has_csrf={has_csrf}, has_sid={has_sid}, has_buvid={has_buvid}, has_ticket={has_ticket}, cookie_len={}",
         cookie_header.len()
     )
+}
+
+pub(crate) async fn enrich_device_identity_for_uid(
+    state: &crate::state::AppState,
+    uid: &str,
+    cookie: &mut String,
+) -> bool {
+    if !crate::bili::ensure_device_identity(&state.client, cookie).await {
+        return false;
+    }
+    let mut runtime = state.runtime.lock().await;
+    if let Some(user) = runtime.config.users.get_mut(uid) {
+        user.cookie = cookie.clone();
+        crate::config::save_config(&state.config_path, &runtime.config, &state.master_key);
+    }
+    true
+}
+
+pub(crate) async fn enrich_current_device_identity(
+    state: &crate::state::AppState,
+    cookie: &mut String,
+) -> bool {
+    let uid = {
+        let runtime = state.runtime.lock().await;
+        runtime.config.current_uid.clone()
+    };
+    let Some(uid) = uid else { return false };
+    enrich_device_identity_for_uid(state, &uid, cookie).await
 }
