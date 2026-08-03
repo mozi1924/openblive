@@ -593,6 +593,44 @@ fn apply_app_config_value(
         "filter_follow_share_msg" => {
             runtime.config.filter_follow_share_msg = value.as_bool().unwrap_or(false);
         }
+        "tts_enabled" => {
+            runtime.config.tts_enabled = value.as_bool().unwrap_or(false);
+        }
+        "tts_voice" => {
+            runtime.config.tts_voice = value
+                .as_str()
+                .unwrap_or("zh-CN-XiaoxiaoNeural")
+                .trim()
+                .to_string();
+        }
+        "tts_rate" => {
+            runtime.config.tts_rate = value.as_str().unwrap_or("+0%").trim().to_string();
+        }
+        "tts_pitch" => {
+            runtime.config.tts_pitch = value.as_str().unwrap_or("+0Hz").trim().to_string();
+        }
+        "tts_volume" => {
+            let next_volume = value
+                .as_u64()
+                .and_then(|raw| u8::try_from(raw).ok())
+                .unwrap_or(100);
+            runtime.config.tts_volume = next_volume.min(100);
+        }
+        "tts_device" => {
+            runtime.config.tts_device = value.as_str().unwrap_or("default").trim().to_string();
+        }
+        "tts_read_danmu" => {
+            runtime.config.tts_read_danmu = value.as_bool().unwrap_or(true);
+        }
+        "tts_read_gift" => {
+            runtime.config.tts_read_gift = value.as_bool().unwrap_or(true);
+        }
+        "tts_read_superchat" => {
+            runtime.config.tts_read_superchat = value.as_bool().unwrap_or(true);
+        }
+        "tts_read_interact" => {
+            runtime.config.tts_read_interact = value.as_bool().unwrap_or(false);
+        }
         _ => return Err("i18n.system.error.unknown_config_key".into()),
     }
 
