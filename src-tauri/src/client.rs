@@ -26,6 +26,14 @@ impl BiliClient {
         Self { http, jar }
     }
 
+    pub fn with_cookie(cookie_header: &str) -> Self {
+        let client = Self::new();
+        if !cookie_header.trim().is_empty() {
+            client.apply_cookie_header(cookie_header);
+        }
+        client
+    }
+
     pub async fn get_json(
         &self,
         url: &str,

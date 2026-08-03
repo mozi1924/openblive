@@ -5,7 +5,7 @@ use super::common::{
     COOKIE_REFRESH_SOURCE,
 };
 use crate::avatar::refresh_avatar_cache;
-use crate::client::parse_cookie_value;
+use crate::client::{parse_cookie_value, BiliClient};
 use crate::config::save_config;
 use crate::endpoints;
 use crate::live_status::is_live_or_round_status;
@@ -170,7 +170,7 @@ fn build_correspond_path(timestamp: i64) -> Result<String, String> {
 
 async fn refresh_cookie_with_official_flow(
     user: &mut UserRecord,
-    state: &AppState,
+    client: &BiliClient,
     timestamp: i64,
 ) -> Result<(), String> {
     crate::runtime_log!(
@@ -202,8 +202,7 @@ async fn refresh_cookie_with_official_flow(
     let correspond_path = build_correspond_path(ts)?;
     let correspond_url = format!("{}/correspond/1/{}", endpoints::www(""), correspond_path);
 
-    let correspond_response = state
-        .client
+    let correspond_response = client
         .http
         .get(&correspond_url)
         .header("user-agent", endpoints::http_user_agent())
@@ -240,8 +239,7 @@ async fn refresh_cookie_with_official_flow(
     refresh_form.insert("source".to_string(), COOKIE_REFRESH_SOURCE.to_string());
     refresh_form.insert("refresh_token".to_string(), old_refresh_token.clone());
 
-    let refresh_value = state
-        .client
+    let refresh_value = client
         .post_form(
             &endpoints::passport("/x/passport-login/web/cookie/refresh"),
             &refresh_form,
@@ -268,7 +266,7 @@ async fn refresh_cookie_with_official_flow(
         }
     }
 
-    let cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
+    let cookie_header = client.cookie_header_for(&endpoints::api_origin());
     if !cookie_header.is_empty() {
         user.cookie = cookie_header;
     }
@@ -294,8 +292,7 @@ async fn refresh_cookie_with_official_flow(
     confirm_form.insert("csrf".to_string(), confirm_csrf);
     confirm_form.insert("refresh_token".to_string(), old_refresh_token);
 
-    let confirm_value = state
-        .client
+    let confirm_value = client
         .post_form(
             &endpoints::passport("/x/passport-login/web/confirm/refresh"),
             &confirm_form,
@@ -405,7 +402,7 @@ pub(super) async fn refresh_cookie_for_uid(
         cookie_diagnostics(&user.cookie)
     );
 
-    state.client.apply_cookie_header(&user.cookie);
+    let client = BiliClient::with_cookie(&user.cookie);
 
     let csrf = parse_cookie_value(&user.cookie, "bili_jct").unwrap_or_default();
     let mut info_params: Vec<(&str, String)> = Vec::new();
@@ -413,8 +410,7 @@ pub(super) async fn refresh_cookie_for_uid(
         info_params.push(("csrf", csrf));
     }
 
-    let info = match state
-        .client
+    let info = match client
         .get_json(
             &endpoints::passport("/x/passport-login/web/cookie/info"),
             &info_params,
@@ -474,7 +470,7 @@ pub(super) async fn refresh_cookie_for_uid(
         let timestamp = info["data"]["timestamp"]
             .as_i64()
             .unwrap_or_else(current_timestamp_millis);
-        if let Err(error) = refresh_cookie_with_official_flow(&mut user, state, timestamp).await {
+        if let Err(error) = refresh_cookie_with_official_flow(&mut user, &client, timestamp).await {
             let fail_count = bump_user_auth_fail_count(uid, state).await;
             clear_user_login_invalid_flag(uid, state).await;
             crate::runtime_log!(
@@ -486,7 +482,7 @@ pub(super) async fn refresh_cookie_for_uid(
                 "i18n.account.error.cookie_refresh_retry_failed:attempt={fail_count}/{AUTH_INVALID_THRESHOLD}:{error}"
             ));
         }
-        state.client.apply_cookie_header(&user.cookie);
+        client.apply_cookie_header(&user.cookie);
     }
 
     if !refresh_profile {
@@ -501,8 +497,7 @@ pub(super) async fn refresh_cookie_for_uid(
         return RefreshCookieResult::Updated(Box::new(user));
     }
 
-    let nav = match state
-        .client
+    let nav = match client
         .get_json(&endpoints::api("/x/web-interface/nav"), &[])
         .await
     {
@@ -549,8 +544,7 @@ pub(super) async fn refresh_cookie_for_uid(
         return RefreshCookieResult::Failed(msg.to_string());
     }
 
-    let stat = match state
-        .client
+    let stat = match client
         .get_json(&endpoints::api("/x/web-interface/nav/stat"), &[])
         .await
     {
@@ -568,7 +562,7 @@ pub(super) async fn refresh_cookie_for_uid(
     let mut full = nav["data"].clone();
     full["stat"] = stat["data"].clone();
 
-    let cookie_header = state.client.cookie_header_for(&endpoints::api_origin());
+    let cookie_header = client.cookie_header_for(&endpoints::api_origin());
     if !cookie_header.is_empty() {
         user.cookie = cookie_header;
     }
@@ -581,7 +575,7 @@ pub(super) async fn refresh_cookie_for_uid(
     user.last_auth_fail_at = 0;
 
     if let Err(error) =
-        refresh_avatar_cache(&state.client, &state.config_path, uid, &user.face).await
+        refresh_avatar_cache(&client, &state.config_path, uid, &user.face).await
     {
         crate::runtime_log!(
             "[auth][check] uid={} avatar cache refresh failed: {}",
@@ -694,6 +688,23 @@ mod tests {
             extract_refresh_csrf(html),
             Some("15ca0dd6665fcdb4cf8555b21aba8df4".to_string())
         );
+    }
+
+    #[test]
+    fn test_bili_client_with_cookie_isolation() {
+        let client1 = BiliClient::with_cookie("DedeUserID=1001; bili_jct=csrf1; SESSDATA=sess1");
+        let client2 = BiliClient::with_cookie("DedeUserID=2002; bili_jct=csrf2; SESSDATA=sess2");
+
+        let header1 = client1.cookie_header_for(&endpoints::api_origin());
+        let header2 = client2.cookie_header_for(&endpoints::api_origin());
+
+        assert!(header1.contains("DedeUserID=1001"));
+        assert!(header1.contains("bili_jct=csrf1"));
+        assert!(!header1.contains("DedeUserID=2002"));
+
+        assert!(header2.contains("DedeUserID=2002"));
+        assert!(header2.contains("bili_jct=csrf2"));
+        assert!(!header2.contains("DedeUserID=1001"));
     }
 }
 
