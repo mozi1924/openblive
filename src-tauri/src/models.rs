@@ -520,12 +520,22 @@ pub struct GetLiveCoverAdviceReq {
 }
 
 #[derive(Deserialize)]
+pub struct GetCoverDataUrlReq {
+    pub cover_url: String,
+}
+
+#[derive(Deserialize)]
 pub struct UploadLiveCoverReq {
     pub data_url: String,
     #[serde(default)]
     pub file_name: Option<String>,
     #[serde(default)]
     pub mime_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UploadLiveCoverFileReq {
+    pub path: String,
 }
 
 #[derive(Deserialize)]

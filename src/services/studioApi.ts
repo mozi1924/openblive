@@ -21,6 +21,7 @@ import {
   LiveSilentUserListData,
   GetLiveTagsResp,
   GetLiveCoverHistoryResp,
+  GetCoverDataUrlResp,
   AddLiveTagResp,
   LiveCoverAdvice,
   CreateLiveReserveResp,
@@ -30,7 +31,6 @@ import {
   Resp,
   Session,
   StudioStateEvent,
-  StreamInfo,
   UpdateAreaResp,
   UpdateLiveCoverResp,
   UpdateRoomNewsResp,
@@ -100,9 +100,17 @@ export const studioApi = {
     invokeCommand<LiveCoverAdvice | null>("get_live_cover_advice", {
       req: { cover_url: coverUrl },
     }),
+  getCoverDataUrl: (coverUrl: string) =>
+    invokeCommand<GetCoverDataUrlResp>("get_cover_data_url", {
+      req: { cover_url: coverUrl },
+    }),
   uploadLiveCover: (dataUrl: string, fileName?: string, mimeType?: string) =>
     invokeCommand<UploadLiveCoverResp>("upload_live_cover", {
       req: { data_url: dataUrl, file_name: fileName, mime_type: mimeType },
+    }),
+  uploadLiveCoverFile: (path: string) =>
+    invokeCommand<UploadLiveCoverResp>("upload_live_cover_file", {
+      req: { path },
     }),
   updateLiveCover: (cover: string, visitId?: string) =>
     invokeCommand<UpdateLiveCoverResp>("update_live_cover", {

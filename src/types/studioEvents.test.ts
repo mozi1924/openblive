@@ -1,20 +1,24 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync } from "fs";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import { describe, expect, it } from "vitest";
 import { EVENT_NAMES } from "./studio";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dir = dirname(__filename);
 
 describe("EVENT_NAMES cross-end alignment", () => {
   it("should have matching event name strings in Rust backend files", () => {
     const danmuRs = readFileSync(
-      resolve(__dirname, "../../src-tauri/src/danmu.rs"),
+      resolve(__dir, "../../src-tauri/src/danmu.rs"),
       "utf-8",
     );
     const systemRs = readFileSync(
-      resolve(__dirname, "../../src-tauri/src/commands/system.rs"),
+      resolve(__dir, "../../src-tauri/src/commands/system.rs"),
       "utf-8",
     );
     const stateEventRs = readFileSync(
-      resolve(__dirname, "../../src-tauri/src/state_event.rs"),
+      resolve(__dir, "../../src-tauri/src/state_event.rs"),
       "utf-8",
     );
 

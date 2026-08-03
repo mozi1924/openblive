@@ -35,7 +35,7 @@ use commands::{
     reveal_main_window, send_danmu, set_app_config, set_app_configs, set_danmu_overlay_pinned,
     show_danmu_overlay, start_danmu_monitor, start_live_flow, stop_danmu_monitor, stop_live_flow,
     switch_account, sync_live_room_profile, sync_live_status, terminate_live_vote, update_area, update_live_cover, update_live_tags, update_room_news, update_title,
-    upload_live_cover,
+    upload_live_cover, get_cover_data_url, upload_live_cover_file,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -223,7 +223,9 @@ pub fn run() {
             get_live_tags,
             get_live_cover_history,
             get_live_cover_advice,
+            get_cover_data_url,
             upload_live_cover,
+            upload_live_cover_file,
             update_live_cover,
             add_live_tag,
             remove_live_tag,

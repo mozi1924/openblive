@@ -29,6 +29,7 @@ futures-util = "0.3"
 flate2 = "1"
 brotli = "6"
 bytes = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 serde_urlencoded = "0.7"
 dirs = "6"

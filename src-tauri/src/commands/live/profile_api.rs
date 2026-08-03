@@ -12,9 +12,9 @@ use crate::constants::CmdResult;
 use crate::cover_cache::ensure_cover_data_url;
 use crate::endpoints;
 use crate::models::{
-    sync_live_profile_state_defaults, AddLiveTagReq, CreateLiveReserveReq, GetLiveCoverAdviceReq,
-    RemoveLiveTagReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateRoomNewsReq, UpdateTagsReq,
-    UpdateTitleReq, UploadLiveCoverReq,
+    sync_live_profile_state_defaults, AddLiveTagReq, CreateLiveReserveReq, GetCoverDataUrlReq,
+    GetLiveCoverAdviceReq, RemoveLiveTagReq, UpdateAreaReq, UpdateLiveCoverReq, UpdateRoomNewsReq,
+    UpdateTagsReq, UpdateTitleReq, UploadLiveCoverFileReq, UploadLiveCoverReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -380,6 +380,126 @@ pub(crate) async fn get_live_cover_advice(
         object.insert("cover_url".into(), json!(cover_url));
     }
     Ok(wrap_ok(advice))
+}
+
+pub(crate) async fn get_cover_data_url(
+    req: GetCoverDataUrlReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let cover_url = normalize_cover_url(&req.cover_url);
+    if cover_url.is_empty() {
+        return Ok(wrap_ok(json!({ "data_url": "" })));
+    }
+    let data_url = ensure_cover_data_url(&state.client, &state.config_path, &cover_url)
+        .await
+        .unwrap_or_default();
+    Ok(wrap_ok(json!({ "data_url": data_url })))
+}
+
+pub fn process_cover_image_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let img = image::load_from_memory(bytes)
+        .map_err(|err| format!("i18n.live.error.upload_cover_invalid_data: {err}"))?;
+    let (width, height) = (img.width(), img.height());
+    if width == 0 || height == 0 {
+        return Err("i18n.live.error.upload_cover_invalid_data".into());
+    }
+
+    let target_ratio = 4.0 / 3.0;
+    let current_ratio = width as f64 / height as f64;
+
+    let (crop_w, crop_h, x, y) = if current_ratio > target_ratio {
+        let crop_w = (height as f64 * target_ratio).round() as u32;
+        let crop_h = height;
+        let x = (width - crop_w) / 2;
+        let y = 0;
+        (crop_w, crop_h, x, y)
+    } else {
+        let crop_w = width;
+        let crop_h = (width as f64 / target_ratio).round() as u32;
+        let x = 0;
+        let y = (height - crop_h) / 2;
+        (crop_w, crop_h, x, y)
+    };
+
+    let cropped = img.crop_imm(x, y, crop_w, crop_h);
+    let final_img = if cropped.width() > 1020 {
+        let target_h = (1020.0 / target_ratio).round() as u32;
+        cropped.resize_exact(1020, target_h, image::imageops::FilterType::Triangle)
+    } else {
+        cropped
+    };
+
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    final_img
+        .write_to(&mut cursor, image::ImageFormat::Jpeg)
+        .map_err(|err| format!("encode_cover_failed: {err}"))?;
+    Ok(cursor.into_inner())
+}
+
+pub(crate) async fn upload_live_cover_file(
+    req: UploadLiveCoverFileReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    let cookie = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, _room_id, _csrf, cookie) = resolve_current_auth_context(&runtime)?;
+        cookie
+    };
+    if cookie.trim().is_empty() {
+        return Err("i18n.account.error.local_credential_empty".into());
+    }
+
+    let file_bytes = std::fs::read(&req.path).map_err(|error| error.to_string())?;
+    let jpeg_bytes = process_cover_image_bytes(&file_bytes)?;
+
+    let file_name = normalize_cover_file_name(Some(&req.path), "image/jpeg");
+    let part = Part::bytes(jpeg_bytes)
+        .file_name(file_name)
+        .mime_str("image/jpeg")
+        .map_err(|error| error.to_string())?;
+    let form = Form::new()
+        .text("bucket", "live")
+        .text("dir", "new_room_cover")
+        .part("file", part);
+
+    let csrf = {
+        let runtime = state.runtime.lock().await;
+        let (_uid, _room_id, csrf, _cookie) = resolve_current_auth_context(&runtime)?;
+        csrf
+    };
+    if csrf.is_empty() {
+        return Err("i18n.live.error.csrf_missing".into());
+    }
+
+    let value = state
+        .client
+        .post_multipart_with_cookie(
+            &format!("{}?csrf={}", endpoints::api("/x/upload/web/image"), csrf),
+            form,
+            &cookie,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let code = value["code"].as_i64().unwrap_or(-1);
+    if code != 0 {
+        if is_auth_invalid_code(code) {
+            mark_current_user_login_invalid(
+                &state,
+                &format!(
+                    "upload_live_cover_file code={code}, msg={}",
+                    error_message(&value, "")
+                ),
+            )
+            .await;
+            return Err("i18n.common.login_expired_relogin".into());
+        }
+        return Err(error_message(&value, "i18n.live.error.upload_cover_failed"));
+    }
+
+    Ok(wrap_ok(json!({
+        "location": normalize_cover_url(value["data"]["location"].as_str().unwrap_or("")),
+        "etag": value["data"]["etag"].as_str().unwrap_or(""),
+    })))
 }
 
 pub(crate) async fn upload_live_cover(
@@ -1213,5 +1333,19 @@ mod tests {
         let (bytes, mime) = decode_cover_data_url(raw_data, None).unwrap();
         assert_eq!(bytes, b"hello");
         assert_eq!(mime, "image/jpeg");
+    }
+
+    #[test]
+    fn test_process_cover_image_bytes_crops_to_4_3_and_resizes() {
+        let img = image::DynamicImage::ImageRgb8(image::RgbImage::new(1920, 1080));
+        let mut input_bytes = Vec::new();
+        img.write_to(&mut std::io::Cursor::new(&mut input_bytes), image::ImageFormat::Png)
+            .unwrap();
+
+        let processed_bytes = process_cover_image_bytes(&input_bytes).unwrap();
+        let processed_img = image::load_from_memory(&processed_bytes).unwrap();
+
+        assert_eq!(processed_img.width(), 1020);
+        assert_eq!(processed_img.height(), 765);
     }
 }

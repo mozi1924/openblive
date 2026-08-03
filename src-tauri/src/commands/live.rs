@@ -6,10 +6,10 @@ use crate::emoticon::parse_live_emoticon_packages;
 use crate::endpoints;
 use crate::models::{
     AddBlackUserReq, AddLiveTagReq, AddRoomAdminReq, AddSilentUserReq, CreateLiveReserveReq,
-    CreateLiveVoteReq, DanmuReq, GetBlackUserListReq, GetLiveCoverAdviceReq, GetRoomAdminListReq,
-    GetSilentUserListReq, RemoveBlackUserReq, RemoveLiveTagReq, RemoveRoomAdminReq,
-    RemoveSilentUserReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateLiveCoverReq,
-    UpdateRoomNewsReq, UpdateTagsReq, UpdateTitleReq, UploadLiveCoverReq,
+    CreateLiveVoteReq, DanmuReq, GetBlackUserListReq, GetCoverDataUrlReq, GetLiveCoverAdviceReq,
+    GetRoomAdminListReq, GetSilentUserListReq, RemoveBlackUserReq, RemoveLiveTagReq,
+    RemoveRoomAdminReq, RemoveSilentUserReq, TerminateLiveVoteReq, UpdateAreaReq, UpdateLiveCoverReq,
+    UpdateRoomNewsReq, UpdateTagsReq, UpdateTitleReq, UploadLiveCoverFileReq, UploadLiveCoverReq,
 };
 use crate::response::wrap_ok;
 use crate::state::AppState;
@@ -43,12 +43,14 @@ pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 pub(crate) use linkage::obs_ws_probe;
 use profile_api::{
     add_live_tag as add_live_tag_inner, create_live_reserve as create_live_reserve_inner,
+    get_cover_data_url as get_cover_data_url_inner,
     get_live_cover_advice as get_live_cover_advice_inner,
     get_live_cover_history as get_live_cover_history_inner, get_live_tags as get_live_tags_inner,
     get_partitions as get_partitions_inner, remove_live_tag as remove_live_tag_inner,
     update_area as update_area_inner, update_live_cover as update_live_cover_inner,
     update_live_tags as update_live_tags_inner, update_room_news as update_room_news_inner,
     update_title as update_title_inner, upload_live_cover as upload_live_cover_inner,
+    upload_live_cover_file as upload_live_cover_file_inner,
 };
 use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
@@ -193,8 +195,24 @@ pub async fn get_live_cover_advice(
 }
 
 #[tauri::command]
+pub async fn get_cover_data_url(
+    req: GetCoverDataUrlReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    get_cover_data_url_inner(req, state).await
+}
+
+#[tauri::command]
 pub async fn upload_live_cover(req: UploadLiveCoverReq, state: State<'_, AppState>) -> CmdResult {
     upload_live_cover_inner(req, state).await
+}
+
+#[tauri::command]
+pub async fn upload_live_cover_file(
+    req: UploadLiveCoverFileReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    upload_live_cover_file_inner(req, state).await
 }
 
 #[tauri::command]

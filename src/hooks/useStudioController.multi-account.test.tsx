@@ -38,7 +38,9 @@ const { mockStudioApi } = vi.hoisted(() => ({
     syncLiveRoomProfile: vi.fn(),
     getLiveCoverHistory: vi.fn(),
     getLiveCoverAdvice: vi.fn(),
+    getCoverDataUrl: vi.fn(),
     uploadLiveCover: vi.fn(),
+    uploadLiveCoverFile: vi.fn(),
     updateLiveCover: vi.fn(),
     updateLiveTags: vi.fn(),
     getLiveTags: vi.fn(),
@@ -225,7 +227,9 @@ beforeEach(() => {
   mockStudioApi.syncLiveRoomProfile.mockResolvedValue(makeProfileSyncResp());
   mockStudioApi.getLiveCoverHistory.mockResolvedValue(ok({ history: [] }));
   mockStudioApi.getLiveCoverAdvice.mockResolvedValue(ok(null));
+  mockStudioApi.getCoverDataUrl.mockResolvedValue(ok({ data_url: "" }));
   mockStudioApi.uploadLiveCover.mockResolvedValue(ok({ location: "http://example.com/uploaded.jpg" }));
+  mockStudioApi.uploadLiveCoverFile.mockResolvedValue(ok({ location: "http://example.com/uploaded.jpg" }));
   mockStudioApi.updateLiveCover.mockResolvedValue(
     ok({ cover: "http://example.com/uploaded.jpg", profile_state: defaultProfileState() }),
   );

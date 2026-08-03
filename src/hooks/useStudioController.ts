@@ -43,6 +43,7 @@ type PendingCoverUpload = {
   dataUrl: string;
   fileName: string;
   mimeType: string;
+  filePath?: string;
 };
 
 type ConfirmModalTone = "primary" | "danger";
@@ -64,7 +65,7 @@ type ConfirmModalState = {
 };
 type ConfirmRequestPayload = Omit<ConfirmModalState, "show" | "showCancel">;
 
-const LIVE_PROFILE_SYNC_POLL_INTERVAL_MS = 20_000;
+
 
 export function useStudioController() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("account");
@@ -478,9 +479,18 @@ export function useStudioController() {
       const forceRoomNews = options?.forceRoomNews ?? false;
 
       if (allowCover && (forceCover || !coverDirtyRef.current)) {
-        setCover(normalizeCoverValue(user.last_cover || ""));
-        setCoverRenderSrc(normalizeCoverValue(user.last_cover_asset || ""));
+        const lastCover = normalizeCoverValue(user.last_cover || "");
+        const lastAsset = normalizeCoverValue(user.last_cover_asset || "");
+        setCover(lastCover);
+        setCoverRenderSrc(lastAsset);
         setPendingCoverUpload(null);
+        if (!lastAsset && lastCover && !lastCover.startsWith("data:")) {
+          void studioApi.getCoverDataUrl(lastCover).then((res) => {
+            if (res.code === 0 && res.data?.data_url) {
+              setCoverRenderSrc(normalizeCoverValue(res.data.data_url));
+            }
+          });
+        }
       }
       if (forceTitle || !titleDirtyRef.current) {
         setTitle(user.last_title || "");
@@ -845,12 +855,19 @@ export function useStudioController() {
     return synced;
   }, []);
 
-  const selectHistoryCover = useCallback((coverUrl: string, assetUrl?: string) => {
+  const selectHistoryCover = useCallback(async (coverUrl: string, assetUrl?: string) => {
     coverDirtyRef.current = true;
     coverDraftVersionRef.current += 1;
     setPendingCoverUpload(null);
     setCover(coverUrl);
-    setCoverRenderSrc(normalizeCoverValue(assetUrl || ""));
+    const initialAsset = normalizeCoverValue(assetUrl || "");
+    setCoverRenderSrc(initialAsset);
+    if (!initialAsset && coverUrl) {
+      const res = await studioApi.getCoverDataUrl(coverUrl);
+      if (res.code === 0 && res.data?.data_url) {
+        setCoverRenderSrc(normalizeCoverValue(res.data.data_url));
+      }
+    }
   }, []);
 
   const selectCoverFile = useCallback(async (file: File | null) => {
@@ -867,6 +884,7 @@ export function useStudioController() {
       return;
     }
     try {
+      const filePath = (file as File & { path?: string }).path || undefined;
       const prepared = await prepareLiveCoverUpload(file);
       coverDirtyRef.current = true;
       coverDraftVersionRef.current += 1;
@@ -874,6 +892,7 @@ export function useStudioController() {
         dataUrl: prepared.dataUrl,
         fileName: prepared.fileName,
         mimeType: prepared.mimeType,
+        filePath,
       });
       setCover(prepared.dataUrl);
       setCoverRenderSrc(prepared.dataUrl);
@@ -911,11 +930,13 @@ export function useStudioController() {
     try {
       let nextCover = remoteCover;
       if (uploadPayload) {
-        const uploadRes = await studioApi.uploadLiveCover(
-          uploadPayload.dataUrl,
-          uploadPayload.fileName,
-          uploadPayload.mimeType,
-        );
+        const uploadRes = uploadPayload.filePath
+          ? await studioApi.uploadLiveCoverFile(uploadPayload.filePath)
+          : await studioApi.uploadLiveCover(
+              uploadPayload.dataUrl,
+              uploadPayload.fileName,
+              uploadPayload.mimeType,
+            );
         if (requestUid !== activeUidRef.current) {
           return;
         }

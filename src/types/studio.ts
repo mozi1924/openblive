@@ -335,6 +335,10 @@ export type UploadLiveCoverResp = {
   etag?: string;
 };
 
+export type GetCoverDataUrlResp = {
+  data_url: string;
+};
+
 export type DanmuMsg = {
   id: string;
   type:
