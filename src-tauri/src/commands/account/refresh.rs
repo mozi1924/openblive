@@ -682,3 +682,19 @@ pub(super) async fn refresh_all_account_profiles_inner(
     let _refresh_guard = state.auth_refresh_lock.lock().await;
     refresh_accounts_batch(app, state, true).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_refresh_csrf() {
+        let html = r#"<!DOCTYPE html><html><body><div id="1-name">15ca0dd6665fcdb4cf8555b21aba8df4</div></body></html>"#;
+        assert_eq!(
+            extract_refresh_csrf(html),
+            Some("15ca0dd6665fcdb4cf8555b21aba8df4".to_string())
+        );
+    }
+}
+
+
