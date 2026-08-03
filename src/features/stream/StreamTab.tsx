@@ -26,8 +26,7 @@ import { TagsPanel } from "./components/TagsPanel";
 import { StreamEndpointsPanel } from "./components/StreamEndpointsPanel";
 import { LinkageStatusPanel } from "./components/LinkageStatusPanel";
 
-type StreamTabProps = {
-  locale: LocaleSetting;
+type StreamTabState = {
   child: string;
   children: string[];
   copiedKey: string | null;
@@ -60,8 +59,11 @@ type StreamTabProps = {
     area: { tone: "green" | "yellow" | "red"; label: string; detail: string };
     tags: { tone: "green" | "yellow" | "red"; label: string; detail: string };
   };
-  dirtyStatus: { cover: boolean; title: boolean; area: boolean; tags: boolean };
+  dirtyStatus?: { cover: boolean; title: boolean; area: boolean; tags: boolean };
   unsavedItems: string[];
+};
+
+type StreamTabActions = {
   onSelectTab: (tab: ActiveTab) => void;
   onChangeChild: (value: string) => void;
   onChangeParent: (value: string) => void;
@@ -85,6 +87,12 @@ type StreamTabProps = {
   onSubmitTitle: (event: React.FormEvent) => Promise<void>;
   onSubmitRoomNews: (event: React.FormEvent) => Promise<void>;
   onSubmitLiveReserve: (event: React.FormEvent) => Promise<void>;
+};
+
+type StreamTabProps = {
+  locale: LocaleSetting;
+  state: StreamTabState;
+  actions: StreamTabActions;
 };
 
 function SectionBadge({
@@ -119,60 +127,63 @@ function SectionBadge({
   );
 }
 
-export function StreamTab({
-  locale,
-  child,
-  children,
-  copiedKey,
-  cover,
-  coverRenderSrc,
-  coverAdvice,
-  coverAdviceLoading,
-  coverHistory,
-  coverHistoryLoading,
-  parent,
-  partitions,
-  pendingCoverUpload,
-  rtmp,
-  session,
-  linkageStatus,
-  tagInput,
-  tags,
-  title,
-  roomNews,
-  liveReserveTitle,
-  liveReserveStartAt,
-  liveReserveCreateDynamic,
-  recentAreas,
-  hasUnsavedChanges,
-  hasAttentionStatus,
-  profileState,
-  sectionStatus,
-  unsavedItems,
-  onSelectTab,
-  onChangeChild,
-  onChangeParent,
-  onChangeTagInput,
-  onChangeTitle,
-  onChangeRoomNews,
-  onChangeLiveReserveTitle,
-  onChangeLiveReserveStartAt,
-  onChangeLiveReserveCreateDynamic,
-  onAddTag,
-  onSelectCoverFile,
-  onSelectHistoryCover,
-  onRemoveTag,
-  onCopyToClipboard,
-  onSyncProfile,
-  onStartLive,
-  onStopLive,
-  onApplyRecentArea,
-  onSubmitArea,
-  onSubmitCover,
-  onSubmitTitle,
-  onSubmitRoomNews,
-  onSubmitLiveReserve,
-}: StreamTabProps) {
+export function StreamTab({ locale, state, actions }: StreamTabProps) {
+  const {
+    child,
+    children,
+    copiedKey,
+    cover,
+    coverRenderSrc,
+    coverAdvice,
+    coverAdviceLoading,
+    coverHistory,
+    coverHistoryLoading,
+    parent,
+    partitions,
+    pendingCoverUpload,
+    rtmp,
+    session,
+    linkageStatus,
+    tagInput,
+    tags,
+    title,
+    roomNews,
+    liveReserveTitle,
+    liveReserveStartAt,
+    liveReserveCreateDynamic,
+    recentAreas,
+    hasUnsavedChanges,
+    hasAttentionStatus,
+    profileState,
+    sectionStatus,
+    unsavedItems,
+  } = state;
+
+  const {
+    onSelectTab,
+    onChangeChild,
+    onChangeParent,
+    onChangeTagInput,
+    onChangeTitle,
+    onChangeRoomNews,
+    onChangeLiveReserveTitle,
+    onChangeLiveReserveStartAt,
+    onChangeLiveReserveCreateDynamic,
+    onAddTag,
+    onSelectCoverFile,
+    onSelectHistoryCover,
+    onRemoveTag,
+    onCopyToClipboard,
+    onSyncProfile,
+    onStartLive,
+    onStopLive,
+    onApplyRecentArea,
+    onSubmitArea,
+    onSubmitCover,
+    onSubmitTitle,
+    onSubmitRoomNews,
+    onSubmitLiveReserve,
+  } = actions;
   const liveSessionState = resolveSessionLiveState(session);
   const isLive = liveSessionState.isLive;
   const isRoundPlay = liveSessionState.isRound;

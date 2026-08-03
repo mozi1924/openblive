@@ -2,21 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pin, Send, SmilePlus, X } from "lucide-react";
 import { studioApi } from "../services/studioApi";
 import type { AppConfig, LiveEmoticonPackage, StudioStateEvent, User } from "../types/studio";
-import { createLiveEmoticonIndex, createSelfDanmuMessage, shouldFilterDanmuMessage } from "../utils/danmu";
+import { createLiveEmoticonIndex, createSelfDanmuMessage, resolveEmoticonStyle, shouldFilterDanmuMessage } from "../utils/danmu";
 import { t, type LocaleSetting } from "../utils/i18n";
 import { useWindowDrag } from "../hooks/useWindowDrag";
 import { useDanmuMessageFeed } from "../hooks/studio/useDanmuMessageFeed";
 import { DanmuOverlayMessageRow } from "../features/danmu/DanmuOverlayMessageRow";
 import { useTauriEvent } from "../hooks/useTauriEvent";
-
-const resolveEmoticonStyle = (width: number, height: number, targetHeight: number) => {
-  const ratio = width > 0 && height > 0 ? width / height : 1;
-  const resolvedWidth = Math.max(targetHeight, Math.round(targetHeight * ratio));
-  return {
-    width: `${Math.min(resolvedWidth, targetHeight * 3.4)}px`,
-    height: `${targetHeight}px`,
-  };
-};
 
 export function DanmuOverlayApp() {
   const [appConfig, setAppConfig] = useState<AppConfig | null>(null);

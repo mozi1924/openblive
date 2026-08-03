@@ -6,14 +6,9 @@ import type { LocaleSetting } from "../../utils/i18n";
 import { resolveBackendMessage, t, tf } from "../../utils/i18n";
 import { CompactEventStrip } from "./CompactEventStrip";
 
-export const resolveEmoticonStyle = (width: number, height: number, targetHeight: number) => {
-  const ratio = width > 0 && height > 0 ? width / height : 1;
-  const resolvedWidth = Math.max(targetHeight, Math.round(targetHeight * ratio));
-  return {
-    width: `${Math.min(resolvedWidth, targetHeight * 3.4)}px`,
-    height: `${targetHeight}px`,
-  };
-};
+import { resolveEmoticonStyle } from "../../utils/danmu";
+
+export { resolveEmoticonStyle };
 
 export const isSelfMessage = (message: DanmuMsg, currentUser: User | null, locale: LocaleSetting) =>
   Boolean(

@@ -20,13 +20,7 @@ pub(crate) struct CommandTemplateContext {
     pub(crate) protocol: String,
 }
 
-pub(crate) fn normalize_live_control_mode(mode: &str) -> &'static str {
-    match mode.trim() {
-        "obs_ws" => "obs_ws",
-        "command" => "command",
-        _ => "none",
-    }
-}
+pub(crate) use super::common::normalize_live_control_mode;
 
 pub(crate) fn build_command_template_context(primary: &StreamEndpoint) -> CommandTemplateContext {
     CommandTemplateContext {

@@ -30,8 +30,14 @@ pub(crate) fn build_room_update_form(room_id: &str, csrf: &str) -> BTreeMap<Stri
     form
 }
 
-pub(crate) fn live_platform() -> String {
-    endpoints::live_platform()
+pub(crate) use crate::endpoints::live_platform;
+
+pub(crate) fn normalize_live_control_mode(mode: &str) -> &'static str {
+    match mode.trim() {
+        "obs_ws" => "obs_ws",
+        "command" => "command",
+        _ => "none",
+    }
 }
 
 pub(crate) fn clear_user_auth_flags(user: &mut UserRecord) {

@@ -148,6 +148,57 @@ export function useAccountController({
     [append, localeSetting, qrcode, qrcodeKey, resetQrLoginState, setQrLoginTimedOut],
   );
 
+  const applyUserSession = useCallback(
+    async (user: User, options?: { forceAll?: boolean; clearDanmu?: boolean }) => {
+      const force = options?.forceAll ?? false;
+      const clearDanmu = options?.clearDanmu ?? false;
+      const isAccountSwitched = force || activeUidRef.current !== user.uid;
+
+      activeUidRef.current = user.uid;
+      setCurrentUser(user);
+      applyProfileState(user.live_profile_state);
+
+      if (clearDanmu) {
+        setDanmus([]);
+        clearDanmuAssetsAndVoteState();
+      }
+
+      applyUserDraftValues(user, {
+        forceTitle: isAccountSwitched,
+        forceArea: isAccountSwitched,
+        forceTags: isAccountSwitched,
+        forceCover: isAccountSwitched,
+        forceRoomNews: isAccountSwitched,
+      });
+
+      if (isAccountSwitched) {
+        titleDirtyRef.current = false;
+        areaDirtyRef.current = false;
+        tagsDirtyRef.current = false;
+        coverDirtyRef.current = false;
+        roomNewsDirtyRef.current = false;
+      }
+
+      setRecentAreas(user.recent_areas || []);
+      await syncTrayMenu();
+    },
+    [
+      activeUidRef,
+      applyProfileState,
+      applyUserDraftValues,
+      areaDirtyRef,
+      clearDanmuAssetsAndVoteState,
+      coverDirtyRef,
+      roomNewsDirtyRef,
+      setDanmus,
+      setRecentAreas,
+      setCurrentUser,
+      syncTrayMenu,
+      tagsDirtyRef,
+      titleDirtyRef,
+    ],
+  );
+
   const loadSavedUser = useCallback(async () => {
     const res = await studioApi.loadSavedConfig();
     const user = isValidUser(res.data) ? res.data : null;
@@ -174,48 +225,28 @@ export function useAccountController({
       return;
     }
 
-    const isAccountSwitched = activeUidRef.current !== user.uid;
-    activeUidRef.current = user.uid;
-    setCurrentUser(user);
-    applyProfileState(user.live_profile_state);
-    applyUserDraftValues(user, {
-      forceTitle: isAccountSwitched,
-      forceArea: isAccountSwitched,
-      forceTags: isAccountSwitched,
-      forceCover: isAccountSwitched,
-      forceRoomNews: isAccountSwitched,
-    });
-    if (isAccountSwitched) {
-      titleDirtyRef.current = false;
-      areaDirtyRef.current = false;
-      tagsDirtyRef.current = false;
-      coverDirtyRef.current = false;
-      roomNewsDirtyRef.current = false;
-    }
-    setRecentAreas(user.recent_areas || []);
-    await syncTrayMenu();
+    await applyUserSession(user);
   }, [
     activeUidRef,
     applyProfileState,
-    applyUserDraftValues,
+    applyUserSession,
     areaDirtyRef,
     clearDanmuAssetsAndVoteState,
     coverDirtyRef,
     localeSetting,
+    roomNewsDirtyRef,
     setChild,
     setCover,
     setCurrentUser,
     setDanmuListening,
     setParent,
     setRecentAreas,
-    setAccounts,
     setTagInput,
     setTags,
     setTitle,
     syncTrayMenu,
     tagsDirtyRef,
     titleDirtyRef,
-    roomNewsDirtyRef,
   ]);
 
   const loadAccounts = useCallback(async () => {
@@ -418,23 +449,7 @@ export function useAccountController({
       const res = await studioApi.pollLoginStatus(qrcodeKey);
       if (res.code === 0 && res.data) {
         loginStatusCodeRef.current = 0;
-        activeUidRef.current = res.data.uid;
-        setCurrentUser(res.data);
-        applyProfileState(res.data.live_profile_state);
-        setDanmus([]);
-        clearDanmuAssetsAndVoteState();
-        titleDirtyRef.current = false;
-        areaDirtyRef.current = false;
-        tagsDirtyRef.current = false;
-        roomNewsDirtyRef.current = false;
-        applyUserDraftValues(res.data, {
-          forceTitle: true,
-          forceArea: true,
-          forceTags: true,
-          forceCover: true,
-          forceRoomNews: true,
-        });
-        setRecentAreas(res.data.recent_areas || []);
+        await applyUserSession(res.data, { forceAll: true, clearDanmu: true });
         append(
           tf(localeSetting, "ui.ctrl.login_success", {
             name: res.data.uname || t(localeSetting, "ui.ctrl.user_fallback"),
@@ -504,24 +519,8 @@ export function useAccountController({
       try {
         const res = await studioApi.switchAccount(uid);
         if (res.code === 0 && res.data) {
-          activeUidRef.current = res.data.uid;
-          setCurrentUser(res.data);
-          applyProfileState(res.data.live_profile_state);
-          setDanmus([]);
-          clearDanmuAssetsAndVoteState();
+          await applyUserSession(res.data, { forceAll: true, clearDanmu: true });
           setShowFaceModal(false);
-          titleDirtyRef.current = false;
-          areaDirtyRef.current = false;
-          tagsDirtyRef.current = false;
-          roomNewsDirtyRef.current = false;
-          applyUserDraftValues(res.data, {
-            forceTitle: true,
-            forceArea: true,
-            forceTags: true,
-            forceCover: true,
-            forceRoomNews: true,
-          });
-          setRecentAreas(res.data.recent_areas || []);
           append(tf(localeSetting, "ui.ctrl.switched_account", { name: res.data.uname }));
           await refreshSession();
           await loadAccounts();
@@ -621,10 +620,7 @@ export function useAccountController({
             if (requestUid !== activeUidRef.current) {
               return;
             }
-            activeUidRef.current = res.data.uid;
-            setCurrentUser(res.data);
-            applyProfileState(res.data.live_profile_state);
-            applyUserDraftValues(res.data);
+            await applyUserSession(res.data);
             append(t(localeSetting, "ui.ctrl.user_refreshed"));
             await loadAccounts();
             await studioApi.syncLiveRoomProfile().catch(() => undefined);

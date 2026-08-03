@@ -462,13 +462,15 @@ export type LiveSilentUserItem = {
   admin_level: number;
 };
 
-export type LiveSilentUserListData = {
+export type PageResult<T> = {
   page: number;
   page_size: number;
   total: number;
   total_page: number;
-  items: LiveSilentUserItem[];
+  items: T[];
 };
+
+export type LiveSilentUserListData = PageResult<LiveSilentUserItem>;
 
 export type LiveBlackUserItem = {
   mid: number;
@@ -479,13 +481,7 @@ export type LiveBlackUserItem = {
   sign?: string;
 };
 
-export type LiveBlackUserListData = {
-  page: number;
-  page_size: number;
-  total: number;
-  total_page: number;
-  items: LiveBlackUserItem[];
-};
+export type LiveBlackUserListData = PageResult<LiveBlackUserItem>;
 
 export type LiveRoomAdminItem = {
   uid: number;
@@ -496,13 +492,8 @@ export type LiveRoomAdminItem = {
   permissions?: number[];
 };
 
-export type LiveRoomAdminListData = {
-  page: number;
-  page_size: number;
-  total: number;
-  total_page: number;
+export type LiveRoomAdminListData = PageResult<LiveRoomAdminItem> & {
   max_room_anchors_number?: number;
-  items: LiveRoomAdminItem[];
 };
 
 export type LiveVoteHistoryData = {

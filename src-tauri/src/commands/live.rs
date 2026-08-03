@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, HashMap};
 use tauri::{AppHandle, State};
 
 mod client_version;
-mod common;
+pub(crate) mod common;
 mod danmu;
 mod dashboard;
 mod flow;

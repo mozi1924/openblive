@@ -106,58 +106,32 @@ function App() {
           {state.activeTab === "stream" && (
             <StreamTab
               locale={locale}
-              child={state.child}
-              children={state.children}
-              copiedKey={state.copiedKey}
-              cover={state.cover}
-              coverRenderSrc={state.coverRenderSrc}
-              coverAdvice={state.coverAdvice}
-              coverAdviceLoading={state.coverAdviceLoading}
-              coverHistory={state.coverHistory}
-              coverHistoryLoading={state.coverHistoryLoading}
-              parent={state.parent}
-              pendingCoverUpload={state.pendingCoverUpload}
-              partitions={state.partitions}
-              rtmp={state.rtmp}
-              session={state.session}
-              linkageStatus={state.linkageStatus}
-              tagInput={state.tagInput}
-              tags={state.tags}
-              title={state.title}
-              roomNews={state.roomNews}
-              liveReserveTitle={state.liveReserveTitle}
-              liveReserveStartAt={state.liveReserveStartAt}
-              liveReserveCreateDynamic={state.liveReserveCreateDynamic}
-              onSelectTab={actions.setActiveTab}
-              onChangeChild={actions.setChild}
-              onChangeParent={actions.changeParent}
-              onChangeTagInput={actions.setTagInput}
-              onChangeTitle={actions.setTitle}
-              onChangeRoomNews={actions.setRoomNews}
-              onChangeLiveReserveTitle={actions.setLiveReserveTitle}
-              onChangeLiveReserveStartAt={actions.setLiveReserveStartAt}
-              onChangeLiveReserveCreateDynamic={actions.setLiveReserveCreateDynamic}
-              onAddTag={actions.addTag}
-              onSelectCoverFile={actions.selectCoverFile}
-              onSelectHistoryCover={actions.selectHistoryCover}
-              onRemoveTag={actions.removeTag}
-              onCopyToClipboard={actions.copyToClipboard}
-              onSyncProfile={actions.syncLiveRoomProfile}
-              onStartLive={actions.startLive}
-              onStopLive={actions.stopLive}
-              recentAreas={state.recentAreas}
-              hasUnsavedChanges={state.hasUnsavedChanges}
-              hasAttentionStatus={state.hasAttentionStatus}
-              profileState={state.profileState}
-              sectionStatus={state.sectionStatus}
-              dirtyStatus={state.dirtyStatus}
-              unsavedItems={state.unsavedItems}
-              onApplyRecentArea={actions.applyRecentArea}
-              onSubmitArea={actions.submitArea}
-              onSubmitCover={actions.submitCover}
-              onSubmitTitle={actions.submitTitle}
-              onSubmitRoomNews={actions.submitRoomNews}
-              onSubmitLiveReserve={actions.submitLiveReserve}
+              state={state}
+              actions={{
+                onSelectTab: actions.setActiveTab,
+                onChangeChild: actions.setChild,
+                onChangeParent: actions.changeParent,
+                onChangeTagInput: actions.setTagInput,
+                onChangeTitle: actions.setTitle,
+                onChangeRoomNews: actions.setRoomNews,
+                onChangeLiveReserveTitle: actions.setLiveReserveTitle,
+                onChangeLiveReserveStartAt: actions.setLiveReserveStartAt,
+                onChangeLiveReserveCreateDynamic: actions.setLiveReserveCreateDynamic,
+                onAddTag: actions.addTag,
+                onSelectCoverFile: actions.selectCoverFile,
+                onSelectHistoryCover: actions.selectHistoryCover,
+                onRemoveTag: actions.removeTag,
+                onCopyToClipboard: actions.copyToClipboard,
+                onSyncProfile: actions.syncLiveRoomProfile,
+                onStartLive: actions.startLive,
+                onStopLive: actions.stopLive,
+                onApplyRecentArea: actions.applyRecentArea,
+                onSubmitArea: actions.submitArea,
+                onSubmitCover: actions.submitCover,
+                onSubmitTitle: actions.submitTitle,
+                onSubmitRoomNews: actions.submitRoomNews,
+                onSubmitLiveReserve: actions.submitLiveReserve,
+              }}
             />
           )}
 

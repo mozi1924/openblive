@@ -57,13 +57,7 @@ struct ManagedWindowState {
 
 type ManagedWindowStateMap = HashMap<String, ManagedWindowState>;
 
-fn normalize_live_control_mode(mode: &str) -> &'static str {
-    match mode.trim() {
-        "obs_ws" => "obs_ws",
-        "command" => "command",
-        _ => "none",
-    }
-}
+use super::live::common::normalize_live_control_mode;
 
 fn now_hms() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()

@@ -44,6 +44,19 @@ export const normalizeEmoticonText = (text: string) => {
   return `[${trimmed}]`;
 };
 
+export const resolveEmoticonStyle = (
+  width: number,
+  height: number,
+  targetHeight: number,
+) => {
+  const ratio = width > 0 && height > 0 ? width / height : 1;
+  const resolvedWidth = Math.max(targetHeight, Math.round(targetHeight * ratio));
+  return {
+    width: `${Math.min(resolvedWidth, targetHeight * 3.4)}px`,
+    height: `${targetHeight}px`,
+  };
+};
+
 export const normalizeDanmuSegments = (
   segments?: DanmuContentSegment[],
 ): DanmuContentSegment[] | undefined => {
