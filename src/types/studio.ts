@@ -99,6 +99,7 @@ export type Session = {
   from_cache?: boolean;
   last_sync_at?: number;
   error_code?: string;
+  stream_info?: StreamInfo | null;
 };
 
 export type User = {

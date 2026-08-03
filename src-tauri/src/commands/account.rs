@@ -185,6 +185,7 @@ pub async fn poll_login_status(
         live_profile_state: old.live_profile_state,
         live_key: None,
         sub_session_key: None,
+        stream_info: old.stream_info,
         login_invalid: false,
         auth_fail_count: 0,
         last_auth_fail_at: 0,

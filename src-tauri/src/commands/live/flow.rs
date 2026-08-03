@@ -592,12 +592,14 @@ pub(crate) async fn stop_live_inner(state: &AppState) -> CmdResult {
         }
         runtime.session.is_live = false;
         runtime.session.live_status = Some(LIVE_STATUS_OFFLINE);
+        runtime.session.stream_info = None;
         clear_live_session_identity(&mut runtime.session);
         if let Some(uid) = runtime.config.current_uid.clone() {
             if let Some(user) = runtime.config.users.get_mut(&uid) {
                 clear_user_auth_flags(user);
                 user.live_key = None;
                 user.sub_session_key = None;
+                user.stream_info = None;
             }
         }
         save_config(&state.config_path, &runtime.config, &state.master_key);
@@ -669,6 +671,18 @@ pub async fn start_live_flow_inner(app: &AppHandle, state: &AppState) -> CmdResu
             .map(|user| user.recent_areas.clone())
             .unwrap_or_default()
     };
+
+    let stream_info_val = start_result["data"].clone();
+    {
+        let mut runtime = state.runtime.lock().await;
+        runtime.session.stream_info = Some(stream_info_val.clone());
+        if let Some(uid) = runtime.config.current_uid.clone() {
+            if let Some(user) = runtime.config.users.get_mut(&uid) {
+                user.stream_info = Some(stream_info_val);
+            }
+        }
+        save_config(&state.config_path, &runtime.config, &state.master_key);
+    }
 
     let response = wrap_ok(json!({
         "stream_info": start_result["data"].clone(),

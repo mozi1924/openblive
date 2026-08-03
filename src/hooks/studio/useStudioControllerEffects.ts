@@ -236,6 +236,8 @@ export function useStudioControllerEffects({
           if (!liveSessionState.isLive) {
             setRtmp(null);
             clearLiveStreamInfoCache();
+          } else if (nextSession.stream_info) {
+            setRtmp(nextSession.stream_info);
           } else {
             const cachedStreamInfo = readLiveStreamInfoCache(nextSession.uid ?? currentUserUid);
             if (cachedStreamInfo) {

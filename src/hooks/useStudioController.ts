@@ -607,6 +607,8 @@ export function useStudioController() {
     if (!liveSessionState.isLive) {
       setRtmp(null);
       clearLiveStreamInfoCache();
+    } else if (nextSession?.stream_info) {
+      setRtmp(nextSession.stream_info);
     } else {
       const cacheUid = nextSession?.uid ?? activeUidRef.current;
       const cachedStreamInfo = readLiveStreamInfoCache(cacheUid);
@@ -1113,14 +1115,10 @@ export function useStudioController() {
     };
 
     void syncProfileAndTags();
-    const timer = window.setInterval(() => {
-      void syncProfileAndTags();
-    }, LIVE_PROFILE_SYNC_POLL_INTERVAL_MS);
 
     return () => {
       alive = false;
       syncing = false;
-      window.clearInterval(timer);
     };
   }, [hasLiveAuth, hasPendingReviewOption, refreshLiveTags, syncLiveRoomProfileResources]);
 

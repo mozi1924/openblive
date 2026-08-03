@@ -139,12 +139,22 @@ pub async fn sync_live_status_runtime(state: &AppState) -> SessionState {
     if runtime.config.current_uid.as_deref() == Some(&uid) {
         apply_room_status_to_session(&mut runtime.session, &room_info);
         mark_session_sync_state(&mut runtime.session, false, None);
-        if !runtime.session.is_live {
+        if runtime.session.is_live {
+            if let Some(uid_key) = runtime.config.current_uid.clone() {
+                if let Some(user) = runtime.config.users.get(&uid_key) {
+                    if runtime.session.stream_info.is_none() {
+                        runtime.session.stream_info = user.stream_info.clone();
+                    }
+                }
+            }
+        } else {
+            runtime.session.stream_info = None;
             if let Some(uid_key) = runtime.config.current_uid.clone() {
                 if let Some(user) = runtime.config.users.get_mut(&uid_key) {
-                    if user.live_key.is_some() || user.sub_session_key.is_some() {
+                    if user.live_key.is_some() || user.sub_session_key.is_some() || user.stream_info.is_some() {
                         user.live_key = None;
                         user.sub_session_key = None;
+                        user.stream_info = None;
                         need_save = true;
                     }
                 }
@@ -176,7 +186,7 @@ pub async fn sync_live_status(state: State<'_, AppState>) -> CmdResult {
     Ok(wrap_ok(serde_json::to_value(session).unwrap()))
 }
 
-pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
+pub async fn sync_live_room_profile_runtime(state: &AppState) -> CmdResult {
     let (uid, user) = {
         let runtime = state.runtime.lock().await;
         let uid = runtime
@@ -369,3 +379,8 @@ pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
         }
     }
 }
+
+pub async fn sync_live_room_profile(state: State<'_, AppState>) -> CmdResult {
+    sync_live_room_profile_runtime(&state).await
+}
+

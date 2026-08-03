@@ -756,6 +756,7 @@ describe("useStudioController multi-account regressions", () => {
         csrf: "csrf",
         live_status: 1,
         from_cache: false,
+        stream_info: cachedStreamInfo,
       }),
     );
     saveLiveStreamInfoCache("1", cachedStreamInfo);
@@ -858,7 +859,7 @@ describe("useStudioController multi-account regressions", () => {
       await flush();
     });
 
-    expect(readLiveStreamInfoCache("1")).toEqual(streamInfo);
+    expect(result.current.state.rtmp).toEqual(streamInfo);
   });
 
   it("keeps applied history cover instead of forcing an immediate stale profile sync", async () => {

@@ -54,7 +54,7 @@ use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
     sync_live_status as sync_live_status_inner,
 };
-pub use profile_sync::sync_live_status_runtime;
+pub use profile_sync::{sync_live_room_profile_runtime, sync_live_status_runtime};
 use session::resolve_room_scoped_auth_context;
 use user_manage::{
     add_black_user_inner, add_room_admin_inner, add_silent_user_inner, get_black_user_list_inner,

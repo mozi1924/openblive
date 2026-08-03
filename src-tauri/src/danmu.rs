@@ -21,6 +21,11 @@ static AVATAR_CACHE_PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static AVATAR_BATCH_QUEUE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 static AVATAR_BATCH_FLUSH_SCHEDULED: OnceLock<Mutex<bool>> = OnceLock::new();
 static EMOTICON_CACHE_PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static FILTER_CONFIG_CACHE: OnceLock<Mutex<crate::models::PersistConfig>> = OnceLock::new();
+
+fn filter_config_cache() -> &'static Mutex<crate::models::PersistConfig> {
+    FILTER_CONFIG_CACHE.get_or_init(|| Mutex::new(crate::models::PersistConfig::default()))
+}
 const DANMU_AVATAR_RESOLVED_EVENT: &str = "danmu-avatar-resolved";
 const AVATAR_BATCH_MAX_SIZE: usize = 50;
 const AVATAR_BATCH_WINDOW_MS: u64 = 80;
@@ -362,11 +367,17 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                 if let Some(mut message) = message {
                     let config = {
                         let state = app.state::<AppState>();
-                        state
-                            .runtime
-                            .try_lock()
-                            .map(|g| g.config.clone())
-                            .unwrap_or_default()
+                        let maybe_cfg = state.runtime.try_lock().ok().map(|g| g.config.clone());
+                        if let Some(cfg) = maybe_cfg {
+                            if let Ok(mut cache) = filter_config_cache().lock() {
+                                *cache = cfg.clone();
+                            }
+                            cfg
+                        } else if let Ok(cache) = filter_config_cache().lock() {
+                            cache.clone()
+                        } else {
+                            crate::models::PersistConfig::default()
+                        }
                     };
                     if !should_filter_danmu_message(&config, &message) {
                         enrich_sender_face_with_cache(app, &mut message);
@@ -415,4 +426,30 @@ mod tests {
         cfg.filter_guard_status = false;
         assert!(!should_filter_danmu_message(&cfg, &msg));
     }
+
+    #[test]
+    fn test_should_filter_enter_msg() {
+        let mut cfg = PersistConfig::default();
+        cfg.filter_enter_msg = true;
+        let msg = json!({ "type": "interact", "interact_type": "enter", "cmd": "INTERACT_WORD" });
+        assert!(should_filter_danmu_message(&cfg, &msg));
+
+        cfg.filter_enter_msg = false;
+        assert!(!should_filter_danmu_message(&cfg, &msg));
+    }
+
+    #[test]
+    fn test_should_filter_follow_share_msg() {
+        let mut cfg = PersistConfig::default();
+        cfg.filter_follow_share_msg = true;
+        let follow_msg = json!({ "type": "interact", "interact_type": "follow" });
+        let share_msg = json!({ "type": "interact", "interact_type": "share" });
+        assert!(should_filter_danmu_message(&cfg, &follow_msg));
+        assert!(should_filter_danmu_message(&cfg, &share_msg));
+
+        cfg.filter_follow_share_msg = false;
+        assert!(!should_filter_danmu_message(&cfg, &follow_msg));
+        assert!(!should_filter_danmu_message(&cfg, &share_msg));
+    }
 }
+

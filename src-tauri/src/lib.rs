@@ -162,8 +162,10 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_secs(3)).await;
                 let mut ticker = tokio::time::interval(Duration::from_secs(10));
+                let mut tick_count: u64 = 0;
                 loop {
                     ticker.tick().await;
+                    tick_count = tick_count.wrapping_add(1);
                     let state = app_handle_bg.state::<AppState>();
                     let is_logged_in = {
                         let runtime = state.runtime.lock().await;
@@ -171,6 +173,11 @@ pub fn run() {
                     };
                     if is_logged_in {
                         let session = commands::sync_live_status_runtime(&state).await;
+                        if tick_count % 2 == 0 {
+                            if let Err(err) = commands::sync_live_room_profile_runtime(&state).await {
+                                crate::runtime_warn!("[background][profile] sync failed: {err}");
+                            }
+                        }
                         if session.is_live {
                             if let Err(err) = commands::get_live_online_rank_runtime(&state).await {
                                 crate::runtime_warn!("[background][online_rank] sync failed: {err}");

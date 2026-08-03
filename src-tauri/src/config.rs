@@ -150,6 +150,8 @@ struct LiveUserCacheFile {
     recent_areas: Vec<RecentArea>,
     #[serde(default)]
     live_profile_state: LiveProfileState,
+    #[serde(default)]
+    stream_info: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -418,6 +420,7 @@ pub fn load_config(path: &Path, key: &[u8; 32]) -> PersistConfig {
                 user.last_cover_asset = cache.last_cover_asset;
                 user.recent_areas = cache.recent_areas;
                 user.live_profile_state = cache.live_profile_state;
+                user.stream_info = cache.stream_info;
             }
         }
     }
@@ -595,6 +598,7 @@ pub fn save_config(path: &Path, cfg: &PersistConfig, key: &[u8; 32]) {
                 last_cover_asset: user.last_cover_asset.clone(),
                 recent_areas: user.recent_areas.clone(),
                 live_profile_state: user.live_profile_state.clone(),
+                stream_info: user.stream_info.clone(),
             },
         );
     }

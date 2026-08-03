@@ -46,6 +46,8 @@ pub struct SessionState {
     pub last_sync_at: Option<i64>,
     #[serde(default)]
     pub error_code: Option<String>,
+    #[serde(default)]
+    pub stream_info: Option<serde_json::Value>,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, PartialEq)]
@@ -183,6 +185,8 @@ pub struct UserRecord {
     pub live_key: Option<String>,
     #[serde(default)]
     pub sub_session_key: Option<String>,
+    #[serde(default)]
+    pub stream_info: Option<serde_json::Value>,
     #[serde(default)]
     pub login_invalid: bool,
     #[serde(default)]
