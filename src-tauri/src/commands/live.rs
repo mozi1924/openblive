@@ -40,7 +40,6 @@ use danmu::{
 };
 use dashboard::get_live_dashboard_snapshot_inner;
 pub use flow::{start_live_flow_inner, stop_live_flow_inner};
-use flow::{start_live_inner, stop_live_inner};
 pub(crate) use linkage::obs_ws_probe;
 use profile_api::{
     add_live_tag as add_live_tag_inner, create_live_reserve as create_live_reserve_inner,
@@ -213,50 +212,7 @@ pub async fn remove_live_tag(req: RemoveLiveTagReq, state: State<'_, AppState>) 
     remove_live_tag_inner(req, state).await
 }
 
-#[tauri::command]
-pub async fn start_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
-    let result = start_live_inner(&app, &state).await;
-    if let Ok(payload) = &result {
-        emit_studio_state_event(
-            &app,
-            "live.flow",
-            "command.start_live",
-            json!({
-                "action": "start",
-                "ok": payload["code"].as_i64().unwrap_or(-1) == 0,
-                "code": payload["code"].as_i64().unwrap_or(-1),
-            }),
-        );
-    }
-    if result.is_ok() {
-        emit_runtime_snapshot(&app, &state, "command.start_live").await;
-        crate::tray::refresh_tray_menu(&app);
-    }
-    result
-}
 
-#[tauri::command]
-pub async fn stop_live(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
-    let result = stop_live_inner(&state).await;
-    if let Ok(payload) = &result {
-        emit_studio_state_event(
-            &app,
-            "live.flow",
-            "command.stop_live",
-            json!({
-                "action": "stop",
-                "ok": payload["code"].as_i64().unwrap_or(-1) == 0,
-                "code": payload["code"].as_i64().unwrap_or(-1),
-                "session_consistent": payload["data"]["session_consistent"].as_bool().unwrap_or(true),
-            }),
-        );
-    }
-    if result.is_ok() {
-        emit_runtime_snapshot(&app, &state, "command.stop_live").await;
-        crate::tray::refresh_tray_menu(&app);
-    }
-    result
-}
 
 #[tauri::command]
 pub async fn start_live_flow(app: AppHandle, state: State<'_, AppState>) -> CmdResult {

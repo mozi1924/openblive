@@ -5,6 +5,26 @@ export type Resp<T> = {
   qr?: string;
 };
 
+/**
+ * Event names emitted from Rust backend to TypeScript frontend over Tauri IPC.
+ * Corresponding Rust definitions:
+ * - DANMU_MESSAGE: `src-tauri/src/danmu.rs`
+ * - DANMU_AVATAR_RESOLVED: `src-tauri/src/danmu.rs`
+ * - APP_LOG: `src-tauri/src/commands/system.rs`
+ * - STUDIO_STATE: `src-tauri/src/state_event.rs`
+ * - DANMU_OVERLAY_SETTINGS: `src-tauri/src/commands/system.rs`
+ */
+export const EVENT_NAMES = {
+  DANMU_MESSAGE: "danmu-message",
+  DANMU_AVATAR_RESOLVED: "danmu-avatar-resolved",
+  APP_LOG: "app-log",
+  STUDIO_STATE: "studio-state",
+  DANMU_OVERLAY_SETTINGS: "danmu-overlay-settings",
+} as const;
+
+export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];
+
+
 export type ActiveTab = "account" | "dashboard" | "stream" | "danmu" | "project" | "settings";
 
 export type TransportStatus = "idle" | "saving" | "synced" | "conflict" | "failed";

@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type {
-  AccountList,
-  AppLogEvent,
+import {
+  EVENT_NAMES,
+  type AccountList,
+  type AppLogEvent,
   AppConfig,
   DanmuAvatarResolvedEvent,
   DanmuMsg,
@@ -62,14 +63,6 @@ export const studioApi = {
     invokeCommand("set_danmu_overlay_pinned", { pinned }),
   loadSavedConfig: () => invokeCommand<User | null>("load_saved_config"),
   getAccountList: () => invokeCommand<AccountList>("get_account_list"),
-  refreshAllAccountCookies: () =>
-    invokeCommand<{ updated: number; failed: string[]; expired: string[] }>(
-      "refresh_all_account_cookies",
-    ),
-  refreshAllAccountProfiles: () =>
-    invokeCommand<{ updated: number; failed: string[]; expired: string[] }>(
-      "refresh_all_account_profiles",
-    ),
   refreshCurrentUser: () => invokeCommand<User>("refresh_current_user"),
   getLoginQrcode: () =>
     invokeCommand<{ url: string; content: string; image_src: string; qrcode_key: string }>(
@@ -124,9 +117,7 @@ export const studioApi = {
   addLiveTag: (tag: string) => invokeCommand<AddLiveTagResp>("add_live_tag", { req: { tag } }),
   removeLiveTag: (tag: string) =>
     invokeCommand<RemoveLiveTagResp>("remove_live_tag", { req: { tag } }),
-  startLive: () => invokeCommand<StreamInfo>("start_live"),
   startLiveFlow: () => invokeCommand<LiveFlowResp>("start_live_flow"),
-  stopLive: () => invokeCommand("stop_live"),
   stopLiveFlow: () => invokeCommand<LiveFlowResp>("stop_live_flow"),
   startDanmuMonitor: () => invokeCommand("start_danmu_monitor"),
   stopDanmuMonitor: () => invokeCommand("stop_danmu_monitor"),
@@ -196,13 +187,17 @@ export const studioApi = {
   getAppLogs: () => invokeCommand<string[]>("get_app_logs"),
   clearAppLogs: () => invokeCommand("clear_app_logs"),
   listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
-    listen<DanmuMsg>("danmu-message", (event) => handler(event.payload)),
+    listen<DanmuMsg>(EVENT_NAMES.DANMU_MESSAGE, (event) => handler(event.payload)),
   listenDanmuAvatarResolved: (handler: (payload: DanmuAvatarResolvedEvent) => void) =>
-    listen<DanmuAvatarResolvedEvent>("danmu-avatar-resolved", (event) => handler(event.payload)),
+    listen<DanmuAvatarResolvedEvent>(EVENT_NAMES.DANMU_AVATAR_RESOLVED, (event) =>
+      handler(event.payload),
+    ),
   listenAppLog: (handler: (payload: AppLogEvent) => void) =>
-    listen<AppLogEvent>("app-log", (event) => handler(event.payload)),
+    listen<AppLogEvent>(EVENT_NAMES.APP_LOG, (event) => handler(event.payload)),
   listenStudioState: (handler: (payload: StudioStateEvent) => void) =>
-    listen<StudioStateEvent>("studio-state", (event) => handler(event.payload)),
+    listen<StudioStateEvent>(EVENT_NAMES.STUDIO_STATE, (event) => handler(event.payload)),
   listenDanmuOverlaySettings: (handler: (payload: DanmuOverlaySettingsEvent) => void) =>
-    listen<DanmuOverlaySettingsEvent>("danmu-overlay-settings", (event) => handler(event.payload)),
+    listen<DanmuOverlaySettingsEvent>(EVENT_NAMES.DANMU_OVERLAY_SETTINGS, (event) =>
+      handler(event.payload),
+    ),
 };

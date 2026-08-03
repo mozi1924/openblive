@@ -24,8 +24,6 @@ const { mockStudioApi } = vi.hoisted(() => ({
     setDanmuOverlayPinned: vi.fn(),
     loadSavedConfig: vi.fn(),
     getAccountList: vi.fn(),
-    refreshAllAccountCookies: vi.fn(),
-    refreshAllAccountProfiles: vi.fn(),
     refreshCurrentUser: vi.fn(),
     getLoginQrcode: vi.fn(),
     pollLoginStatus: vi.fn(),
@@ -44,9 +42,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     updateLiveCover: vi.fn(),
     updateLiveTags: vi.fn(),
     getLiveTags: vi.fn(),
-    startLive: vi.fn(),
     startLiveFlow: vi.fn(),
-    stopLive: vi.fn(),
     stopLiveFlow: vi.fn(),
     startDanmuMonitor: vi.fn(),
     stopDanmuMonitor: vi.fn(),
@@ -233,9 +229,7 @@ beforeEach(() => {
   mockStudioApi.updateLiveCover.mockResolvedValue(
     ok({ cover: "http://example.com/uploaded.jpg", profile_state: defaultProfileState() }),
   );
-  mockStudioApi.refreshAllAccountProfiles.mockResolvedValue(
-    ok({ updated: 0, failed: [], expired: [] }),
-  );
+
   mockStudioApi.startDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.stopDanmuMonitor.mockResolvedValue(ok({}));
   mockStudioApi.getRecentDanmu.mockResolvedValue(ok([]));
@@ -287,7 +281,7 @@ beforeEach(() => {
       profile_state: defaultProfileState(),
     }),
   );
-  mockStudioApi.startLive.mockResolvedValue(ok(null));
+
   mockStudioApi.startLiveFlow.mockResolvedValue(
     ok({
       stream_info: null,
@@ -295,7 +289,7 @@ beforeEach(() => {
       danmu_monitor_msg: "i18n.live.danmu_monitor_started",
     }),
   );
-  mockStudioApi.stopLive.mockResolvedValue(ok({}));
+
   mockStudioApi.stopLiveFlow.mockResolvedValue(
     ok({
       live_stopped: true,
@@ -353,10 +347,7 @@ describe("useStudioController multi-account regressions", () => {
     const titleReq = deferred<Resp<{ profile_state: ReturnType<typeof defaultProfileState> }>>();
     let backendCurrentUid = "1";
 
-    mockStudioApi.refreshAllAccountProfiles.mockResolvedValue({
-      code: 1,
-      msg: "skip",
-    });
+
     mockStudioApi.loadSavedConfig.mockImplementation(async () =>
       ok(backendCurrentUid === "1" ? userA : userB),
     );
@@ -465,10 +456,7 @@ describe("useStudioController multi-account regressions", () => {
     const userB = makeUser("2", "B", "B-old");
     let backendCurrentUid = "1";
 
-    mockStudioApi.refreshAllAccountProfiles.mockResolvedValue({
-      code: 1,
-      msg: "skip",
-    });
+
     mockStudioApi.loadSavedConfig.mockImplementation(async () =>
       ok(backendCurrentUid === "1" ? userA : userB),
     );
@@ -539,10 +527,7 @@ describe("useStudioController multi-account regressions", () => {
     const userB = makeUser("2", "B", "B-old");
     let backendCurrentUid = "1";
 
-    mockStudioApi.refreshAllAccountProfiles.mockResolvedValue({
-      code: 1,
-      msg: "skip",
-    });
+
     mockStudioApi.loadSavedConfig.mockImplementation(async () =>
       ok(backendCurrentUid === "1" ? userA : userB),
     );

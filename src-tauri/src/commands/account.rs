@@ -2,7 +2,7 @@ mod common;
 mod refresh;
 
 use common::{cookie_diagnostics, fill_profile_from_full, RefreshCookieResult};
-use refresh::{refresh_accounts_batch, refresh_cookie_for_uid};
+use refresh::refresh_cookie_for_uid;
 
 use crate::avatar::{delete_avatar_cache, has_cached_face, refresh_avatar_cache, to_response_user};
 use crate::bili::fetch_full_user_data;
@@ -417,13 +417,4 @@ pub async fn refresh_all_account_profiles_inner(
     refresh::refresh_all_account_profiles_inner(app, state).await
 }
 
-#[tauri::command]
-pub async fn refresh_all_account_cookies(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
-    let _refresh_guard = state.auth_refresh_lock.lock().await;
-    Ok(wrap_ok(refresh_accounts_batch(&app, &state, false).await))
-}
 
-#[tauri::command]
-pub async fn refresh_all_account_profiles(app: AppHandle, state: State<'_, AppState>) -> CmdResult {
-    Ok(wrap_ok(refresh_all_account_profiles_inner(&app, &state).await))
-}
