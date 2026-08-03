@@ -11,6 +11,7 @@ import {
   Gift,
   Sparkles,
   UserCheck,
+  ChevronDown,
 } from "lucide-react";
 import type { AppConfig, TtsVoice } from "../../../types/studio";
 import type { LocaleSetting } from "../../../utils/i18n";
@@ -45,8 +46,8 @@ const PITCH_OPTIONS = [
 const optionCardClass =
   "flex min-h-20 items-start rounded-xl border p-3.5 text-left transition-all duration-200";
 
-const inputClass =
-  "w-full rounded-lg border border-white/8 bg-[#090b0f] px-3.5 py-2.5 text-xs text-white outline-none transition-all hover:border-white/12 focus:border-bili-blue/40 cursor-pointer";
+const selectClass =
+  "h-10 w-full appearance-none rounded-lg border border-white/8 bg-[#0b111c] px-3.5 pr-9 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none cursor-pointer";
 
 export function TtsSettingsSection({
   locale,
@@ -167,17 +168,20 @@ export function TtsSettingsSection({
                 <Mic className="h-3.5 w-3.5 text-bili-blue" />
                 {t(locale, "ui.settings.tts.voice")}
               </label>
-              <select
-                value={appConfig.tts_voice || "zh-CN-XiaoxiaoNeural"}
-                onChange={(e) => onChangeConfig("tts_voice", e.target.value)}
-                className={inputClass}
-              >
-                {voices.map((voice) => (
-                  <option key={voice.short_name} value={voice.short_name} className="bg-[#090b0f]">
-                    {voice.friendly_name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={appConfig.tts_voice || "zh-CN-XiaoxiaoNeural"}
+                  onChange={(e) => onChangeConfig("tts_voice", e.target.value)}
+                  className={selectClass}
+                >
+                  {voices.map((voice) => (
+                    <option key={voice.short_name} value={voice.short_name} className="bg-[#090b0f]">
+                      {voice.friendly_name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
 
             {/* Audio Output Device Selection */}
@@ -186,19 +190,22 @@ export function TtsSettingsSection({
                 <AudioLines className="h-3.5 w-3.5 text-purple-400" />
                 {t(locale, "ui.settings.tts.device")}
               </label>
-              <select
-                value={appConfig.tts_device || "default"}
-                onChange={(e) => onChangeConfig("tts_device", e.target.value)}
-                className={inputClass}
-              >
-                {devices.map((device) => (
-                  <option key={device} value={device} className="bg-[#090b0f]">
-                    {device === "default"
-                      ? t(locale, "ui.settings.tts.device.default")
-                      : device}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={appConfig.tts_device || "default"}
+                  onChange={(e) => onChangeConfig("tts_device", e.target.value)}
+                  className={selectClass}
+                >
+                  {devices.map((device) => (
+                    <option key={device} value={device} className="bg-[#090b0f]">
+                      {device === "default"
+                        ? t(locale, "ui.settings.tts.device.default")
+                        : device}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
 
             {/* Rate Adjustment */}
@@ -207,17 +214,20 @@ export function TtsSettingsSection({
                 <Sliders className="h-3.5 w-3.5 text-amber-400" />
                 {t(locale, "ui.settings.tts.rate")}
               </label>
-              <select
-                value={appConfig.tts_rate || "+0%"}
-                onChange={(e) => onChangeConfig("tts_rate", e.target.value)}
-                className={inputClass}
-              >
-                {RATE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-[#090b0f]">
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={appConfig.tts_rate || "+0%"}
+                  onChange={(e) => onChangeConfig("tts_rate", e.target.value)}
+                  className={selectClass}
+                >
+                  {RATE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="bg-[#090b0f]">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
 
             {/* Pitch Adjustment */}
@@ -226,17 +236,20 @@ export function TtsSettingsSection({
                 <Sliders className="h-3.5 w-3.5 text-bili-pink" />
                 {t(locale, "ui.settings.tts.pitch")}
               </label>
-              <select
-                value={appConfig.tts_pitch || "+0Hz"}
-                onChange={(e) => onChangeConfig("tts_pitch", e.target.value)}
-                className={inputClass}
-              >
-                {PITCH_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value} className="bg-[#090b0f]">
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={appConfig.tts_pitch || "+0Hz"}
+                  onChange={(e) => onChangeConfig("tts_pitch", e.target.value)}
+                  className={selectClass}
+                >
+                  {PITCH_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="bg-[#090b0f]">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
           </div>
 
