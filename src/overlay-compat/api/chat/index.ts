@@ -1,4 +1,3 @@
-import MD5 from "crypto-js/md5";
 
 export interface MsgHandler {
   onAddText: (data: any) => void;
@@ -25,40 +24,34 @@ export function getDefaultMsgHandler(): MsgHandler {
   };
 }
 
-export const DEFAULT_AVATAR_URL = "//static.hdslb.com/images/member/noface.gif";
+export const DEFAULT_AVATAR_URL =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiB2aWV3Qm94PSIwIDAgMTI4IDEyOCI+PGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNlMGUwZTAiLz48Y2lyY2xlIGN4PSI2NCIgY3k9IjQ2IiByPSIyNCIgZmlsbD0iIzllOWU5ZSIvPjxwYXRoIGQ9Ik02NCA3OGMtMjYuNSAwLTQ4IDE1LjctNDggMzUgMCAyIDEuNiAzLjYgMy42IDMuNmg4OC44YzIgMCAzLjYtMS42IDMuNi0zLjYgMC0xOS4zLTIxLjUtMzUtNDgtMzV6IiBmaWxsPSIjOWU5ZTllIi8+PC9zdmc+";
 
 export function processAvatarUrl(avatarUrl?: string | null): string {
-  if (typeof avatarUrl !== "string") {
-    return "";
-  }
-  const m = avatarUrl.match(/(?:https?:)?(.*)/);
-  if (m && m[1]) {
-    return m[1];
-  }
-  return avatarUrl;
-}
-
-export function getDefaultAvatarUrl(uid?: string | number | null, username = ""): string {
-  let source = "";
-  if (uid !== null && uid !== undefined && `${uid}` !== "" && `${uid}` !== "0") {
-    source = `${uid}`;
-  } else if (username && username !== "") {
-    source = username;
-  }
-  if (source === "") {
+  if (!avatarUrl || typeof avatarUrl !== "string" || avatarUrl.trim() === "" || avatarUrl === "//") {
     return DEFAULT_AVATAR_URL;
   }
-  const hash = MD5(source).toString();
-  return `//cravatar.cn/avatar/${hash}?s=256&d=robohash&f=y`;
+  const trimmed = avatarUrl.trim();
+  if (trimmed.startsWith("data:") || trimmed.startsWith("/api/") || trimmed.startsWith("http://127.0.0.1") || trimmed.startsWith("http://localhost")) {
+    return trimmed;
+  }
+  return `/api/avatar_url?face=${encodeURIComponent(trimmed)}`;
+}
+
+export function getDefaultAvatarUrl(uid?: string | number | null, _username = ""): string {
+  if (uid !== null && uid !== undefined && `${uid}` !== "" && `${uid}` !== "0") {
+    return `/api/avatar_url?uid=${encodeURIComponent(uid)}`;
+  }
+  return DEFAULT_AVATAR_URL;
 }
 
 export function resolveAvatarUrl(avatarUrl?: string | null, uid?: string | number | null, username = ""): string {
-  const processed = processAvatarUrl(avatarUrl);
-  if (!processed || processed === "" || processed === "//") {
-    return getDefaultAvatarUrl(uid, username);
+  if (avatarUrl && avatarUrl !== "" && avatarUrl !== "//") {
+    return processAvatarUrl(avatarUrl);
   }
-  return processed;
+  return getDefaultAvatarUrl(uid, username);
 }
+
 
 export async function getTextEmoticons(): Promise<Array<{ keyword: string; url: string }>> {
   try {

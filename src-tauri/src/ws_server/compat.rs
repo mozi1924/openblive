@@ -11,12 +11,17 @@ use super::constants::{
 use super::types::{CompatIncomingFrame, CompatSessionState, WsServerRuntimeState};
 use super::utils::now_unix_secs;
 
+use std::path::Path;
+use tauri::Manager;
+use crate::state::AppState;
+
 pub(in crate::ws_server) async fn compat_ws_session(
     socket: WebSocket,
     state: Arc<WsServerRuntimeState>,
 ) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (out_tx, mut out_rx) = mpsc::channel::<Message>(CHAT_DANMU_MAX_BUFFER);
+    let config_path = state.app.state::<AppState>().config_path.clone();
 
     let writer = tokio::spawn(async move {
         while let Some(message) = out_rx.recv().await {
@@ -30,6 +35,7 @@ pub(in crate::ws_server) async fn compat_ws_session(
     let joined_state_for_pump = joined_state.clone();
     let mut danmu_rx = state.danmu_tx.subscribe();
     let out_tx_for_pump = out_tx.clone();
+    let config_path_for_pump = config_path.clone();
     let pump = tokio::spawn(async move {
         let mut heartbeat = time::interval(Duration::from_secs(CHAT_HEARTBEAT_INTERVAL_SECS));
         loop {
@@ -52,7 +58,7 @@ pub(in crate::ws_server) async fn compat_ws_session(
                     if !joined {
                         continue;
                     }
-                    if let Some(frame) = map_danmu_to_compat_frame(&payload) {
+                    if let Some(frame) = map_danmu_to_compat_frame(&payload, &config_path_for_pump) {
                         if out_tx_for_pump
                             .send(Message::Text(frame.to_string().into()))
                             .await
@@ -87,7 +93,7 @@ pub(in crate::ws_server) async fn compat_ws_session(
                     let recent_messages =
                         super::raw::fetch_recent_danmu_messages_for_ws(&state.app).await;
                     for payload in recent_messages {
-                        if let Some(frame) = map_danmu_to_compat_frame(&payload) {
+                        if let Some(frame) = map_danmu_to_compat_frame(&payload, &config_path) {
                             if out_tx
                                 .send(Message::Text(frame.to_string().into()))
                                 .await
@@ -106,28 +112,46 @@ pub(in crate::ws_server) async fn compat_ws_session(
     writer.abort();
 }
 
-fn map_danmu_to_compat_frame(payload: &Value) -> Option<Value> {
+fn resolve_avatar_for_compat(config_path: &Path, uid: &str, raw_face: &str) -> String {
+    let uid = uid.trim();
+    let raw_face = raw_face.trim();
+
+    if !uid.is_empty() {
+        if let Some(cached) = crate::avatar::load_cached_face_data_url(config_path, uid) {
+            return cached;
+        }
+    }
+
+    if !uid.is_empty() || !raw_face.is_empty() {
+        let encoded_face = urlencoding::encode(raw_face);
+        return format!("/api/avatar_url?uid={uid}&face={encoded_face}");
+    }
+
+    COMPAT_DEFAULT_AVATAR_URL.to_string()
+}
+
+fn map_danmu_to_compat_frame(payload: &Value, config_path: &Path) -> Option<Value> {
     let msg_type = payload.get("type")?.as_str().unwrap_or("");
     match msg_type {
         "danmu" => Some(json!({
             "cmd": 2,
-            "data": build_compat_text_data(payload),
+            "data": build_compat_text_data(payload, config_path),
         })),
         "interact" => Some(json!({
             "cmd": 2,
-            "data": build_compat_interact_text_data(payload),
+            "data": build_compat_interact_text_data(payload, config_path),
         })),
         "gift" => Some(json!({
             "cmd": 3,
-            "data": build_compat_gift_data(payload),
+            "data": build_compat_gift_data(payload, config_path),
         })),
         "guard" => Some(json!({
             "cmd": 4,
-            "data": build_compat_member_data(payload),
+            "data": build_compat_member_data(payload, config_path),
         })),
         "superchat" => Some(json!({
             "cmd": 5,
-            "data": build_compat_super_chat_data(payload),
+            "data": build_compat_super_chat_data(payload, config_path),
         })),
         "moderation" => {
             let deleted_ids = payload
@@ -169,13 +193,19 @@ fn map_danmu_to_compat_frame(payload: &Value) -> Option<Value> {
     }
 }
 
-fn build_compat_text_data(payload: &Value) -> Value {
-    let avatar = normalize_avatar_url(
-        payload
-            .get("sender_face")
-            .and_then(Value::as_str)
-            .unwrap_or(""),
-    );
+
+fn build_compat_text_data(payload: &Value, config_path: &Path) -> Value {
+    let raw_face = payload
+        .get("sender_face")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let uid = payload
+        .get("sender_uid")
+        .and_then(Value::as_u64)
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let avatar = resolve_avatar_for_compat(config_path, &uid, raw_face);
+
     let sender = payload
         .get("sender")
         .and_then(Value::as_str)
@@ -195,11 +225,6 @@ fn build_compat_text_data(payload: &Value) -> Value {
         .get("sender_guard_level")
         .and_then(Value::as_i64)
         .unwrap_or(0);
-    let uid = payload
-        .get("sender_uid")
-        .and_then(Value::as_u64)
-        .map(|value| value.to_string())
-        .unwrap_or_default();
     let id = payload
         .get("id")
         .and_then(Value::as_str)
@@ -245,13 +270,18 @@ fn build_compat_text_data(payload: &Value) -> Value {
     ])
 }
 
-fn build_compat_interact_text_data(payload: &Value) -> Value {
-    let avatar = normalize_avatar_url(
-        payload
-            .get("sender_face")
-            .and_then(Value::as_str)
-            .unwrap_or(""),
-    );
+fn build_compat_interact_text_data(payload: &Value, config_path: &Path) -> Value {
+    let raw_face = payload
+        .get("sender_face")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let uid = payload
+        .get("sender_uid")
+        .and_then(Value::as_u64)
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let avatar = resolve_avatar_for_compat(config_path, &uid, raw_face);
+
     let sender = payload
         .get("sender")
         .and_then(Value::as_str)
@@ -271,11 +301,6 @@ fn build_compat_interact_text_data(payload: &Value) -> Value {
         .get("sender_guard_level")
         .and_then(Value::as_i64)
         .unwrap_or(0);
-    let uid = payload
-        .get("sender_uid")
-        .and_then(Value::as_u64)
-        .map(|value| value.to_string())
-        .unwrap_or_default();
     let id = payload
         .get("id")
         .and_then(Value::as_str)
@@ -341,7 +366,18 @@ fn build_compat_system_text_data(payload: &Value) -> Value {
     ])
 }
 
-fn build_compat_gift_data(payload: &Value) -> Value {
+fn build_compat_gift_data(payload: &Value, config_path: &Path) -> Value {
+    let raw_face = payload
+        .get("sender_face")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let uid = payload
+        .get("sender_uid")
+        .and_then(Value::as_u64)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let avatar = resolve_avatar_for_compat(config_path, &uid, raw_face);
+
     let total_coin = payload
         .get("gift_total_coin")
         .and_then(Value::as_i64)
@@ -353,12 +389,7 @@ fn build_compat_gift_data(payload: &Value) -> Value {
         .unwrap_or(true);
     json!({
         "id": payload.get("id").and_then(Value::as_str).unwrap_or(""),
-        "avatarUrl": normalize_avatar_url(
-            payload
-                .get("sender_face")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-        ),
+        "avatarUrl": avatar,
         "timestamp": now_unix_secs(),
         "authorName": payload.get("sender").and_then(Value::as_str).unwrap_or("viewer"),
         "totalCoin": if is_paid { total_coin } else { 0 },
@@ -367,14 +398,25 @@ fn build_compat_gift_data(payload: &Value) -> Value {
         "num": payload.get("gift_count").and_then(Value::as_i64).unwrap_or(1),
         "giftId": 0,
         "giftIconUrl": "",
-        "uid": payload.get("sender_uid").and_then(Value::as_u64).map(|v| v.to_string()).unwrap_or_default(),
+        "uid": uid,
         "privilegeType": payload.get("sender_guard_level").and_then(Value::as_i64).unwrap_or(0),
         "medalLevel": 0,
         "medalName": "",
     })
 }
 
-fn build_compat_member_data(payload: &Value) -> Value {
+fn build_compat_member_data(payload: &Value, config_path: &Path) -> Value {
+    let raw_face = payload
+        .get("sender_face")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let uid = payload
+        .get("sender_uid")
+        .and_then(Value::as_u64)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let avatar = resolve_avatar_for_compat(config_path, &uid, raw_face);
+
     let num = payload
         .get("gift_count")
         .and_then(Value::as_i64)
@@ -387,15 +429,10 @@ fn build_compat_member_data(payload: &Value) -> Value {
 
     json!({
         "id": payload.get("id").and_then(Value::as_str).unwrap_or(""),
-        "avatarUrl": normalize_avatar_url(
-            payload
-                .get("sender_face")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-        ),
+        "avatarUrl": avatar,
         "timestamp": now_unix_secs(),
         "authorName": payload.get("sender").and_then(Value::as_str).unwrap_or("viewer"),
-        "uid": payload.get("sender_uid").and_then(Value::as_u64).map(|v| v.to_string()).unwrap_or_default(),
+        "uid": uid,
         "privilegeType": payload.get("sender_guard_level").and_then(Value::as_i64).unwrap_or(0),
         "num": num,
         "unit": "月",
@@ -405,37 +442,32 @@ fn build_compat_member_data(payload: &Value) -> Value {
     })
 }
 
-fn build_compat_super_chat_data(payload: &Value) -> Value {
+fn build_compat_super_chat_data(payload: &Value, config_path: &Path) -> Value {
+    let raw_face = payload
+        .get("sender_face")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let uid = payload
+        .get("sender_uid")
+        .and_then(Value::as_u64)
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let avatar = resolve_avatar_for_compat(config_path, &uid, raw_face);
+
     json!({
         "id": payload.get("superchat_id").and_then(Value::as_i64).map(|v| v.to_string()).unwrap_or_else(|| payload.get("id").and_then(Value::as_str).unwrap_or("").to_string()),
-        "avatarUrl": normalize_avatar_url(
-            payload
-                .get("sender_face")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-        ),
+        "avatarUrl": avatar,
         "timestamp": now_unix_secs(),
         "authorName": payload.get("sender").and_then(Value::as_str).unwrap_or("viewer"),
         "price": payload.get("superchat_price").and_then(Value::as_i64).unwrap_or(0),
         "content": payload.get("content").and_then(Value::as_str).unwrap_or(""),
         "translation": "",
-        "uid": payload.get("sender_uid").and_then(Value::as_u64).map(|v| v.to_string()).unwrap_or_default(),
+        "uid": uid,
         "privilegeType": payload.get("sender_guard_level").and_then(Value::as_i64).unwrap_or(0),
         "medalLevel": 0,
         "medalName": "",
     })
 }
 
-fn normalize_avatar_url(avatar_url: &str) -> String {
-    let trimmed = avatar_url.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    if let Some(without_scheme) = trimmed
-        .strip_prefix("https://")
-        .or_else(|| trimmed.strip_prefix("http://"))
-    {
-        return format!("//{without_scheme}");
-    }
-    trimmed.to_string()
-}
+
+

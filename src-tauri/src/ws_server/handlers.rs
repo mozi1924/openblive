@@ -86,6 +86,71 @@ pub(in crate::ws_server) async fn text_emoticon_mappings_handler(
     response
 }
 
+#[derive(serde::Deserialize, Default)]
+pub(in crate::ws_server) struct AvatarUrlQuery {
+    pub token: Option<String>,
+    pub uid: Option<String>,
+    #[allow(dead_code)]
+    pub username: Option<String>,
+    pub face: Option<String>,
+}
+
+pub(in crate::ws_server) async fn avatar_url_handler(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Query(query): Query<AvatarUrlQuery>,
+    State(state): State<Arc<WsServerRuntimeState>>,
+) -> Response {
+    use tauri::Manager;
+    use crate::state::AppState;
+
+    if !is_authorized(&headers, query.token.as_deref(), addr, &state) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+
+    let app_state = state.app.state::<AppState>();
+    let uid = query.uid.as_deref().unwrap_or("").trim();
+    let face = query.face.as_deref().unwrap_or("").trim();
+
+    if !uid.is_empty() {
+        if let Some(cached) = crate::avatar::load_cached_face_data_url(&app_state.config_path, uid) {
+            let mut resp = Json(json!({ "avatarUrl": cached })).into_response();
+            resp.headers_mut().insert(
+                "cache-control",
+                HeaderValue::from_static("private, max-age=86400"),
+            );
+            return resp;
+        }
+    }
+
+    let fallback_face = if face.is_empty() { None } else { Some(face) };
+    if !uid.is_empty() || fallback_face.is_some() {
+        if let Ok(Some(data_url)) = crate::avatar::resolve_and_cache_face_data_url(
+            &app_state.client,
+            &app_state.config_path,
+            uid,
+            fallback_face,
+        )
+        .await
+        {
+            let mut resp = Json(json!({ "avatarUrl": data_url })).into_response();
+            resp.headers_mut().insert(
+                "cache-control",
+                HeaderValue::from_static("private, max-age=86400"),
+            );
+            return resp;
+        }
+    }
+
+    let mut resp = Json(json!({ "avatarUrl": super::constants::COMPAT_DEFAULT_AVATAR_URL })).into_response();
+    resp.headers_mut().insert(
+        "cache-control",
+        HeaderValue::from_static("private, max-age=86400"),
+    );
+    resp
+}
+
+
 pub(in crate::ws_server) async fn raw_ws_handler(
     ws: WebSocketUpgrade,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,

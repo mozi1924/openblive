@@ -10,9 +10,11 @@ use tokio::sync::{broadcast, oneshot};
 use crate::state::AppState;
 
 use super::handlers::{
-    chat_ws_handler, overlay_asset_handler, overlay_index_handler, raw_ws_handler,
-    rest_action_path_handler, rest_action_post_handler, text_emoticon_mappings_handler,
+    avatar_url_handler, chat_ws_handler, overlay_asset_handler, overlay_index_handler,
+    raw_ws_handler, rest_action_path_handler, rest_action_post_handler,
+    text_emoticon_mappings_handler,
 };
+
 use super::net::{normalize_listen_addr, resolve_bind_addr};
 use super::types::{WsServerConfig, WsServerRuntimeState};
 
@@ -162,6 +164,7 @@ async fn run_ws_server(
         .route("/overlay", get(overlay_index_handler))
         .route("/overlay/{*path}", get(overlay_asset_handler))
         .route("/api/chat", get(chat_ws_handler))
+        .route("/api/avatar_url", get(avatar_url_handler))
         .route(
             "/api/text_emoticon_mappings",
             get(text_emoticon_mappings_handler),

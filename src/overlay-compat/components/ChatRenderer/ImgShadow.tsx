@@ -23,6 +23,7 @@ export default function ImgShadow({ imgUrl, height, width, id, className }: ImgS
     }
   };
 
+
   const classes = ["no-transition", className].filter(Boolean).join(" ");
 
   return (

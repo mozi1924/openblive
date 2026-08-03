@@ -14,7 +14,8 @@ const COMMAND_FATAL_ERROR = 8;
 
 const CONTENT_TYPE_EMOTICON = 1;
 
-const RECEIVE_TIMEOUT = 15 * 1000;
+const RECEIVE_TIMEOUT = 45 * 1000;
+const HEARTBEAT_INTERVAL = 15 * 1000;
 
 export default class ChatClientRelay {
   roomKey: { type: number; value: string | number };
@@ -25,6 +26,7 @@ export default class ChatClientRelay {
   totalRetryCount: number;
   isDestroying: boolean;
   receiveTimeoutTimerId: any;
+  heartbeatTimerId: any;
 
   constructor(roomKey: { type: number; value: string | number }, autoTranslate: boolean) {
     this.roomKey = roomKey;
@@ -37,6 +39,7 @@ export default class ChatClientRelay {
     this.totalRetryCount = 0;
     this.isDestroying = false;
     this.receiveTimeoutTimerId = null;
+    this.heartbeatTimerId = null;
   }
 
   start() {
@@ -45,8 +48,20 @@ export default class ChatClientRelay {
 
   stop() {
     this.isDestroying = true;
+    this.clearTimers();
     if (this.websocket) {
       this.websocket.close();
+    }
+  }
+
+  clearTimers() {
+    if (this.receiveTimeoutTimerId) {
+      window.clearTimeout(this.receiveTimeoutTimerId);
+      this.receiveTimeoutTimerId = null;
+    }
+    if (this.heartbeatTimerId) {
+      window.clearInterval(this.heartbeatTimerId);
+      this.heartbeatTimerId = null;
     }
   }
 
@@ -99,6 +114,22 @@ export default class ChatClientRelay {
       );
     }
     this.refreshReceiveTimeoutTimer();
+    this.startHeartbeatTimer();
+  }
+
+  startHeartbeatTimer() {
+    if (this.heartbeatTimerId) {
+      window.clearInterval(this.heartbeatTimerId);
+    }
+    this.heartbeatTimerId = window.setInterval(() => {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        this.websocket.send(
+          JSON.stringify({
+            cmd: COMMAND_HEARTBEAT,
+          })
+        );
+      }
+    }, HEARTBEAT_INTERVAL);
   }
 
   refreshReceiveTimeoutTimer() {
@@ -126,10 +157,7 @@ export default class ChatClientRelay {
     this.addDebugMsg("Disconnected");
 
     this.websocket = null;
-    if (this.receiveTimeoutTimerId) {
-      window.clearTimeout(this.receiveTimeoutTimerId);
-      this.receiveTimeoutTimerId = null;
-    }
+    this.clearTimers();
 
     if (this.isDestroying) {
       return;
@@ -164,13 +192,6 @@ export default class ChatClientRelay {
     switch (cmd) {
       case COMMAND_HEARTBEAT: {
         this.refreshReceiveTimeoutTimer();
-        if (this.websocket) {
-          this.websocket.send(
-            JSON.stringify({
-              cmd: COMMAND_HEARTBEAT,
-            })
-          );
-        }
         break;
       }
       case COMMAND_ADD_TEXT: {
@@ -242,6 +263,9 @@ export default class ChatClientRelay {
 
     if (cmd !== COMMAND_FATAL_ERROR) {
       this.retryCount = 0;
+      this.totalRetryCount = 0;
+      this.refreshReceiveTimeoutTimer();
     }
   }
 }
+
