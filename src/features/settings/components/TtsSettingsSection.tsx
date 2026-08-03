@@ -3,6 +3,7 @@ import {
   Volume2,
   VolumeX,
   Play,
+  Square,
   Mic,
   Sliders,
   AudioLines,
@@ -13,10 +14,11 @@ import {
   UserCheck,
   ChevronDown,
 } from "lucide-react";
-import type { AppConfig, TtsVoice } from "../../../types/studio";
+import type { AppConfig, TtsPlaybackEvent, TtsVoice } from "../../../types/studio";
 import type { LocaleSetting } from "../../../utils/i18n";
 import { t } from "../../../utils/i18n";
 import { studioApi } from "../../../services/studioApi";
+import { useTauriEvent } from "../../../hooks/useTauriEvent";
 import {
   DEFAULT_TTS_VOICE,
   DEFAULT_TTS_RATE,
@@ -31,30 +33,18 @@ type TtsSettingsSectionProps = {
   onChangeConfig: <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => void;
 };
 
-const RATE_OPTIONS = [
-  { label: "-50%", value: "-50%" },
-  { label: "-25%", value: "-25%" },
-  { label: "-10%", value: "-10%" },
-  { label: "正常 (0%)", value: "+0%" },
-  { label: "+10%", value: "+10%" },
-  { label: "+25%", value: "+25%" },
-  { label: "+50%", value: "+50%" },
-  { label: "+100%", value: "+100%" },
-];
+const RATE_VALUES = ["-50%", "-25%", "-10%", "+0%", "+10%", "+25%", "+50%", "+100%"];
 
-const PITCH_OPTIONS = [
-  { label: "-10Hz", value: "-10Hz" },
-  { label: "-5Hz", value: "-5Hz" },
-  { label: "正常 (0Hz)", value: "+0Hz" },
-  { label: "+5Hz", value: "+5Hz" },
-  { label: "+10Hz", value: "+10Hz" },
-];
+const PITCH_VALUES = ["-10Hz", "-5Hz", "+0Hz", "+5Hz", "+10Hz"];
 
 const optionCardClass =
   "flex min-h-20 items-start rounded-xl border p-3.5 text-left transition-all duration-200";
 
 const selectClass =
   "h-10 w-full appearance-none rounded-lg border border-white/8 bg-[#0b111c] px-3.5 pr-9 text-xs text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:border-white/12 focus:border-bili-blue/40 focus:outline-none cursor-pointer";
+
+const inputClass =
+  "w-full rounded-lg border border-white/8 bg-[#090b0f] px-3.5 py-2.5 text-xs text-white outline-none transition-all hover:border-white/12 focus:border-bili-blue/40";
 
 export function TtsSettingsSection({
   locale,
@@ -63,7 +53,8 @@ export function TtsSettingsSection({
 }: TtsSettingsSectionProps) {
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [devices, setDevices] = useState<string[]>([]);
-  const [testing, setTesting] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [testText, setTestText] = useState(() => t(locale, "ui.settings.tts.test.placeholder"));
 
   const loadData = useCallback(async () => {
     try {
@@ -86,19 +77,45 @@ export function TtsSettingsSection({
     void loadData();
   }, [loadData]);
 
-  const handleTestSpeech = async () => {
-    if (testing) return;
-    setTesting(true);
+  // Reflect backend playback state: the test button turns into "playing"
+  // only after the backend actually started a test speech, and reverts when
+  // the speech finishes naturally or is stopped.
+  useTauriEvent(studioApi.listenTtsPlayback, (event: TtsPlaybackEvent) => {
+    if (event.playing) {
+      setPlaying(event.source === "test");
+    } else {
+      setPlaying(false);
+    }
+  });
+
+  const handlePlayTest = async () => {
     try {
-      await studioApi.testTtsSpeech(
-        "这是一条直播信息流朗读测试消息，用于验证当前发音人和声音设置。",
-      );
+      await studioApi.testTtsSpeech(testText.trim() || t(locale, "ui.settings.tts.test.placeholder"));
     } catch {
       // ignore
-    } finally {
-      setTimeout(() => setTesting(false), 1500);
     }
   };
+
+  const handleStopTest = async () => {
+    setPlaying(false);
+    try {
+      await studioApi.stopTtsSpeech();
+    } catch {
+      // ignore
+    }
+  };
+
+  const rateOptions = RATE_VALUES.map((value) => ({
+    value,
+    label:
+      value === "+0%" ? t(locale, "ui.settings.tts.rate.normal") : value,
+  }));
+
+  const pitchOptions = PITCH_VALUES.map((value) => ({
+    value,
+    label:
+      value === "+0Hz" ? t(locale, "ui.settings.tts.pitch.normal") : value,
+  }));
 
   return (
     <section className="space-y-4.5 p-5">
@@ -237,7 +254,7 @@ export function TtsSettingsSection({
                   onChange={(e) => onChangeConfig("tts_rate", e.target.value)}
                   className={selectClass}
                 >
-                  {RATE_OPTIONS.map((opt) => (
+                  {rateOptions.map((opt) => (
                     <option key={opt.value} value={opt.value} className="bg-[#090b0f]">
                       {opt.label}
                     </option>
@@ -259,7 +276,7 @@ export function TtsSettingsSection({
                   onChange={(e) => onChangeConfig("tts_pitch", e.target.value)}
                   className={selectClass}
                 >
-                  {PITCH_OPTIONS.map((opt) => (
+                  {pitchOptions.map((opt) => (
                     <option key={opt.value} value={opt.value} className="bg-[#090b0f]">
                       {opt.label}
                     </option>
@@ -385,21 +402,48 @@ export function TtsSettingsSection({
           </div>
 
           {/* Test Speech Action Row */}
-          <div className="border-t border-white/6 pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <p className="text-[10px] font-medium text-gray-500">
-              {t(locale, "ui.settings.tts.test.desc")}
-            </p>
-            <button
-              type="button"
-              onClick={() => void handleTestSpeech()}
-              disabled={testing}
-              className="flex h-9 min-w-[110px] items-center justify-center rounded-lg border border-bili-blue/30 bg-bili-blue/10 px-4 text-xs font-bold text-bili-blue transition-all hover:bg-bili-blue/20 active:scale-95 disabled:opacity-50"
-            >
-              <Play className="mr-1.5 h-3.5 w-3.5 fill-current shrink-0" />
-              {testing
-                ? t(locale, "ui.settings.tts.test.testing")
-                : t(locale, "ui.settings.tts.test.btn")}
-            </button>
+          <div className="space-y-3 border-t border-white/6 pt-4">
+            <label className="flex flex-col gap-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide text-gray-400 uppercase">
+                <Play className="h-3.5 w-3.5 text-bili-blue" />
+                {t(locale, "ui.settings.tts.test.text")}
+              </span>
+              <input
+                className={inputClass}
+                value={testText}
+                onChange={(event) => setTestText(event.target.value)}
+                placeholder={t(locale, "ui.settings.tts.test.placeholder")}
+              />
+            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-[10px] font-medium text-gray-500">
+                {t(locale, "ui.settings.tts.test.desc")}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (playing) {
+                    void handleStopTest();
+                  } else {
+                    void handlePlayTest();
+                  }
+                }}
+                className={`flex h-9 min-w-[110px] items-center justify-center rounded-lg border px-4 text-xs font-bold transition-all active:scale-95 ${
+                  playing
+                    ? "border-red-500/40 bg-red-500/15 text-red-400 hover:bg-red-500/25"
+                    : "border-bili-blue/30 bg-bili-blue/10 text-bili-blue hover:bg-bili-blue/20"
+                }`}
+              >
+                {playing ? (
+                  <Square className="mr-1.5 h-3 w-3 fill-current shrink-0" />
+                ) : (
+                  <Play className="mr-1.5 h-3.5 w-3.5 fill-current shrink-0" />
+                )}
+                {playing
+                  ? t(locale, "ui.settings.tts.test.stop")
+                  : t(locale, "ui.settings.tts.test.play")}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
 
 pub const STUDIO_STATE_EVENT_NAME: &str = "studio-state";
+pub const TTS_PLAYBACK_EVENT_NAME: &str = "tts-playback";
 
 #[derive(Clone, Serialize)]
 pub struct StudioStateEvent {
@@ -54,6 +55,16 @@ pub async fn emit_runtime_snapshot(app: &AppHandle, state: &AppState, source: &s
             "obs_ws_last_checked_at": obs_ws_last_checked_at,
             "linkage_status": linkage,
             "online_rank": last_online_rank,
+        }),
+    );
+}
+
+pub fn emit_tts_playback_state(app: &AppHandle, playing: bool, source: &str) {
+    let _ = app.emit(
+        TTS_PLAYBACK_EVENT_NAME,
+        json!({
+            "playing": playing,
+            "source": source,
         }),
     );
 }

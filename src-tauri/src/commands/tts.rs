@@ -33,3 +33,9 @@ pub async fn test_tts_speech(state: State<'_, AppState>, req: Option<TestTtsReq>
     tts::enqueue_test_speech(&config, text);
     Ok(wrap_ok(json!({ "status": "ok" })))
 }
+
+#[tauri::command]
+pub fn stop_tts_speech() -> CmdResult {
+    tts::stop_tts();
+    Ok(wrap_ok(json!({ "status": "ok" })))
+}

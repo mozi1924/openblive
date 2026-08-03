@@ -4,6 +4,7 @@ use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use rodio::{Decoder, OutputStream, Sink};
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use tokio::sync::mpsc;
 
@@ -23,10 +24,57 @@ pub struct TtsSpeechTask {
     pub pitch: String,
     pub volume: u8,
     pub device: String,
+    /// Where the task came from: "test" or "danmu".
+    pub source: String,
+    /// Generation counter used to invalidate queued tasks after a stop.
+    pub epoch: u64,
 }
 
 static TTS_TX: OnceLock<mpsc::Sender<TtsSpeechTask>> = OnceLock::new();
 static CLIENT_CACHE: OnceLock<Arc<Mutex<Option<EdgeTtsClient>>>> = OnceLock::new();
+
+/// App handle used to emit `tts-playback` state events to the frontend.
+static TTS_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
+/// Sink of the speech that is currently being played (if any). Lets a
+/// `stop` request abort playback immediately instead of only draining the
+/// queue.
+static CURRENT_SINK: OnceLock<Arc<Mutex<Option<Arc<Sink>>>>> = OnceLock::new();
+
+/// Generation counter. Bumped on every stop / test replay so tasks queued
+/// before the stop are skipped by the worker and never played.
+static PLAY_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+pub fn set_app_handle(app: &tauri::AppHandle) {
+    let _ = TTS_APP.set(app.clone());
+}
+
+fn emit_playback_state(playing: bool, source: &str) {
+    if let Some(app) = TTS_APP.get() {
+        crate::state_event::emit_tts_playback_state(app, playing, source);
+    }
+}
+
+fn get_current_sink() -> &'static Arc<Mutex<Option<Arc<Sink>>>> {
+    CURRENT_SINK.get_or_init(|| Arc::new(Mutex::new(None)))
+}
+
+fn stop_current_sink() {
+    if let Ok(guard) = get_current_sink().lock() {
+        if let Some(sink) = guard.as_ref() {
+            sink.stop();
+        }
+    }
+}
+
+/// Stops any currently playing speech (not paused) and invalidates all tasks
+/// still waiting in the queue. The next `enqueue_test_speech` call plays
+/// from the start again.
+pub fn stop_tts() {
+    PLAY_EPOCH.fetch_add(1, Ordering::SeqCst);
+    stop_current_sink();
+    emit_playback_state(false, "test");
+}
 
 fn get_client_cache() -> &'static Arc<Mutex<Option<EdgeTtsClient>>> {
     CLIENT_CACHE.get_or_init(|| Arc::new(Mutex::new(None)))
@@ -57,9 +105,17 @@ pub fn init_tts_worker() {
             if task.text.trim().is_empty() {
                 continue;
             }
+            // Tasks enqueued before a stop were invalidated; skip them so a
+            // stale queue can never start playing again after a stop.
+            if task.epoch != PLAY_EPOCH.load(Ordering::SeqCst) {
+                continue;
+            }
+            emit_playback_state(true, &task.source);
+            let source = task.source.clone();
             if let Err(err) = process_speech_task(task).await {
                 crate::runtime_warn!("[tts] speech processing error: {err}");
             }
+            emit_playback_state(false, &source);
         }
     });
 }
@@ -107,6 +163,12 @@ async fn process_speech_task(task: TtsSpeechTask) -> Result<()> {
         return Ok(());
     }
 
+    // A stop may have been requested while this task was synthesizing;
+    // skip playback so a stopped test never starts playing late.
+    if task.epoch != PLAY_EPOCH.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+
     let device_name = task.device.clone();
     let volume = task.volume;
     let audio_bytes = audio_data.audio;
@@ -146,8 +208,14 @@ fn play_audio_bytes(bytes: &[u8], device_name: &str, volume_pct: u8) -> Result<(
             .map_err(|e| anyhow!("Failed to open default audio output stream: {e}"))?,
     };
 
-    let sink = Sink::try_new(&stream_handle)
-        .map_err(|e| anyhow!("Failed to create audio Sink: {e}"))?;
+    let sink = Arc::new(
+        Sink::try_new(&stream_handle).map_err(|e| anyhow!("Failed to create audio Sink: {e}"))?,
+    );
+
+    // Register the sink so a stop request can abort playback immediately.
+    if let Ok(mut guard) = get_current_sink().lock() {
+        *guard = Some(sink.clone());
+    }
 
     let cursor = Cursor::new(bytes.to_vec());
     let source = Decoder::new(cursor).map_err(|e| anyhow!("Failed to decode MP3 audio: {e}"))?;
@@ -156,6 +224,10 @@ fn play_audio_bytes(bytes: &[u8], device_name: &str, volume_pct: u8) -> Result<(
     sink.set_volume(vol);
     sink.append(source);
     sink.sleep_until_end();
+
+    if let Ok(mut guard) = get_current_sink().lock() {
+        *guard = None;
+    }
 
     Ok(())
 }
@@ -173,6 +245,8 @@ pub fn enqueue_speech(config: &crate::models::PersistConfig, text: String) {
             pitch: config.tts_pitch.clone(),
             volume: config.tts_volume,
             device: config.tts_device.clone(),
+            source: "danmu".to_string(),
+            epoch: PLAY_EPOCH.load(Ordering::SeqCst),
         };
         let _ = tx.try_send(task);
     }
@@ -180,6 +254,10 @@ pub fn enqueue_speech(config: &crate::models::PersistConfig, text: String) {
 
 pub fn enqueue_test_speech(config: &crate::models::PersistConfig, custom_text: Option<String>) {
     init_tts_worker();
+    // Invalidate any still-queued speech and cut off the current playback so
+    // the test speech starts right away (fresh from the beginning).
+    let epoch = PLAY_EPOCH.fetch_add(1, Ordering::SeqCst) + 1;
+    stop_current_sink();
     if let Some(tx) = TTS_TX.get() {
         let text = custom_text
             .filter(|t| !t.trim().is_empty())
@@ -191,6 +269,8 @@ pub fn enqueue_test_speech(config: &crate::models::PersistConfig, custom_text: O
             pitch: config.tts_pitch.clone(),
             volume: config.tts_volume,
             device: config.tts_device.clone(),
+            source: "test".to_string(),
+            epoch,
         };
         let _ = tx.try_send(task);
     }

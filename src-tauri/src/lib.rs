@@ -37,7 +37,7 @@ use commands::{
     show_danmu_overlay, start_danmu_monitor, start_live_flow, stop_danmu_monitor, stop_live_flow,
     switch_account, sync_live_room_profile, sync_live_status, terminate_live_vote, update_area, update_live_cover, update_live_tags, update_room_news, update_title,
     upload_live_cover, get_cover_data_url, upload_live_cover_file,
-    get_tts_voices, get_audio_output_devices, test_tts_speech,
+    get_tts_voices, get_audio_output_devices, test_tts_speech, stop_tts_speech,
 };
 use config::{config_path, load_config};
 use crypto::get_or_create_master_key;
@@ -128,6 +128,8 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             ensure_macos_main_window_titlebar_overlay(app.handle());
+
+            crate::tts::set_app_handle(app.handle());
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -286,7 +288,8 @@ pub fn run() {
             clear_app_logs,
             get_tts_voices,
             get_audio_output_devices,
-            test_tts_speech
+            test_tts_speech,
+            stop_tts_speech
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

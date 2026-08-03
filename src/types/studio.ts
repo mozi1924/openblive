@@ -20,6 +20,7 @@ export const EVENT_NAMES = {
   APP_LOG: "app-log",
   STUDIO_STATE: "studio-state",
   DANMU_OVERLAY_SETTINGS: "danmu-overlay-settings",
+  TTS_PLAYBACK: "tts-playback",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];
@@ -89,6 +90,11 @@ export type TtsVoice = {
   friendly_name: string;
   locale: string;
   gender: string;
+};
+
+export type TtsPlaybackEvent = {
+  playing: boolean;
+  source: "test" | "danmu" | string;
 };
 
 export type DanmuOverlaySettingsEvent = {

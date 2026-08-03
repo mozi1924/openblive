@@ -8,6 +8,7 @@ import {
   DanmuAvatarResolvedEvent,
   DanmuMsg,
   DanmuOverlaySettingsEvent,
+  TtsPlaybackEvent,
   LinkageStatus,
   LiveFlowResp,
   LiveEmoticonPackage,
@@ -197,6 +198,7 @@ export const studioApi = {
   getTtsVoices: () => invokeCommand<{ voices: import("../types/studio").TtsVoice[] }>("get_tts_voices"),
   getAudioOutputDevices: () => invokeCommand<{ devices: string[] }>("get_audio_output_devices"),
   testTtsSpeech: (text?: string) => invokeCommand("test_tts_speech", { req: { text: text || null } }),
+  stopTtsSpeech: () => invokeCommand("stop_tts_speech"),
   listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
     listen<DanmuMsg>(EVENT_NAMES.DANMU_MESSAGE, (event) => handler(event.payload)),
   listenDanmuAvatarResolved: (handler: (payload: DanmuAvatarResolvedEvent) => void) =>
@@ -211,4 +213,6 @@ export const studioApi = {
     listen<DanmuOverlaySettingsEvent>(EVENT_NAMES.DANMU_OVERLAY_SETTINGS, (event) =>
       handler(event.payload),
     ),
+  listenTtsPlayback: (handler: (payload: TtsPlaybackEvent) => void) =>
+    listen<TtsPlaybackEvent>(EVENT_NAMES.TTS_PLAYBACK, (event) => handler(event.payload)),
 };
