@@ -41,7 +41,7 @@ use danmu::{
 use dashboard::get_live_dashboard_snapshot_inner;
 pub use flow::{start_live_flow_inner, stop_live_flow_inner};
 pub(crate) use linkage::obs_ws_probe;
-use profile_api::{
+pub(crate) use profile_api::{
     add_live_tag as add_live_tag_inner, create_live_reserve as create_live_reserve_inner,
     get_cover_data_url as get_cover_data_url_inner,
     get_live_cover_advice as get_live_cover_advice_inner,
@@ -52,13 +52,13 @@ use profile_api::{
     update_title as update_title_inner, upload_live_cover as upload_live_cover_inner,
     upload_live_cover_file as upload_live_cover_file_inner,
 };
-use profile_sync::{
+pub(crate) use profile_sync::{
     sync_live_room_profile as sync_live_room_profile_inner,
     sync_live_status as sync_live_status_inner,
 };
 pub use profile_sync::{sync_live_room_profile_runtime, sync_live_status_runtime};
 use session::resolve_room_scoped_auth_context;
-use user_manage::{
+pub(crate) use user_manage::{
     add_black_user_inner, add_room_admin_inner, add_silent_user_inner, get_black_user_list_inner,
     get_room_admin_list_inner, get_silent_user_list_inner, remove_black_user_inner,
     remove_room_admin_inner, remove_silent_user_inner,
@@ -164,11 +164,8 @@ pub async fn update_room_news(req: UpdateRoomNewsReq, state: State<'_, AppState>
 }
 
 #[tauri::command]
-pub async fn create_live_reserve(
-    req: CreateLiveReserveReq,
-    state: State<'_, AppState>,
-) -> CmdResult {
-    create_live_reserve_inner(req, state).await
+pub async fn create_live_reserve(req: CreateLiveReserveReq, state: State<'_, AppState>) -> CmdResult {
+    create_live_reserve_inner(req, &state).await
 }
 
 #[tauri::command]
@@ -242,8 +239,7 @@ pub async fn stop_live_flow(app: AppHandle, state: State<'_, AppState>) -> CmdRe
     stop_live_flow_inner(&app, &state).await
 }
 
-#[tauri::command]
-pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult {
+pub async fn send_danmu_inner(req: DanmuReq, state: &AppState) -> CmdResult {
     let (_uid, room_id, csrf, cookie) = {
         let runtime = state.runtime.lock().await;
         resolve_room_scoped_auth_context(&runtime, true)?
@@ -289,7 +285,7 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
-                &state,
+                state,
                 &format!("send_danmu code={code}, msg={}", error_message(&value, "")),
             )
             .await;
@@ -300,7 +296,11 @@ pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult 
 }
 
 #[tauri::command]
-pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
+pub async fn send_danmu(req: DanmuReq, state: State<'_, AppState>) -> CmdResult {
+    send_danmu_inner(req, &state).await
+}
+
+pub async fn get_live_emoticons_inner(state: &AppState) -> CmdResult {
     let (_uid, room_id, _csrf, cookie) = {
         let runtime = state.runtime.lock().await;
         resolve_room_scoped_auth_context(&runtime, false)?
@@ -330,7 +330,7 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
-                &state,
+                state,
                 &format!(
                     "get_live_emoticons code={code}, msg={}",
                     error_message(&value, "")
@@ -344,6 +344,11 @@ pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
             "i18n.live.error.fetch_live_emoticons_failed",
         ))
     }
+}
+
+#[tauri::command]
+pub async fn get_live_emoticons(state: State<'_, AppState>) -> CmdResult {
+    get_live_emoticons_inner(&state).await
 }
 
 #[tauri::command]
@@ -678,8 +683,7 @@ pub async fn remove_room_admin(req: RemoveRoomAdminReq, state: State<'_, AppStat
     remove_room_admin_inner(req, &state).await
 }
 
-#[tauri::command]
-pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>) -> CmdResult {
+pub async fn create_live_vote_inner(req: CreateLiveVoteReq, state: &AppState) -> CmdResult {
     if !(1..=9).contains(&req.duration) {
         return Err("i18n.live.error.invalid_vote_duration".into());
     }
@@ -738,7 +742,7 @@ pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
-                &state,
+                state,
                 &format!(
                     "create_live_vote code={code}, msg={}",
                     error_message(&value, "")
@@ -755,9 +759,13 @@ pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>
 }
 
 #[tauri::command]
-pub async fn terminate_live_vote(
+pub async fn create_live_vote(req: CreateLiveVoteReq, state: State<'_, AppState>) -> CmdResult {
+    create_live_vote_inner(req, &state).await
+}
+
+pub async fn terminate_live_vote_inner(
     req: TerminateLiveVoteReq,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> CmdResult {
     let (_uid, room_id, csrf, cookie) = {
         let runtime = state.runtime.lock().await;
@@ -792,7 +800,7 @@ pub async fn terminate_live_vote(
     } else {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
-                &state,
+                state,
                 &format!(
                     "terminate_live_vote code={code}, msg={}",
                     error_message(&value, "")
@@ -806,6 +814,14 @@ pub async fn terminate_live_vote(
             "i18n.live.error.terminate_live_vote_failed",
         ))
     }
+}
+
+#[tauri::command]
+pub async fn terminate_live_vote(
+    req: TerminateLiveVoteReq,
+    state: State<'_, AppState>,
+) -> CmdResult {
+    terminate_live_vote_inner(req, &state).await
 }
 
 #[tauri::command]

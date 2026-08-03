@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use super::constants::{RAW_DANMU_MAX_BUFFER, RAW_EVENT_DANMU};
 use super::types::{RawActionFrame, WsServerRuntimeState};
-use super::utils::{invoke_cmd, now_unix_secs};
+use super::utils::now_unix_secs;
 use crate::state::AppState;
 
 pub(in crate::ws_server) async fn raw_ws_session(
@@ -133,38 +133,9 @@ pub(in crate::ws_server) async fn raw_ws_session(
 async fn run_action(
     state: &WsServerRuntimeState,
     action: &str,
-    _params: Value,
+    params: Value,
 ) -> Result<Value, String> {
-    match action {
-        "live.start" => invoke_cmd(
-            crate::commands::start_live_flow_inner(&state.app, &state.app.state::<AppState>())
-                .await,
-        ),
-        "live.stop" => invoke_cmd(
-            crate::commands::stop_live_flow_inner(&state.app, &state.app.state::<AppState>()).await,
-        ),
-        "danmu.start" => invoke_cmd(
-            crate::commands::start_danmu_monitor_for_ws(&state.app, &state.app.state::<AppState>())
-                .await,
-        ),
-        "danmu.stop" => invoke_cmd(
-            crate::commands::stop_danmu_monitor_for_ws(&state.app.state::<AppState>()).await,
-        ),
-        "danmu.recent" => invoke_cmd(
-            crate::commands::get_recent_danmu_for_ws(&state.app.state::<AppState>()).await,
-        ),
-        "session.get" => {
-            let app_state = state.app.state::<AppState>();
-            let runtime = app_state.runtime.lock().await;
-            Ok(json!({
-                "session": runtime.session,
-                "danmu_running": runtime.danmu_task.is_some(),
-                "overlay_enabled": runtime.config.danmu_overlay_enabled,
-            }))
-        }
-        "server.ping" => Ok(json!({ "pong": true, "at": now_unix_secs() })),
-        _ => Err(format!("unknown action: {action}")),
-    }
+    super::action::dispatch_action(&state.app, action, params).await
 }
 
 pub(in crate::ws_server) async fn fetch_recent_danmu_messages_for_ws(

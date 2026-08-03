@@ -160,6 +160,21 @@ pub fn run() {
             });
             let app_handle_bg = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                let state = app_handle_bg.state::<AppState>();
+                let is_logged_in = {
+                    let runtime = state.runtime.lock().await;
+                    runtime.config.current_uid.is_some()
+                };
+                if is_logged_in {
+                    commands::sync_live_status_runtime(&state).await;
+                    if let Err(err) = commands::sync_live_room_profile_runtime(&state).await {
+                        crate::runtime_warn!("[startup][profile] sync failed: {err}");
+                    }
+                    if let Err(err) = commands::get_live_emoticons_inner(&state).await {
+                        crate::runtime_warn!("[startup][emoticons] preload failed: {err}");
+                    }
+                }
+
                 tokio::time::sleep(Duration::from_secs(3)).await;
                 let mut ticker = tokio::time::interval(Duration::from_secs(10));
                 let mut tick_count: u64 = 0;

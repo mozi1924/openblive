@@ -902,7 +902,7 @@ pub(crate) async fn update_room_news(
 
 pub(crate) async fn create_live_reserve(
     req: CreateLiveReserveReq,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> CmdResult {
     let title = req.title.trim().to_string();
     if title.is_empty() {
@@ -955,7 +955,7 @@ pub(crate) async fn create_live_reserve(
     if code != 0 {
         if is_auth_invalid_code(code) {
             mark_current_user_login_invalid(
-                &state,
+                state,
                 &format!(
                     "create_live_reserve code={code}, msg={}",
                     error_message(&value, "")

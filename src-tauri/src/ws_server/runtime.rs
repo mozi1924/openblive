@@ -1,4 +1,4 @@
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use serde_json::Value;
 use std::net::SocketAddr;
@@ -11,7 +11,7 @@ use crate::state::AppState;
 
 use super::handlers::{
     chat_ws_handler, overlay_asset_handler, overlay_index_handler, raw_ws_handler,
-    text_emoticon_mappings_handler,
+    rest_action_path_handler, rest_action_post_handler, text_emoticon_mappings_handler,
 };
 use super::net::{normalize_listen_addr, resolve_bind_addr};
 use super::types::{WsServerConfig, WsServerRuntimeState};
@@ -165,6 +165,11 @@ async fn run_ws_server(
         .route(
             "/api/text_emoticon_mappings",
             get(text_emoticon_mappings_handler),
+        )
+        .route("/api/v1/action", post(rest_action_post_handler))
+        .route(
+            "/api/v1/action/{*action}",
+            get(rest_action_path_handler).post(rest_action_path_handler),
         )
         .route("/ws", get(raw_ws_handler))
         .with_state(shared_state);
