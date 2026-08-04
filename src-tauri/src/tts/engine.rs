@@ -1,10 +1,9 @@
 use anyhow::{anyhow, Result};
-use edge_tts_rust::{EdgeTtsClient, SpeakOptions, SynthesisEvent};
-use futures_util::StreamExt;
+use edge_tts_rust::{EdgeTtsClient, SpeakOptions};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::player::{play_streamed_chunks, AudioBuffer};
+use super::player::play_audio;
 use super::types::TtsSpeechTask;
 
 static CLIENT_CACHE: OnceLock<Arc<Mutex<Option<EdgeTtsClient>>>> = OnceLock::new();
@@ -19,12 +18,16 @@ pub fn get_or_create_client() -> Result<EdgeTtsClient> {
     if let Some(ref client) = *guard {
         return Ok(client.clone());
     }
-    let new_client = EdgeTtsClient::new().map_err(|e| anyhow!("Failed to init EdgeTtsClient: {e}"))?;
+    let new_client =
+        EdgeTtsClient::new().map_err(|e| anyhow!("Failed to init EdgeTtsClient: {e}"))?;
     *guard = Some(new_client.clone());
     Ok(new_client)
 }
 
-pub async fn process_speech_task(task: TtsSpeechTask, play_epoch: &'static AtomicU64) -> Result<()> {
+pub async fn process_speech_task(
+    task: TtsSpeechTask,
+    play_epoch: &'static AtomicU64,
+) -> Result<()> {
     let client = get_or_create_client()?;
 
     let defaults = SpeakOptions::default();
@@ -51,37 +54,25 @@ pub async fn process_speech_task(task: TtsSpeechTask, play_epoch: &'static Atomi
         ..Default::default()
     };
 
-    let mut stream = client
-        .stream(task.text.clone(), options)
+    // Do not expose the network stream directly to rodio. Rodio pulls samples on
+    // its real-time audio thread; a Read implementation that waits for the next
+    // websocket chunk can therefore starve the output callback and cause audible
+    // stutters. edge-tts-rust collects the websocket stream asynchronously here,
+    // then rodio receives an in-memory MP3 source with non-blocking reads.
+    let result = client
+        .synthesize(task.text.clone(), options)
         .await
-        .map_err(|e| anyhow!("TTS stream init error: {e}"))?;
+        .map_err(|e| anyhow!("TTS synthesis error: {e}"))?;
+
+    if task.epoch != play_epoch.load(Ordering::SeqCst) {
+        return Ok(());
+    }
 
     let device_name = task.device.clone();
     let volume = task.volume;
     let epoch = task.epoch;
 
-    let buffer = Arc::new(AudioBuffer::new());
-    let playback = tokio::task::spawn_blocking({
-        let buffer = buffer.clone();
-        move || play_streamed_chunks(buffer, epoch, play_epoch, &device_name, volume)
-    });
-
-    while let Some(event) = stream.next().await {
-        if epoch != play_epoch.load(Ordering::SeqCst) {
-            break;
-        }
-        let SynthesisEvent::Audio(chunk) = event
-            .map_err(|e| anyhow!("TTS stream read error: {e}"))?
-        else {
-            continue;
-        };
-        buffer.append(&chunk);
-    }
-    buffer.finish();
-
-    playback
-        .await
-        .map_err(|e| anyhow!("TTS playback task panicked: {e}"))??;
+    play_audio(result.audio, epoch, play_epoch, &device_name, volume)?;
 
     Ok(())
 }
