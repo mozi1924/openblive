@@ -45,6 +45,13 @@ const MANUAL_SAVE_APP_CONFIG_KEYS = [
   "tts_read_gift",
   "tts_read_superchat",
   "tts_read_interact",
+  "tts_priority_queue_enabled",
+  "tts_auto_priority_mode",
+  "tts_high_freq_threshold",
+  "tts_priority_guard",
+  "tts_priority_gift",
+  "tts_priority_superchat",
+  "tts_priority_high_rank",
 ] as const satisfies ReadonlyArray<keyof AppConfig>;
 
 type ManualSaveConfigKey = (typeof MANUAL_SAVE_APP_CONFIG_KEYS)[number];

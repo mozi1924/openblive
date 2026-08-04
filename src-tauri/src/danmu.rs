@@ -312,6 +312,10 @@ pub fn should_filter_danmu_message(config: &crate::models::PersistConfig, messag
     false
 }
 
+mod priority;
+
+use priority::resolve_tts_priority;
+
 fn maybe_enqueue_tts_speech(config: &crate::models::PersistConfig, message: &Value) {
     if !config.tts_enabled {
         return;
@@ -356,7 +360,8 @@ fn maybe_enqueue_tts_speech(config: &crate::models::PersistConfig, message: &Val
         _ => return,
     };
 
-    crate::tts::enqueue_speech(config, text_to_speak);
+    let priority = resolve_tts_priority(config, message);
+    crate::tts::enqueue_speech_with_priority(config, text_to_speak, priority);
 }
 
 pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {

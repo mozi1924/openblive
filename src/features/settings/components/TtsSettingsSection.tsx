@@ -13,6 +13,9 @@ import {
   Sparkles,
   UserCheck,
   ChevronDown,
+  Zap,
+  Shield,
+  Activity,
 } from "lucide-react";
 import type { AppConfig, TtsPlaybackEvent, TtsVoice } from "../../../types/studio";
 import type { LocaleSetting } from "../../../utils/i18n";
@@ -399,6 +402,243 @@ export function TtsSettingsSection({
                 </span>
               </button>
             </div>
+          </div>
+
+          {/* Priority Queue & Insertion Settings */}
+          <div className="border-t border-white/6 pt-4 space-y-3">
+            <div className="flex items-center space-x-2">
+              <Zap className="h-4 w-4 text-amber-400" />
+              <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+                {t(locale, "ui.settings.tts.priority.title")}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-gray-500">
+              {t(locale, "ui.settings.tts.priority.desc")}
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => onChangeConfig("tts_priority_queue_enabled", true)}
+                className={`${optionCardClass} ${
+                  appConfig.tts_priority_queue_enabled ?? true
+                    ? "border-amber-500/35 bg-amber-500/8 text-white"
+                    : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                }`}
+              >
+                <Zap
+                  className={`mr-3 mt-0.5 h-5 w-5 shrink-0 ${
+                    appConfig.tts_priority_queue_enabled ?? true ? "text-amber-400" : "text-gray-500"
+                  }`}
+                />
+                <div>
+                  <span className="block text-xs font-bold text-gray-200">
+                    {t(locale, "ui.settings.tts.priority.enable")}
+                  </span>
+                  <span className="mt-1 block text-[10px] font-medium leading-normal text-gray-500">
+                    {t(locale, "ui.settings.tts.priority.enable_desc")}
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onChangeConfig("tts_priority_queue_enabled", false)}
+                className={`${optionCardClass} ${
+                  !(appConfig.tts_priority_queue_enabled ?? true)
+                    ? "border-amber-500/35 bg-amber-500/8 text-white"
+                    : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                }`}
+              >
+                <Zap
+                  className={`mr-3 mt-0.5 h-5 w-5 shrink-0 ${
+                    !(appConfig.tts_priority_queue_enabled ?? true) ? "text-amber-400" : "text-gray-500"
+                  }`}
+                />
+                <div>
+                  <span className="block text-xs font-bold text-gray-200">
+                    {t(locale, "ui.settings.tts.priority.disable")}
+                  </span>
+                  <span className="mt-1 block text-[10px] font-medium leading-normal text-gray-500">
+                    {t(locale, "ui.settings.tts.priority.disable_desc")}
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {appConfig.tts_priority_queue_enabled ?? true ? (
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onChangeConfig("tts_priority_guard", !(appConfig.tts_priority_guard ?? true))}
+                  className={`flex items-start rounded-xl border p-3.5 text-left transition-all duration-200 ${
+                    appConfig.tts_priority_guard ?? true
+                      ? "border-amber-500/35 bg-amber-500/8 text-white"
+                      : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                  }`}
+                >
+                  <Shield className={`mr-3 h-4 w-4 shrink-0 mt-0.5 ${appConfig.tts_priority_guard ?? true ? "text-amber-400" : "text-gray-500"}`} />
+                  <div>
+                    <span className="block text-xs font-bold text-gray-200">
+                      {t(locale, "ui.settings.tts.priority.guard")}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-gray-500 leading-normal font-medium">
+                      {t(locale, "ui.settings.tts.priority.guard_desc")}
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onChangeConfig("tts_priority_gift", !(appConfig.tts_priority_gift ?? true))}
+                  className={`flex items-start rounded-xl border p-3.5 text-left transition-all duration-200 ${
+                    appConfig.tts_priority_gift ?? true
+                      ? "border-amber-500/35 bg-amber-500/8 text-white"
+                      : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                  }`}
+                >
+                  <Gift className={`mr-3 h-4 w-4 shrink-0 mt-0.5 ${appConfig.tts_priority_gift ?? true ? "text-amber-400" : "text-gray-500"}`} />
+                  <div>
+                    <span className="block text-xs font-bold text-gray-200">
+                      {t(locale, "ui.settings.tts.priority.gift")}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-gray-500 leading-normal font-medium">
+                      {t(locale, "ui.settings.tts.priority.gift_desc")}
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onChangeConfig("tts_priority_superchat", !(appConfig.tts_priority_superchat ?? true))}
+                  className={`flex items-start rounded-xl border p-3.5 text-left transition-all duration-200 ${
+                    appConfig.tts_priority_superchat ?? true
+                      ? "border-amber-500/35 bg-amber-500/8 text-white"
+                      : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                  }`}
+                >
+                  <Sparkles className={`mr-3 h-4 w-4 shrink-0 mt-0.5 ${appConfig.tts_priority_superchat ?? true ? "text-amber-400" : "text-gray-500"}`} />
+                  <div>
+                    <span className="block text-xs font-bold text-gray-200">
+                      {t(locale, "ui.settings.tts.priority.superchat")}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-gray-500 leading-normal font-medium">
+                      {t(locale, "ui.settings.tts.priority.superchat_desc")}
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onChangeConfig("tts_priority_high_rank", !(appConfig.tts_priority_high_rank ?? true))}
+                  className={`flex items-start rounded-xl border p-3.5 text-left transition-all duration-200 ${
+                    appConfig.tts_priority_high_rank ?? true
+                      ? "border-amber-500/35 bg-amber-500/8 text-white"
+                      : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                  }`}
+                >
+                  <UserCheck className={`mr-3 h-4 w-4 shrink-0 mt-0.5 ${appConfig.tts_priority_high_rank ?? true ? "text-amber-400" : "text-gray-500"}`} />
+                  <div>
+                    <span className="block text-xs font-bold text-gray-200">
+                      {t(locale, "ui.settings.tts.priority.high_rank")}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-gray-500 leading-normal font-medium">
+                      {t(locale, "ui.settings.tts.priority.high_rank_desc")}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* High Frequency Auto-Shedding */}
+          <div className="border-t border-white/6 pt-4 space-y-3">
+            <div className="flex items-center space-x-2">
+              <Activity className="h-4 w-4 text-sky-400" />
+              <span className="text-[10px] font-extrabold tracking-widest text-gray-400 uppercase">
+                {t(locale, "ui.settings.tts.auto_mode.title")}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-gray-500">
+              {t(locale, "ui.settings.tts.auto_mode.desc")}
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => onChangeConfig("tts_auto_priority_mode", true)}
+                className={`${optionCardClass} ${
+                  appConfig.tts_auto_priority_mode
+                    ? "border-sky-500/35 bg-sky-500/8 text-white"
+                    : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                }`}
+              >
+                <Activity
+                  className={`mr-3 mt-0.5 h-5 w-5 shrink-0 ${
+                    appConfig.tts_auto_priority_mode ? "text-sky-400" : "text-gray-500"
+                  }`}
+                />
+                <div>
+                  <span className="block text-xs font-bold text-gray-200">
+                    {t(locale, "ui.settings.tts.auto_mode.enable")}
+                  </span>
+                  <span className="mt-1 block text-[10px] font-medium leading-normal text-gray-500">
+                    {t(locale, "ui.settings.tts.auto_mode.enable_desc")}
+                  </span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onChangeConfig("tts_auto_priority_mode", false)}
+                className={`${optionCardClass} ${
+                  !appConfig.tts_auto_priority_mode
+                    ? "border-sky-500/35 bg-sky-500/8 text-white"
+                    : "border-white/5 bg-white/2 text-gray-400 hover:border-white/10 hover:bg-white/4"
+                }`}
+              >
+                <Activity
+                  className={`mr-3 mt-0.5 h-5 w-5 shrink-0 ${
+                    !appConfig.tts_auto_priority_mode ? "text-sky-400" : "text-gray-500"
+                  }`}
+                />
+                <div>
+                  <span className="block text-xs font-bold text-gray-200">
+                    {t(locale, "ui.settings.tts.auto_mode.disable")}
+                  </span>
+                  <span className="mt-1 block text-[10px] font-medium leading-normal text-gray-500">
+                    {t(locale, "ui.settings.tts.auto_mode.disable_desc")}
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {appConfig.tts_auto_priority_mode ? (
+              <div className="rounded-xl border border-white/6 bg-white/[0.02] px-4 py-4 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-gray-200">
+                      {t(locale, "ui.settings.tts.auto_mode.threshold")}
+                    </p>
+                    <p className="mt-1 text-[10px] text-gray-500 font-medium">
+                      {t(locale, "ui.settings.tts.auto_mode.threshold_desc")}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-[10px] font-extrabold text-sky-400">
+                    {appConfig.tts_high_freq_threshold ?? 3} {t(locale, "ui.settings.tts.auto_mode.unit")}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={appConfig.tts_high_freq_threshold ?? 3}
+                  onChange={(e) => onChangeConfig("tts_high_freq_threshold", Number(e.target.value))}
+                  className="mt-3 h-2 w-full cursor-pointer appearance-none rounded-full bg-white/8 accent-sky-400"
+                />
+              </div>
+            ) : null}
           </div>
 
           {/* Test Speech Action Row */}

@@ -631,6 +631,31 @@ fn apply_app_config_value(
         "tts_read_interact" => {
             runtime.config.tts_read_interact = value.as_bool().unwrap_or(false);
         }
+        "tts_priority_queue_enabled" => {
+            runtime.config.tts_priority_queue_enabled = value.as_bool().unwrap_or(true);
+        }
+        "tts_auto_priority_mode" => {
+            runtime.config.tts_auto_priority_mode = value.as_bool().unwrap_or(false);
+        }
+        "tts_high_freq_threshold" => {
+            let next_val = value
+                .as_u64()
+                .and_then(|raw| u32::try_from(raw).ok())
+                .unwrap_or(3);
+            runtime.config.tts_high_freq_threshold = next_val.clamp(1, 60);
+        }
+        "tts_priority_guard" => {
+            runtime.config.tts_priority_guard = value.as_bool().unwrap_or(true);
+        }
+        "tts_priority_gift" => {
+            runtime.config.tts_priority_gift = value.as_bool().unwrap_or(true);
+        }
+        "tts_priority_superchat" => {
+            runtime.config.tts_priority_superchat = value.as_bool().unwrap_or(true);
+        }
+        "tts_priority_high_rank" => {
+            runtime.config.tts_priority_high_rank = value.as_bool().unwrap_or(true);
+        }
         _ => return Err("i18n.system.error.unknown_config_key".into()),
     }
 

@@ -374,6 +374,20 @@ pub struct PersistConfig {
     pub tts_read_superchat: bool,
     #[serde(default = "default_tts_read_interact")]
     pub tts_read_interact: bool,
+    #[serde(default = "default_tts_priority_queue_enabled")]
+    pub tts_priority_queue_enabled: bool,
+    #[serde(default = "default_tts_auto_priority_mode")]
+    pub tts_auto_priority_mode: bool,
+    #[serde(default = "default_tts_high_freq_threshold")]
+    pub tts_high_freq_threshold: u32,
+    #[serde(default = "default_tts_priority_guard")]
+    pub tts_priority_guard: bool,
+    #[serde(default = "default_tts_priority_gift")]
+    pub tts_priority_gift: bool,
+    #[serde(default = "default_tts_priority_superchat")]
+    pub tts_priority_superchat: bool,
+    #[serde(default = "default_tts_priority_high_rank")]
+    pub tts_priority_high_rank: bool,
     #[serde(default = "default_live_client_version")]
     pub live_client_version: String,
     #[serde(default = "default_live_client_build")]
@@ -406,6 +420,13 @@ impl Default for PersistConfig {
             tts_read_gift: default_tts_read_gift(),
             tts_read_superchat: default_tts_read_superchat(),
             tts_read_interact: default_tts_read_interact(),
+            tts_priority_queue_enabled: default_tts_priority_queue_enabled(),
+            tts_auto_priority_mode: default_tts_auto_priority_mode(),
+            tts_high_freq_threshold: default_tts_high_freq_threshold(),
+            tts_priority_guard: default_tts_priority_guard(),
+            tts_priority_gift: default_tts_priority_gift(),
+            tts_priority_superchat: default_tts_priority_superchat(),
+            tts_priority_high_rank: default_tts_priority_high_rank(),
             live_control_mode: default_live_control_mode(),
             obs_ws_enabled: false,
             obs_ws_url: default_obs_ws_url(),
@@ -483,6 +504,34 @@ pub fn default_tts_read_superchat() -> bool {
 
 pub fn default_tts_read_interact() -> bool {
     false
+}
+
+pub fn default_tts_priority_queue_enabled() -> bool {
+    true
+}
+
+pub fn default_tts_auto_priority_mode() -> bool {
+    false
+}
+
+pub fn default_tts_high_freq_threshold() -> u32 {
+    3
+}
+
+pub fn default_tts_priority_guard() -> bool {
+    true
+}
+
+pub fn default_tts_priority_gift() -> bool {
+    true
+}
+
+pub fn default_tts_priority_superchat() -> bool {
+    true
+}
+
+pub fn default_tts_priority_high_rank() -> bool {
+    true
 }
 
 

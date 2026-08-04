@@ -80,6 +80,13 @@ export type AppConfig = {
   tts_read_gift: boolean;
   tts_read_superchat: boolean;
   tts_read_interact: boolean;
+  tts_priority_queue_enabled: boolean;
+  tts_auto_priority_mode: boolean;
+  tts_high_freq_threshold: number;
+  tts_priority_guard: boolean;
+  tts_priority_gift: boolean;
+  tts_priority_superchat: boolean;
+  tts_priority_high_rank: boolean;
   is_win32: boolean;
   is_macos: boolean;
   has_tray: boolean;
