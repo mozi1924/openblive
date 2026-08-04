@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
-use edge_tts_rust::{EdgeTtsClient, SpeakOptions};
+use edge_tts_rust::{EdgeTtsClient, SpeakOptions, SynthesisEvent};
+use futures_util::StreamExt;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use rodio::{Decoder, OutputStream, Sink};
 use serde::{Deserialize, Serialize};
-use std::io::Cursor;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::io::{Read, Seek, SeekFrom};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,7 +146,7 @@ async fn process_speech_task(task: TtsSpeechTask) -> Result<()> {
 
     // Note: `volume` is intentionally left at the crate default ("+0%") here.
     // The user-configurable `tts_volume` (0-100) is an absolute playback gain
-    // applied on the rodio Sink in `play_audio_bytes`, not an Edge TTS
+    // applied on the rodio Sink in `play_streamed_chunks`, not an Edge TTS
     // relative adjustment, so it is kept out of `SpeakOptions`.
     let options = SpeakOptions {
         voice: voice_name,
@@ -154,36 +155,139 @@ async fn process_speech_task(task: TtsSpeechTask) -> Result<()> {
         ..Default::default()
     };
 
-    let audio_data = client
-        .synthesize(&task.text, options)
+    // Stream the synthesis: audio chunks are appended to a shared buffer as
+    // they arrive and decoded by a single continuous MP3 decoder, so the
+    // utterance starts playing as soon as the prebuffer fills instead of
+    // waiting for the whole stream to be synthesized.
+    let mut stream = client
+        .stream(task.text.clone(), options)
         .await
-        .map_err(|e| anyhow!("TTS synthesize error: {e}"))?;
-
-    if audio_data.audio.is_empty() {
-        return Ok(());
-    }
-
-    // A stop may have been requested while this task was synthesizing;
-    // skip playback so a stopped test never starts playing late.
-    if task.epoch != PLAY_EPOCH.load(Ordering::SeqCst) {
-        return Ok(());
-    }
+        .map_err(|e| anyhow!("TTS stream init error: {e}"))?;
 
     let device_name = task.device.clone();
     let volume = task.volume;
-    let audio_bytes = audio_data.audio;
+    let epoch = task.epoch;
 
-    tokio::task::spawn_blocking(move || {
-        if let Err(err) = play_audio_bytes(&audio_bytes, &device_name, volume) {
-            crate::runtime_warn!("[tts] audio playback error: {err}");
+    let buffer = Arc::new(AudioBuffer::new());
+    let playback = tokio::task::spawn_blocking({
+        let buffer = buffer.clone();
+        move || play_streamed_chunks(buffer, epoch, &device_name, volume)
+    });
+
+    while let Some(event) = stream.next().await {
+        // A stop may have been requested while this task was streaming.
+        if epoch != PLAY_EPOCH.load(Ordering::SeqCst) {
+            break;
         }
-    })
-    .await?;
+        let SynthesisEvent::Audio(chunk) = event
+            .map_err(|e| anyhow!("TTS stream read error: {e}"))?
+        else {
+            continue;
+        };
+        buffer.append(&chunk);
+    }
+    // Signal EOF so the playback thread can finish decoding the tail.
+    buffer.finish();
+
+    playback
+        .await
+        .map_err(|e| anyhow!("TTS playback task panicked: {e}"))??;
 
     Ok(())
 }
 
-fn play_audio_bytes(bytes: &[u8], device_name: &str, volume_pct: u8) -> Result<()> {
+/// Prebuffer threshold in bytes. Edge TTS chunks are 720 B ≈ 0.12 s of audio
+/// at 24 kHz, so this is roughly 0.96 s of buffered audio — enough to absorb
+/// network jitter while keeping first-word latency far below buffering the
+/// whole utterance.
+const PREBUFFER_BYTES: usize = 5760;
+
+/// Grow-only byte buffer shared between the network loop (writer) and the
+/// playback thread (reader). Reads block until data is available or EOF.
+struct AudioBuffer {
+    data: Mutex<Vec<u8>>,
+    cond: Condvar,
+    eof: AtomicBool,
+}
+
+impl AudioBuffer {
+    fn new() -> Self {
+        Self {
+            data: Mutex::new(Vec::new()),
+            cond: Condvar::new(),
+            eof: AtomicBool::new(false),
+        }
+    }
+
+    fn append(&self, bytes: &[u8]) {
+        let mut data = self.data.lock().unwrap_or_else(|p| p.into_inner());
+        data.extend_from_slice(bytes);
+        self.cond.notify_all();
+    }
+
+    /// Signals end-of-stream; blocked readers return EOF instead of waiting.
+    fn finish(&self) {
+        self.eof.store(true, Ordering::SeqCst);
+        self.cond.notify_all();
+    }
+
+    /// Blocks until at least `min_bytes` have been appended or EOF is set.
+    fn wait_ready(&self, min_bytes: usize) {
+        let mut data = self.data.lock().unwrap_or_else(|p| p.into_inner());
+        while data.len() < min_bytes && !self.eof.load(Ordering::SeqCst) {
+            data = self.cond.wait(data).unwrap_or_else(|p| p.into_inner());
+        }
+    }
+}
+
+/// `Read + Seek` view over an `AudioBuffer`, consumed by the MP3 decoder.
+/// `seek` only moves within data received so far (the decoder probes and
+/// rewinds at the start; it never jumps ahead of the stream).
+struct StreamingAudioSource {
+    buffer: Arc<AudioBuffer>,
+    pos: usize,
+}
+
+impl Read for StreamingAudioSource {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            let mut data = self.buffer.data.lock().unwrap_or_else(|p| p.into_inner());
+            if self.pos < data.len() {
+                let n = out.len().min(data.len() - self.pos);
+                out[..n].copy_from_slice(&data[self.pos..self.pos + n]);
+                self.pos += n;
+                return Ok(n);
+            }
+            if self.buffer.eof.load(Ordering::SeqCst) {
+                return Ok(0);
+            }
+            data = self.buffer.cond.wait(data).unwrap_or_else(|p| p.into_inner());
+        }
+    }
+}
+
+impl Seek for StreamingAudioSource {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let data = self.buffer.data.lock().unwrap_or_else(|p| p.into_inner());
+        let len = data.len();
+        let new_pos = match pos {
+            SeekFrom::Start(p) => p as usize,
+            SeekFrom::Current(delta) => (self.pos as i64 + delta).max(0) as usize,
+            SeekFrom::End(delta) => (len as i64 + delta).max(0) as usize,
+        };
+        self.pos = new_pos.min(len);
+        Ok(self.pos as u64)
+    }
+}
+
+/// Opens the audio output, waits for the prebuffer, then decodes the shared
+/// byte buffer with a single continuous MP3 decoder so playback is gapless.
+fn play_streamed_chunks(
+    buffer: Arc<AudioBuffer>,
+    epoch: u64,
+    device_name: &str,
+    volume_pct: u8,
+) -> Result<()> {
     let host = rodio::cpal::default_host();
     let mut selected_device = None;
 
@@ -217,16 +321,32 @@ fn play_audio_bytes(bytes: &[u8], device_name: &str, volume_pct: u8) -> Result<(
         *guard = Some(sink.clone());
     }
 
-    let cursor = Cursor::new(bytes.to_vec());
-    let source = Decoder::new(cursor).map_err(|e| anyhow!("Failed to decode MP3 audio: {e}"))?;
-
     let vol = (volume_pct.min(100) as f32) / 100.0;
     sink.set_volume(vol);
-    sink.append(source);
+
+    // Wait for enough audio before starting so network bursts cannot starve
+    // the sink mid-playback.
+    buffer.wait_ready(PREBUFFER_BYTES);
+
+    // A stop may have been requested while prebuffering; do not start playing.
+    if epoch != PLAY_EPOCH.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+
+    let source = StreamingAudioSource {
+        buffer,
+        pos: 0,
+    };
+    let decoder =
+        Decoder::new_mp3(source).map_err(|e| anyhow!("Failed to create MP3 decoder: {e}"))?;
+    sink.append(decoder);
     sink.sleep_until_end();
 
+    // Release the sink slot, but only if it still points at this session.
     if let Ok(mut guard) = get_current_sink().lock() {
-        *guard = None;
+        if guard.as_ref().map(|s| Arc::ptr_eq(s, &sink)).unwrap_or(false) {
+            *guard = None;
+        }
     }
 
     Ok(())
