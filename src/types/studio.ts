@@ -108,6 +108,7 @@ export type DanmuOverlaySettingsEvent = {
   enabled: boolean;
   opacity: number;
   always_on_top: boolean;
+  is_wayland?: boolean;
 };
 
 export type DanmuAvatarResolvedEvent = {

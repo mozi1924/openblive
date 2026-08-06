@@ -71,7 +71,8 @@ fn overlay_settings_payload(config: &PersistConfig) -> serde_json::Value {
     json!({
         "enabled": config.danmu_overlay_enabled,
         "opacity": normalize_danmu_overlay_opacity(config.danmu_overlay_opacity),
-        "always_on_top": config.danmu_overlay_always_on_top
+        "always_on_top": config.danmu_overlay_always_on_top,
+        "is_wayland": is_wayland_session()
     })
 }
 
@@ -870,6 +871,7 @@ pub async fn set_danmu_overlay_pinned(
     pinned: bool,
     state: State<'_, AppState>,
 ) -> CmdResult {
+    let is_wayland = is_wayland_session();
     let config = {
         let mut runtime = state.runtime.lock().await;
         runtime.config.danmu_overlay_always_on_top = pinned;
@@ -881,7 +883,7 @@ pub async fn set_danmu_overlay_pinned(
         apply_overlay_window_config(&window, &config)?;
     }
 
-    Ok(wrap_ok(json!({ "always_on_top": pinned })))
+    Ok(wrap_ok(json!({ "always_on_top": pinned, "is_wayland": is_wayland })))
 }
 
 #[tauri::command]

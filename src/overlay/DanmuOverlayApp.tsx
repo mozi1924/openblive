@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pin, Send, SmilePlus, X } from "lucide-react";
+import { Info, Pin, Send, SmilePlus, X } from "lucide-react";
 import { studioApi } from "../services/studioApi";
 import type { AppConfig, LiveEmoticonPackage, StudioStateEvent, User } from "../types/studio";
 import { createLiveEmoticonIndex, createSelfDanmuMessage, resolveEmoticonStyle, shouldFilterDanmuMessage } from "../utils/danmu";
@@ -17,6 +17,8 @@ export function DanmuOverlayApp() {
   const [liveEmoticonsLoading, setLiveEmoticonsLoading] = useState(false);
   const [openPanel, setOpenPanel] = useState(false);
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  const [isWayland, setIsWayland] = useState(false);
+  const [showWaylandModal, setShowWaylandModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const headerDragRef = useRef<HTMLElement>(null);
@@ -136,6 +138,9 @@ export function DanmuOverlayApp() {
         : prev,
     );
     setAlwaysOnTop(payload.always_on_top);
+    if (typeof payload.is_wayland === "boolean") {
+      setIsWayland(payload.is_wayland);
+    }
   });
 
   useEffect(() => {
@@ -284,10 +289,18 @@ export function DanmuOverlayApp() {
             <button
               type="button"
               onClick={async () => {
+                if (isWayland) {
+                  setShowWaylandModal(true);
+                  return;
+                }
                 const nextValue = !alwaysOnTop;
                 setAlwaysOnTop(nextValue);
                 const res = await studioApi.setDanmuOverlayPinned(nextValue);
-                if (res.code !== 0) {
+                if (res.code === 0 && (res.data as { is_wayland?: boolean })?.is_wayland) {
+                  setIsWayland(true);
+                  setAlwaysOnTop(false);
+                  setShowWaylandModal(true);
+                } else if (res.code !== 0) {
                   setAlwaysOnTop((prev) => !prev);
                 }
               }}
@@ -484,6 +497,73 @@ export function DanmuOverlayApp() {
             </div>
           </div>
         </div>
+
+        {showWaylandModal ? (
+          <div
+            data-tauri-drag-region="false"
+            className="absolute inset-0 z-50 flex items-center justify-center p-3 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
+          >
+            <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-white/12 bg-[#0b1018] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-white/8 px-4 py-3 bg-white/[0.02]">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                    <Info className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-xs font-bold text-gray-100">
+                    {t(locale, "ui.overlay.wayland_pin.title")}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWaylandModal(false)}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 app-scrollbar text-xs">
+                <p className="text-gray-300 leading-relaxed font-normal">
+                  {t(locale, "ui.overlay.wayland_pin.desc")}
+                </p>
+
+                <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 space-y-2">
+                  <p className="font-semibold text-gray-200 leading-snug">
+                    {t(locale, "ui.overlay.wayland_pin.shortcut_title")}
+                  </p>
+                  <ul className="space-y-1.5 pl-1 text-[11px] text-gray-300">
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-bili-blue shrink-0" />
+                      {t(locale, "ui.overlay.wayland_pin.gnome")}
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-bili-pink shrink-0" />
+                      {t(locale, "ui.overlay.wayland_pin.kde")}
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      {t(locale, "ui.overlay.wayland_pin.other")}
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="rounded-xl border border-bili-blue/20 bg-bili-blue/10 p-2.5 text-[11px] text-bili-blue/90 font-medium">
+                  {t(locale, "ui.overlay.wayland_pin.tip")}
+                </div>
+              </div>
+
+              <div className="border-t border-white/8 px-4 py-3 bg-white/[0.02]">
+                <button
+                  type="button"
+                  onClick={() => setShowWaylandModal(false)}
+                  className="w-full rounded-xl bg-bili-blue py-2 text-xs font-bold text-white transition-all hover:bg-bili-blue/90 active:scale-[0.98] shadow-md shadow-bili-blue/20"
+                >
+                  {t(locale, "ui.overlay.wayland_pin.close")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
