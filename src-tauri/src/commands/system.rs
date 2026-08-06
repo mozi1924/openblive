@@ -87,7 +87,7 @@ fn is_managed_window_label(label: &str) -> bool {
     matches!(label, "main" | DANMU_OVERLAY_LABEL)
 }
 
-fn is_wayland_session() -> bool {
+pub(crate) fn is_wayland_session() -> bool {
     #[cfg(target_os = "linux")]
     {
         std::env::var_os("WAYLAND_DISPLAY").is_some()
@@ -106,6 +106,10 @@ fn supports_window_positioning() -> bool {
     !is_wayland_session()
 }
 
+fn supports_window_sizing() -> bool {
+    !is_wayland_session()
+}
+
 fn supports_always_on_top() -> bool {
     !is_wayland_session()
 }
@@ -113,7 +117,7 @@ fn supports_always_on_top() -> bool {
 fn warn_window_position_unsupported() {
     WINDOW_POSITION_UNSUPPORTED_WARN.call_once(|| {
         crate::runtime_warn!(
-            "[window] position restore is unsupported on Linux Wayland; only size/maximized will be restored"
+            "[window] position and size restore are unsupported on Linux Wayland; only maximized state will be restored"
         );
     });
 }
@@ -126,8 +130,12 @@ fn warn_always_on_top_unsupported() {
     });
 }
 
-fn managed_window_state_flags() -> StateFlags {
-    StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED
+pub(crate) fn managed_window_state_flags() -> StateFlags {
+    if is_wayland_session() {
+        StateFlags::MAXIMIZED
+    } else {
+        StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED
+    }
 }
 
 fn build_overlay_window(app: &AppHandle, config: &PersistConfig) -> Result<WebviewWindow, String> {
@@ -197,10 +205,12 @@ fn capture_managed_window_state(window: &Window) -> Option<ManagedWindowState> {
     }
 
     let mut state = ManagedWindowState::default();
-    if let Ok(size) = window.inner_size() {
-        if size.width > 0 && size.height > 0 {
-            state.width = Some(size.width);
-            state.height = Some(size.height);
+    if supports_window_sizing() {
+        if let Ok(size) = window.inner_size() {
+            if size.width > 0 && size.height > 0 {
+                state.width = Some(size.width);
+                state.height = Some(size.height);
+            }
         }
     }
 
@@ -265,10 +275,12 @@ fn restore_managed_window_state(window: &WebviewWindow) -> Result<bool, String> 
         return Ok(false);
     };
 
-    if let (Some(width), Some(height)) = (state.width, state.height) {
-        window
-            .set_size(PhysicalSize::new(width, height))
-            .map_err(|error| format!("restore {} window size failed: {error}", window.label()))?;
+    if supports_window_sizing() {
+        if let (Some(width), Some(height)) = (state.width, state.height) {
+            window
+                .set_size(PhysicalSize::new(width, height))
+                .map_err(|error| format!("restore {} window size failed: {error}", window.label()))?;
+        }
     }
 
     if let (Some(x), Some(y)) = (state.x, state.y) {

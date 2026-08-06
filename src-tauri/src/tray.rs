@@ -9,7 +9,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 #[cfg(target_os = "macos")]
 use tauri::ActivationPolicy;
 use tauri::{App, AppHandle, Manager, Window, WindowEvent};
-use tauri_plugin_window_state::{AppHandleExt as WindowStateAppHandleExt, StateFlags};
+use tauri_plugin_window_state::AppHandleExt as WindowStateAppHandleExt;
 
 const TRAY_ID: &str = "main-tray";
 const MENU_ACCOUNT_INFO: &str = "tray.account_info";
@@ -358,7 +358,7 @@ fn toggle_main_window_inner(app: &AppHandle) {
     if window.is_visible().unwrap_or(true) {
         let _ = window.hide();
         let _ =
-            app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+            app.save_window_state(crate::commands::managed_window_state_flags());
         apply_hidden_window_dock_policy(app);
     } else {
         reveal_main_window_inner(app);
@@ -523,7 +523,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
                 api.prevent_close();
                 let _ = window.hide();
                 let _ = window.app_handle().save_window_state(
-                    StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED,
+                    crate::commands::managed_window_state_flags(),
                 );
                 apply_hidden_window_dock_policy(window.app_handle());
             }
