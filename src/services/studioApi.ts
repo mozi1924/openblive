@@ -201,6 +201,8 @@ export const studioApi = {
   stopTtsSpeech: () => invokeCommand("stop_tts_speech"),
   listenDanmuMessage: (handler: (payload: DanmuMsg) => void) =>
     listen<DanmuMsg>(EVENT_NAMES.DANMU_MESSAGE, (event) => handler(event.payload)),
+  listenDanmuMessageBatch: (handler: (payload: DanmuMsg[]) => void) =>
+    listen<DanmuMsg[]>(EVENT_NAMES.DANMU_MESSAGE_BATCH, (event) => handler(event.payload)),
   listenDanmuAvatarResolved: (handler: (payload: DanmuAvatarResolvedEvent) => void) =>
     listen<DanmuAvatarResolvedEvent>(EVENT_NAMES.DANMU_AVATAR_RESOLVED, (event) =>
       handler(event.payload),

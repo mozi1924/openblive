@@ -23,6 +23,73 @@ static AVATAR_BATCH_FLUSH_SCHEDULED: OnceLock<Mutex<bool>> = OnceLock::new();
 static EMOTICON_CACHE_PENDING: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static FILTER_CONFIG_CACHE: OnceLock<Mutex<crate::models::PersistConfig>> = OnceLock::new();
 
+static DANMU_EMIT_QUEUE: OnceLock<Mutex<Vec<Value>>> = OnceLock::new();
+static DANMU_EMIT_FLUSH_SCHEDULED: OnceLock<Mutex<bool>> = OnceLock::new();
+const DANMU_EMIT_BATCH_MAX_SIZE: usize = 20;
+const DANMU_EMIT_BATCH_WINDOW_MS: u64 = 60;
+
+fn danmu_emit_queue() -> &'static Mutex<Vec<Value>> {
+    DANMU_EMIT_QUEUE.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn danmu_emit_flush_scheduled() -> &'static Mutex<bool> {
+    DANMU_EMIT_FLUSH_SCHEDULED.get_or_init(|| Mutex::new(false))
+}
+
+fn flush_danmu_emit_now(app: &AppHandle) {
+    let drained = {
+        let queue = danmu_emit_queue();
+        let mut queue_guard = queue.lock().unwrap_or_else(|poison| poison.into_inner());
+        let drained = std::mem::take(&mut *queue_guard);
+        let scheduled = danmu_emit_flush_scheduled();
+        let mut scheduled_guard = scheduled.lock().unwrap_or_else(|poison| poison.into_inner());
+        *scheduled_guard = false;
+        drained
+    };
+
+    if drained.is_empty() {
+        return;
+    }
+
+    if drained.len() == 1 {
+        let _ = app.emit("danmu-message", &drained[0]);
+    } else {
+        let _ = app.emit("danmu-message-batch", &drained);
+    }
+}
+
+fn enqueue_danmu_emit(app: &AppHandle, message: Value) {
+    let should_flush_now = {
+        let queue = danmu_emit_queue();
+        let mut queue_guard = queue.lock().unwrap_or_else(|poison| poison.into_inner());
+        queue_guard.push(message);
+        queue_guard.len() >= DANMU_EMIT_BATCH_MAX_SIZE
+    };
+
+    if should_flush_now {
+        flush_danmu_emit_now(app);
+    } else {
+        let should_schedule = {
+            let scheduled = danmu_emit_flush_scheduled();
+            let mut scheduled_guard = scheduled.lock().unwrap_or_else(|poison| poison.into_inner());
+            if *scheduled_guard {
+                false
+            } else {
+                *scheduled_guard = true;
+                true
+            }
+        };
+        if should_schedule {
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(DANMU_EMIT_BATCH_WINDOW_MS)).await;
+                flush_danmu_emit_now(&app_handle);
+            });
+        }
+    }
+}
+
+
 fn filter_config_cache() -> &'static Mutex<crate::models::PersistConfig> {
     FILTER_CONFIG_CACHE.get_or_init(|| Mutex::new(crate::models::PersistConfig::default()))
 }
@@ -435,11 +502,11 @@ pub fn decode_and_emit(app: &AppHandle, data: &[u8]) -> Option<u64> {
                         enrich_sender_face_with_cache(app, &mut message);
                         enrich_emoticon_with_cache(app, &mut message);
                         crate::ws_server::broadcast_danmu_message(app, &message);
-                        let _ = app.emit("danmu-message", &message);
+                        enqueue_danmu_emit(app, message.clone());
                         maybe_enqueue_tts_speech(&config, &message);
                     }
                 } else if is_supported_cmd(raw_cmd) {
-                    let _ = app.emit("danmu-message", build_parse_failed_system_message(raw_cmd));
+                    enqueue_danmu_emit(app, build_parse_failed_system_message(raw_cmd));
                 }
                 if reenter_delay.is_some() {
                     reenter_delay_secs = reenter_delay;

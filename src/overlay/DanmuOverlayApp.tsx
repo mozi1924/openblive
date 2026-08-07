@@ -328,7 +328,7 @@ export function DanmuOverlayApp() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-3 pb-2 app-scrollbar">
+        <div className="flex-1 overflow-y-auto px-3 pb-2 app-scrollbar" style={{ contain: "content" }}>
           {orderedDanmus.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-[11px] text-gray-400">

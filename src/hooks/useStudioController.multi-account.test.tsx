@@ -62,6 +62,7 @@ const { mockStudioApi } = vi.hoisted(() => ({
     getAppLogs: vi.fn(),
     clearAppLogs: vi.fn(),
     listenDanmuMessage: vi.fn(),
+    listenDanmuMessageBatch: vi.fn(),
     listenDanmuAvatarResolved: vi.fn(),
     listenAppLog: vi.fn(),
     listenStudioState: vi.fn(),
@@ -213,6 +214,7 @@ beforeEach(() => {
   mockStudioApi.refreshTrayMenu.mockResolvedValue(ok({}));
   mockStudioApi.getPartitions.mockResolvedValue(ok({ 手游: ["王者荣耀", "永劫无间"] }));
   mockStudioApi.listenDanmuMessage.mockResolvedValue(() => undefined);
+  mockStudioApi.listenDanmuMessageBatch.mockResolvedValue(() => undefined);
   mockStudioApi.listenDanmuAvatarResolved.mockResolvedValue(() => undefined);
   mockStudioApi.listenAppLog.mockResolvedValue(() => undefined);
   mockStudioApi.listenStudioState.mockImplementation(async (handler) => {

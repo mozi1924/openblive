@@ -129,6 +129,19 @@ export function useDanmuMessageFeed({
     onRealtimeMessage?.(message);
   });
 
+  useTauriEvent(studioApi.listenDanmuMessageBatch, (batch) => {
+    if (!Array.isArray(batch) || batch.length === 0) return;
+    setDanmus((prev) => {
+      let current = prev;
+      for (const message of batch) {
+        const resolvedMessage = resolveDanmuSegments(message);
+        current = applyIncomingRealtimeMessage(current, resolvedMessage, localeSetting);
+        onRealtimeMessage?.(message);
+      }
+      return applyLimit(current);
+    });
+  });
+
   useTauriEvent(studioApi.listenDanmuAvatarResolved, (payload) => {
     setDanmus((prev) => applyLimit(applyResolvedDanmuAvatar(prev, payload)));
   });

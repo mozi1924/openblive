@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { DanmuMsg, User } from "../../types/studio";
 import type { LocaleSetting } from "../../utils/i18n";
@@ -134,7 +135,7 @@ const resolveSenderTone = (
   return { className: pickColorBySender(localizedSender) };
 };
 
-export function DanmuOverlayMessageRow({
+function DanmuOverlayMessageRowBase({
   message,
   currentUser,
   locale,
@@ -171,3 +172,6 @@ export function DanmuOverlayMessageRow({
     </div>
   );
 }
+
+export const DanmuOverlayMessageRow = memo(DanmuOverlayMessageRowBase);
+

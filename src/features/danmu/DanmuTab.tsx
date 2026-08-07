@@ -185,7 +185,7 @@ export function DanmuTab({
       }
     }
 
-    return result.reverse();
+    return result.reverse().slice(0, 100);
   }, [danmus, currentUser, locale]);
 
   useEffect(() => {
@@ -284,7 +284,7 @@ export function DanmuTab({
 
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-[#070a0f]">
-      <div className="flex-1 overflow-y-auto p-6 app-scrollbar flex flex-col-reverse bg-[#06080d]/40">
+      <div className="flex-1 overflow-y-auto p-6 app-scrollbar flex flex-col-reverse bg-[#06080d]/40" style={{ contain: "content" }}>
         <div ref={danmuEndRef} />
 
         {danmus.length === 0 ? (

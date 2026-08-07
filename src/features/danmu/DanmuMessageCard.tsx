@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { AlertCircle, Gift, Loader2, Radio, Shield } from "lucide-react";
 import type { DanmuMsg, User } from "../../types/studio";
@@ -239,7 +239,7 @@ function pickBorderColorBySender(sender: string) {
   return palette[Math.abs(hash) % palette.length];
 }
 
-export function DanmuCard({
+function DanmuCardBase({
   message,
   messages,
   locale,
@@ -618,3 +618,5 @@ export function DanmuCard({
     </div>
   );
 }
+
+export const DanmuCard = memo(DanmuCardBase);

@@ -16,6 +16,7 @@ export type Resp<T> = {
  */
 export const EVENT_NAMES = {
   DANMU_MESSAGE: "danmu-message",
+  DANMU_MESSAGE_BATCH: "danmu-message-batch",
   DANMU_AVATAR_RESOLVED: "danmu-avatar-resolved",
   APP_LOG: "app-log",
   STUDIO_STATE: "studio-state",
